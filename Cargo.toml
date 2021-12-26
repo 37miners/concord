@@ -1,0 +1,8 @@
+[package]
+name = "concord"
+version = "0.0.1"
+edition = "2018"
+
+[dependencies]
+librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+concordlib = { path = "./concord" }

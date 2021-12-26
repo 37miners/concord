@@ -1,0 +1,15 @@
+[package]
+name = "concordlib"
+version = "0.0.1"
+authors = ["37 Miners Developers"]
+description = "concord libraries"
+license = "Apache-2.0"
+repository = "https://github.com/37miners/concord"
+keywords = [ "37miners", "concord" ]
+exclude = ["**/*.concord"]
+edition = "2018"
+
+[dependencies]
+
+librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+
