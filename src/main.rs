@@ -12,14 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use librustlet::*; // use the librustlet library
-use concordlib::*; // import our rustlets
+use concordlib::*;
+use librustlet::*; // use the librustlet library // import our rustlets
 nioruntime_log::debug!(); // set log level to debug
 
 fn main() {
-	rustlet_init!(RustletConfig::default()); // initialize with the default config
-	concord_init();
-	rustlet!("myrustlet", { response!("Hello World!"); }); // hello world rustlet
-	rustlet_mapping!("/", "myrustlet"); // create mapping to '/'
+	rustlet_init!(RustletConfig {
+		http_config: HttpConfig {
+			port: 8093,
+			root_dir: "~/.concord".to_string(),
+			..HttpConfig::default()
+		},
+		..RustletConfig::default()
+	});
+
+	concord_init("~/.concord".to_string()); // init concord
 	std::thread::park(); // park the thread so we don't exit
 }

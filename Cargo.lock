@@ -143,6 +143,8 @@ dependencies = [
 name = "concordlib"
 version = "0.0.1"
 dependencies = [
+ "dirs",
+ "fsutils",
  "librustlet",
 ]
 

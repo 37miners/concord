@@ -12,4 +12,6 @@ edition = "2018"
 [dependencies]
 
 librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+fsutils = "0.1"
+dirs = "3.0.2"
 
