@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "concord"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "concordlib",
  "librustlet",
@@ -141,7 +141,7 @@ dependencies = [
 
 [[package]]
 name = "concordlib"
-version = "0.0.1"
+version = "1.0.0"
 dependencies = [
  "dirs",
  "fsutils",

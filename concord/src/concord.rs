@@ -42,8 +42,11 @@ fn init_webroot(root_dir: String) {
 	.to_string();
 	let root_dir = root_dir.replace("~", &home_dir);
 	let js_dir = format!("{}/www/js", root_dir);
+	let css_dir = format!("{}/www/css", root_dir);
+
 	if !Path::new(&js_dir).exists() {
 		fsutils::mkdir(&js_dir);
+		fsutils::mkdir(&css_dir);
 		let bytes = include_bytes!("resources/jquery-3.6.0.min.js");
 		match create_file_from_bytes(
 			"js/jquery-3.6.0.min.js".to_string(),
@@ -60,6 +63,57 @@ fn init_webroot(root_dir: String) {
 				);
 			}
 		}
+
+                let bytes = include_bytes!("resources/concord.js");
+                match create_file_from_bytes(
+                        "js/concord.js".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/index.html");
+                match create_file_from_bytes(
+                        "index.html".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,   
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/style.css");
+                match create_file_from_bytes(
+                        "css/style.css".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
 	}
 }
 

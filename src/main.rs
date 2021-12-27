@@ -12,15 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use concordlib::*;
-use librustlet::*; // use the librustlet library // import our rustlets
+use concordlib::*; // import our rustlets
+use librustlet::*; // use the librustlet library
 nioruntime_log::debug!(); // set log level to debug
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 fn main() {
 	rustlet_init!(RustletConfig {
 		http_config: HttpConfig {
 			port: 8093,
 			root_dir: "~/.concord".to_string(),
+			server_name: format!("Concord {}", VERSION),
 			..HttpConfig::default()
 		},
 		..RustletConfig::default()
@@ -29,3 +31,4 @@ fn main() {
 	concord_init("~/.concord".to_string()); // init concord
 	std::thread::park(); // park the thread so we don't exit
 }
+

@@ -1,6 +1,6 @@
 [package]
 name = "concordlib"
-version = "0.0.1"
+version = "1.0.0"
 authors = ["37 Miners Developers"]
 description = "concord libraries"
 license = "Apache-2.0"
