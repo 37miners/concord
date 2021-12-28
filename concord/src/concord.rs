@@ -43,10 +43,12 @@ fn init_webroot(root_dir: String) {
 	let root_dir = root_dir.replace("~", &home_dir);
 	let js_dir = format!("{}/www/js", root_dir);
 	let css_dir = format!("{}/www/css", root_dir);
+	let images_dir = format!("{}/www/images", root_dir);
 
 	if !Path::new(&js_dir).exists() {
 		fsutils::mkdir(&js_dir);
 		fsutils::mkdir(&css_dir);
+		fsutils::mkdir(&images_dir);
 		let bytes = include_bytes!("resources/jquery-3.6.0.min.js");
 		match create_file_from_bytes(
 			"js/jquery-3.6.0.min.js".to_string(),
@@ -114,13 +116,66 @@ fn init_webroot(root_dir: String) {
                                 );
                         }
                 }
+
+                let bytes = include_bytes!("resources/images/plus.png");
+                match create_file_from_bytes(
+                        "images/plus.png".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/images/plus_fill.png");
+                match create_file_from_bytes(
+                        "images/plus_fill.png".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/images/close_icon.png");
+                match create_file_from_bytes(
+                        "images/close_icon.png".to_string(),
+                        root_dir.clone(),
+                        bytes,
+                ) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
 	}
 }
 
 pub fn concord_init(root_dir: String) {
 	init_webroot(root_dir);
-	rustlet!("myrustlet2", {
+	rustlet!("create_server", {
+		let content = request_content!();
+		println!("hi: '{:?}'", content);
 		response!("Concord!");
 	}); // hello world rustlet
-	rustlet_mapping!("/r2", "myrustlet2"); // create mapping to '/'
+	rustlet_mapping!("/create_server", "create_server"); // create mapping to '/'
 }

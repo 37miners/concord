@@ -1,13 +1,78 @@
 <html>
 	<head>
 		<title>Welcome to Concord Server!</title>
-		<script src="js/concord.js"></script>
 		<script src="js/jquery-3.6.0.min.js"></script>
+		<script src="js/concord.js"></script>
 		<link rel="stylesheet" type="text/css" href="css/style.css"/>
 	</head>
 	<body>
 		<script>
 			init_concord();
 		</script>
+		<div id="interstitial" class="interstitial">
+			<div class="opacity_overlay">&nbsp;</div>
+			<div class="interstitialtext">
+				<div class="upper_close">
+					<a href="JavaScript:close_interstitial();">
+						<img
+							src="/images/close_icon.png"
+							class="close_icon"
+							title="Close"
+						>
+					</a>
+				</div>
+				<div id="interstitialtextpadding1" class="interstitialtextpadding1">
+					Add which type of server?
+					<br/><br/>
+					<a
+						href="JavaScript:create_server();"
+						class="button4 padding4"
+						style="background-color:#303179"
+						title="Create My Own Server"
+					>
+						Create My Own >
+					</a>
+					<br/>
+					<br/>
+					<a
+						href="JavaScript:join_server();"
+						class="button4 padding4"
+						style="background-color:#303179"
+						title="Join Server"
+					>
+						Join Server >
+					</a>
+				</div>
+				<div id="interstitialtextpadding2" class="interstitialtextpadding2">
+                                        <form id="create" method="post" onsubmit="JavaScript:function(){ return false;}">
+                                                Server Name: <input type="text" id="name" size=50/>
+						<br/><br/>
+						Icon: <input type="file" id="file" name="filename"/>
+                                        </form>
+                                        <a
+                                                href="JavaScript:add_server();"
+                                                class="button4 padding4"
+                                                style="background-color:#303179"
+                                                title="Create Server"
+                                        >
+                                                Create Server
+                                        </a>
+				</div>
+				<div id="interstitialtextpadding3" class="interstitialtextpadding3">
+					<form>
+						Invite Link: <input type="text" size=65/>
+					</form>
+                                        <a
+                                                href="JavaScript:add_server();"
+                                                class="button4 padding4"
+                                                style="background-color:#303179"
+                                                title="Join Server"
+                                        >
+                                                Join Server
+                                        </a>
+				</div>
+			</div>
+		</div>
 	</body>
 </html>
+
