@@ -66,107 +66,83 @@ fn init_webroot(root_dir: String) {
 			}
 		}
 
-                let bytes = include_bytes!("resources/concord.js");
-                match create_file_from_bytes(
-                        "js/concord.js".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/concord.js");
+		match create_file_from_bytes("js/concord.js".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/index.html");
-                match create_file_from_bytes(
-                        "index.html".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,   
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/index.html");
+		match create_file_from_bytes("index.html".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/style.css");
-                match create_file_from_bytes(
-                        "css/style.css".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/style.css");
+		match create_file_from_bytes("css/style.css".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/images/plus.png");
-                match create_file_from_bytes(
-                        "images/plus.png".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/plus.png");
+		match create_file_from_bytes("images/plus.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/images/plus_fill.png");
-                match create_file_from_bytes(
-                        "images/plus_fill.png".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/plus_fill.png");
+		match create_file_from_bytes("images/plus_fill.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/images/close_icon.png");
-                match create_file_from_bytes(
-                        "images/close_icon.png".to_string(),
-                        root_dir.clone(),
-                        bytes,
-                ) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/close_icon.png");
+		match create_file_from_bytes("images/close_icon.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 	}
 }
 
@@ -174,8 +150,13 @@ pub fn concord_init(root_dir: String) {
 	init_webroot(root_dir);
 	rustlet!("create_server", {
 		let content = request_content!();
-		println!("hi: '{:?}'", content);
-		response!("Concord!");
-	}); // hello world rustlet
+		let content = &mut &content[..];
+		let mut headers = hyper::header::Headers::new();
+		for i in 0..header_len!() {
+			headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
+		}
+		let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
+		response!("res={:?}", res);
+	});
 	rustlet_mapping!("/create_server", "create_server"); // create mapping to '/'
 }

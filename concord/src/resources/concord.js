@@ -26,12 +26,13 @@ function add_server() {
 		document.createElement('br')
 	);
 	let form = document.getElementById('create');
-	let photo = form.file.files[0];
+	let icon = form.file.files[0];
 	let name = form.name.value;
 
 	let req = new XMLHttpRequest();
 	let formData = new FormData();
-	formData.append("photo", photo);                                
+	formData.append("icon", icon);                                
+	formData.append("icon2", icon);
 	req.open("POST", 'create_server?name='+name);
 	req.send(formData);
 
