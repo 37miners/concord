@@ -9,7 +9,7 @@ body {
 }
 
 .serverbar {
-	background: #fae5df;
+	background: #C0C0C0;
 	color: #000000;
 	padding: 3px;
 	width: 70px;
@@ -20,8 +20,8 @@ body {
 }
 
 .channelbar {
-	background: #f5cac2;
-        color: #000000;
+	background: #303179;
+        color: #FFFFFF;
         padding: 3px;
 	width: 230px;
 	min-width: 230px;
@@ -32,7 +32,7 @@ body {
 }
 
 .messagebar {
-	background: #fae5df;
+	background: #FFFFFF;
         color: #000000;
         padding: 3px;
 	width: 100%;
@@ -42,8 +42,8 @@ body {
 }
 
 .statusbar {
-	background: #303179;
-        color: #ffffff;
+	background: #C0C0C0;
+        color: #000000;
         padding: 3px;
 	width: 230px;
 	min-width: 230px;
