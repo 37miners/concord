@@ -48,7 +48,7 @@ function load_server_bar() {
 			var img = document.createElement('img');
 			img.src = '/get_server_icon?id=' + server.id;
 			img.className = 'server_icon';
-			img.title = server.name;
+			img.title = decodeURIComponent(server.name);
 			img.id = server.id;
 			img.onmouseover = function() {
 				stopEnabled = true;
@@ -79,7 +79,7 @@ function add_server() {
         		load_server_bar();
         		close_interstitial();
 		});
-		req.open("POST", 'create_server?name='+name);
+		req.open("POST", 'create_server?name='+encodeURIComponent(name));
 		req.send(formData);
 	} else {
 		alert("ERROR: file must be specified.");
