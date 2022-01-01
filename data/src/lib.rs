@@ -14,14 +14,17 @@
 
 #[macro_use]
 extern crate log;
-use failure;
-#[macro_use]
 extern crate failure_derive;
+pub use secp256k1zkp as secp;
+pub use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-pub use grin_core as core;
-pub use grin_store as store;
-pub use grin_util as util;
+#[macro_use]
+extern crate serde_derive;
 
 pub mod lmdb;
 pub mod concord;
-pub mod error;
+//pub mod error;
+pub mod ser;
+pub mod hash;
+pub mod hex;
+pub use crate::hex::*;

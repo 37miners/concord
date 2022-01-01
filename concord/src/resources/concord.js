@@ -19,25 +19,43 @@ function join_server() {
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
 }
 
-function add_server() {
-	var text = document.createTextNode('new server');
-	document.getElementById('serverbartext').appendChild(text);
-	document.getElementById('serverbartext').appendChild(
-		document.createElement('br')
-	);
-	let form = document.getElementById('create');
-	let icon = form.file.files[0];
-	let name = form.name.value;
+function load_server_bar() {
+	// first clear server bar
+	document.getElementById('serverbartext').innerHTML = '';
 
-	let req = new XMLHttpRequest();
-	let formData = new FormData();
-	formData.append("icon", icon);                                
-	formData.append("icon2", icon);
+	// then load all servers
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		var servers = JSON.parse(this.responseText);
+		servers.forEach(function(server) {
+			//alert(server.name + ' ' + server.address);
+			var serverbar = document.getElementById('serverbartext');
+			serverbar.appendChild(
+				document.createTextNode(
+					server.name + ' ' + server.address
+				)
+			);
+			serverbar.appendChild(document.createElement('br'));
+		});
+	});
+	req.open("GET", '/get_servers');
+	req.send();
+}
+
+function add_server() {
+	var form = document.getElementById('create');
+	var icon = form.file.files[0];
+	var name = form.name.value;
+
+	var req = new XMLHttpRequest();
+	var formData = new FormData();
+	formData.append("icon", icon);
+	req.addEventListener("load", function() {
+        	load_server_bar();
+        	close_interstitial();
+	});
 	req.open("POST", 'create_server?name='+name);
 	req.send(formData);
-
-	close_interstitial();
-	
 }
 
 function init_concord() {
@@ -79,5 +97,7 @@ function init_concord() {
         div4.innerHTML = 'statusbar';
         div4.className = 'statusbar';
         document.body.appendChild(div4);
+
+	load_server_bar();
 }
 

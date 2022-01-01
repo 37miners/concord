@@ -1,5 +1,5 @@
 [package]
-name = "data"
+name = "concorddata"
 version = "1.0.0"
 authors = ["37 Miners Developers"]
 description = "data libraries"
@@ -11,21 +11,27 @@ edition = "2018"
 
 [dependencies]
 
-grin_store = { git = "https://github.com/bitcoinmw/bitcoinmw", branch = "master"}
-grin_core = { git = "https://github.com/bitcoinmw/bitcoinmw", branch = "master"}
-grin_util = { git = "https://github.com/bitcoinmw/bitcoinmw", branch = "master"}
+concorderror = { path = "../error" }
 
+zeroize = { version = "1.1", features =["zeroize_derive"] }
+grin_secp256k1zkp = { git = "https://github.com/bitcoinmw/rust-secp256k1-zkp", features = ["bullet-proof-sizing"] }
+
+blake2 = { package = "blake2-rfc", version = "0.2"}
+bytes = "0.5"
 byteorder = "1"
 croaring = { version = "0.4.5", package = "croaring-mw", features = ["compat"] }
 libc = "0.2"
 failure = "0.1"
+dirs = "3.0.2"
+fsutils = "0.1.0"
 failure_derive = "0.1"
 lmdb-zero = "0.4.4"
 memmap = "0.7"
 tempfile = "3.1"
+log = "0.4"
+parking_lot = "0.10"
 serde = "1"
 serde_derive = "1"
-log = "0.4"
 
 [dev-dependencies]
 chrono = "0.4.11"

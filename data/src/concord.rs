@@ -1,4 +1,4 @@
-// Copyright 2021 The 37 Miners Developers
+// Copyright 2022 37 Miners, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -13,10 +13,12 @@
 // limitations under the License.
 
 use crate::lmdb::Store;
-use crate::core::ser::{self, Readable, Writeable, Reader, Writer};
-use crate::error::Error;
+use crate::ser::{Readable, Writeable, Reader, Writer, BinReader, ProtocolVersion};
+use concorderror::Error;
 
 use std::convert::TryInto;
+use std::path::PathBuf;
+use std::io::Cursor;
 
 const DB_NAME: &str = "concord";
 
@@ -32,7 +34,7 @@ pub struct ServerInfo {
 }
 
 impl Writeable for ServerInfo {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), ser::Error> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let address_len = self.address.len();
 		let address_bytes = self.address.as_bytes();
 		writer.write_u32(address_len.try_into().unwrap_or(0))?;
@@ -56,7 +58,7 @@ impl Writeable for ServerInfo {
 }
 
 impl Readable for ServerInfo {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, ser::Error> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let address_len = reader.read_u32()?;
 		let mut address = vec![];
 		for _ in 0..address_len {
@@ -83,16 +85,51 @@ impl Readable for ServerInfo {
 	}
 }
 
+const SERVER_PREFIX: u8 = 0;
+
 impl DSContext {
-	pub fn get_servers_from_db(&self) -> Result<Option<ServerInfo>, Error> {
+	pub fn get_servers(&self) -> Result<Vec<ServerInfo>, Error> {
         	let batch = self.store.batch()?;
-        	let res: Option<ServerInfo> = batch.get_ser(&[1])?;
-        	Ok(res)
+        	let mut itt = batch.iter(&(vec![SERVER_PREFIX])[..], |_, v| {
+			let mut cursor = Cursor::new(v.to_vec());
+        		cursor.set_position(0);
+        		let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+			Ok(ServerInfo::read(&mut reader)?)
+		})?;
+
+		let mut ret = vec![];
+		loop {
+			match itt.next() {
+				Some(server) => ret.push(server),
+				None => break,
+			}
+		}
+
+		Ok(ret)
+	}
+
+	pub fn add_server(&self, server_info: ServerInfo) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![SERVER_PREFIX];
+		key.append(&mut server_info.name.as_bytes().to_vec());
+		key.push(';' as u8);
+		key.append(&mut server_info.address.as_bytes().to_vec());
+		batch.put_ser(&key, &server_info)?;
+		batch.commit()?;
+		Ok(())
 	}
 
 	pub fn new(db_root: String) -> Result<DSContext, Error> {
+                let home_dir = match dirs::home_dir() {
+                        Some(p) => p,
+                        None => PathBuf::new(),
+                }
+                .as_path()
+                .display()
+                .to_string();
+                let db_root = db_root.replace("~", &home_dir);
+		fsutils::mkdir(&db_root);
 		let store = Store::new(&db_root, None, Some(DB_NAME), None, true)?;
-
         	Ok(DSContext { store } )
 	}
 }

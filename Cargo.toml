@@ -4,6 +4,7 @@ version = "1.0.0"
 edition = "2018"
 
 [dependencies]
-librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
 concordlib = { path = "./concord" }
-data = { path = "./data" }
+concorderror = { path = "./error" }
+concorddata = { path = "./data" }

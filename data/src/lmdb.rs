@@ -1,4 +1,5 @@
-// Copyright 2022 The Grin Developers and the 37 Miners Developers
+// Copyright 2021 The Grin Developers and
+// 37 Miners, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,8 +22,10 @@ use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
 
-use crate::core::ser::{self, ProtocolVersion};
-use crate::util::RwLock;
+use concorderror::{Error, ErrorKind};
+
+use crate::ser::{self, ProtocolVersion};
+use crate::RwLock;
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
@@ -33,6 +36,7 @@ const RESIZE_PERCENT: f32 = 0.9;
 /// of total space free
 const RESIZE_MIN_TARGET_PERCENT: f32 = 0.65;
 
+/*
 /// Main error type for this lmdb
 #[derive(Clone, Eq, PartialEq, Debug, Fail)]
 pub enum Error {
@@ -64,6 +68,7 @@ impl From<ser::Error> for Error {
 		Error::SerErr(e)
 	}
 }
+*/
 
 /// unwraps the inner option by converting the none case to a not found error
 pub fn option_to_not_found<T, F>(res: Result<Option<T>, Error>, field_name: F) -> Result<T, Error>
@@ -71,7 +76,7 @@ where
 	F: Fn() -> String,
 {
 	match res {
-		Ok(None) => Err(Error::NotFoundErr(field_name())),
+		Ok(None) => Err(ErrorKind::NotFoundErr(field_name()).into()),
 		Ok(Some(o)) => Ok(o),
 		Err(e) => Err(e),
 	}
@@ -111,10 +116,11 @@ impl Store {
 		};
 		let full_path = [root_path.to_owned(), name].join("/");
 		fs::create_dir_all(&full_path).map_err(|e| {
-			Error::FileErr(format!(
+			let error: Error = ErrorKind::FileErr(format!(
 				"Unable to create directory 'db_root' to store chain_data: {:?}",
 				e
-			))
+			)).into();
+			error
 		})?;
 
 		let mut env_builder = lmdb::EnvBuilder::new()?;
@@ -275,7 +281,10 @@ impl Store {
 		let lock = self.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+				let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+				error
+			})?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 
@@ -289,7 +298,10 @@ impl Store {
 		let lock = self.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 
@@ -305,7 +317,10 @@ impl Store {
 		let lock = self.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
 		let cursor = Arc::new(tx.cursor(db.clone())?);
 		Ok(PrefixIterator::new(tx, cursor, prefix, deserialize))
@@ -334,7 +349,10 @@ impl<'a> Batch<'a> {
 		let lock = self.store.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 		self.tx
 			.access()
 			.put(db, key, value, lmdb::put::Flags::empty())?;
@@ -377,7 +395,10 @@ impl<'a> Batch<'a> {
 		let lock = self.store.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 
 		self.store.get_with(key, &access, &db, deserialize)
 	}
@@ -389,7 +410,10 @@ impl<'a> Batch<'a> {
 		let lock = self.store.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
 		Ok(res.is_some())
 	}
@@ -417,7 +441,10 @@ impl<'a> Batch<'a> {
 		let lock = self.store.db.read();
 		let db = lock
 			.as_ref()
-			.ok_or_else(|| Error::NotFoundErr("chain db is None".to_string()))?;
+			.ok_or_else(|| {
+                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+                                error
+                        })?;
 		self.tx.access().del_key(db, key)?;
 		Ok(())
 	}
