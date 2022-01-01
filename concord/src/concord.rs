@@ -118,6 +118,19 @@ fn init_webroot(root_dir: String) {
 			}
 		}
 
+                let bytes = include_bytes!("resources/images/delete.png");
+                match create_file_from_bytes("images/delete.png".to_string(), root_dir.clone(), bytes) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
 		let bytes = include_bytes!("resources/images/plus_fill.png");
 		match create_file_from_bytes("images/plus_fill.png".to_string(), root_dir.clone(), bytes) {
 			Ok(_) => {}

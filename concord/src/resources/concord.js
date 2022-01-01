@@ -1,5 +1,21 @@
 // concord's own js functions
 
+var stopEnabled = false;
+var iconId = '';
+
+document.oncontextmenu = function(e){
+	if(stopEnabled) {
+		stopEvent(e);
+		alert('icon='+iconId);
+	}
+}
+function stopEvent(event){
+	if(event.preventDefault != undefined)
+		event.preventDefault();
+	if(event.stopPropagation != undefined)
+		event.stopPropagation();
+}
+
 function close_interstitial() {
 	document.getElementById('interstitial').style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
@@ -28,20 +44,20 @@ function load_server_bar() {
 	req.addEventListener("load", function() {
 		var servers = JSON.parse(this.responseText);
 		servers.forEach(function(server) {
-			//alert(server.name + ' ' + server.address);
 			var serverbar = document.getElementById('serverbartext');
-			/*
-			serverbar.appendChild(
-				document.createTextNode(
-					server.name + ' ' + server.address
-				)
-			);
-			*/
-			//serverbar.appendChild(document.createElement('br'));
 			var img = document.createElement('img');
 			img.src = '/get_server_icon?id=' + server.id;
 			img.className = 'server_icon';
 			img.title = server.name;
+			img.id = server.id;
+			img.onmouseover = function() {
+				stopEnabled = true;
+				iconId = server.id;
+			};
+			img.onmouseout = function() {
+				stopEnabled = false;
+			};
+
 			serverbar.appendChild(img);
 			serverbar.appendChild(document.createElement('br'));
 		});
