@@ -2,11 +2,34 @@
 
 var stopEnabled = false;
 var iconId = '';
+var menu = [{
+            name: 'Invite',
+            img: 'images/create.png',
+            fun: function () {
+                alert('i am a create button')
+            }
+        }, {
+            name: 'Configure',
+            img: 'images/update.png',
+            fun: function () {
+                alert('i am an update button')
+            }
+        }, {
+            name: 'Delete',
+            img: 'images/delete.png',
+            fun: function () {
+                var req = new XMLHttpRequest();
+                req.addEventListener("load", function() {
+                        load_server_bar();
+                });
+                req.open("GET", '/delete_server?id='+iconId);
+                req.send();
+            }
+        }];
 
 document.oncontextmenu = function(e){
 	if(stopEnabled) {
 		stopEvent(e);
-		alert('icon='+iconId);
 	}
 }
 function stopEvent(event){
@@ -60,6 +83,7 @@ function load_server_bar() {
 
 			serverbar.appendChild(img);
 			serverbar.appendChild(document.createElement('br'));
+			$('.server_icon').contextMenu(menu, {triggerOn:'contextmenu'});
 		});
 	});
 	req.open("GET", '/get_servers');

@@ -65,6 +65,31 @@ fn init_webroot(root_dir: String) {
 				);
 			}
 		}
+                let bytes = include_bytes!("resources/contextMenu.min.js");
+                match create_file_from_bytes("js/contextMenu.min.js".to_string(), root_dir.clone(), bytes) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/contextMenu.min.css");
+                match create_file_from_bytes("css/contextMenu.min.css".to_string(), root_dir.clone(), bytes) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
 
 		let bytes = include_bytes!("resources/concord.js");
 		match create_file_from_bytes("js/concord.js".to_string(), root_dir.clone(), bytes) {
@@ -120,6 +145,32 @@ fn init_webroot(root_dir: String) {
 
                 let bytes = include_bytes!("resources/images/delete.png");
                 match create_file_from_bytes("images/delete.png".to_string(), root_dir.clone(), bytes) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/images/create.png");
+                match create_file_from_bytes("images/create.png".to_string(), root_dir.clone(), bytes) {
+                        Ok(_) => {}
+                        Err(e) => {
+                                log_multi!(
+                                        ERROR,
+                                        MAIN_LOG,
+                                        "Creating file resulted in error: {}",
+                                        e.to_string()
+                                );
+                        }
+                }
+
+                let bytes = include_bytes!("resources/images/update.png");
+                match create_file_from_bytes("images/update.png".to_string(), root_dir.clone(), bytes) {
                         Ok(_) => {}
                         Err(e) => {
                                 log_multi!(
@@ -293,6 +344,30 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
 		}
 	});
 	rustlet_mapping!("/get_server_icon", "get_server_icon");
+
+        // create a new context for each rustlet, synchronization handled by batches
+        let ds_context = DSContext::new(root_dir.clone())?;
+
+	// get the icon for the specified server
+        rustlet!("delete_server", {
+                let query = request!("query");
+                let query_vec = querystring::querify(&query);
+                let mut id = "".to_string();
+                for query_param in query_vec {
+                        if query_param.0 == "id" {
+                                id = query_param.1.to_string();
+                                break;
+                        }
+                }
+
+                ds_context.delete_server(id).map_err(|e| {
+                        let error: Error = ErrorKind::ApplicationError(
+                                format!("error deleting server: {}", e.to_string())
+                        ).into();
+                        error
+                })?;
+        });
+        rustlet_mapping!("/delete_server", "delete_server");
 
 	Ok(())
 }

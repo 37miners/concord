@@ -117,6 +117,7 @@ impl DSContext {
 		let mut key = vec![SERVER_PREFIX];
 		key.append(&mut id);
 		let ret: Option<ServerInfo> = batch.get_ser(&key)?;
+
 		Ok(ret)
 	}
 
@@ -128,6 +129,17 @@ impl DSContext {
 		let id = urlencoding::encode(&id);
 		key.append(&mut id.as_bytes().to_vec());
 		batch.put_ser(&key, &server_info)?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	pub fn delete_server(&self, id: String) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![SERVER_PREFIX];
+		let id = urlencoding::decode(&id)?;
+		let mut id = base64::decode(&*id)?;
+		key.append(&mut id);
+		batch.delete(&key)?;
 		batch.commit()?;
 		Ok(())
 	}
