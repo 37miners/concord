@@ -16,6 +16,7 @@ use failure::{Backtrace, Context, Fail};
 use std::fmt;
 use std::fmt::Display;
 use std::str::Utf8Error;
+use std::string::FromUtf8Error;
 
 /// Base Error struct which is used throught this crate and other crates
 #[derive(Debug, Fail)]
@@ -71,6 +72,12 @@ pub enum ErrorKind {
 	/// HexError
 	#[fail(display = "Hex Error: {}", _0)]
 	HexError(String),
+	/// DecodeError
+	#[fail(display = "Decode Error: {}", _0)]
+	DecodeError(String),
+	/// From Utf8 Error
+	#[fail(display = "FromUtf8Error: {}", _0)]
+	FromUtf8Error(String),
 }
 
 impl Display for Error {
@@ -145,3 +152,20 @@ impl From<Utf8Error> for Error {
 		}
 	}
 }
+
+impl From<base64::DecodeError> for Error {
+	fn from(e: base64::DecodeError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::DecodeError(e.to_string())),
+		}
+	}
+}
+
+impl From<FromUtf8Error> for Error {
+	fn from(e: FromUtf8Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::FromUtf8Error(e.to_string())),
+		}
+	}
+}
+

@@ -64,6 +64,14 @@ body {
 	cursor: pointer;
 }
 
+.server_icon {
+	height: 55px;
+	width: 55px;
+	margin-top: 9px;
+	margin-left: 0px;
+	cursor: pointer;
+}
+
 .plusicon:hover {
 	background: url("/images/plus_fill.png") no-repeat;
 	background-size: 55px 55px;

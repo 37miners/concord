@@ -88,19 +88,21 @@ impl Readable for ServerInfo {
 const SERVER_PREFIX: u8 = 0;
 
 impl DSContext {
-	pub fn get_servers(&self) -> Result<Vec<ServerInfo>, Error> {
+	pub fn get_servers(&self) -> Result<Vec<(ServerInfo, String)>, Error> {
         	let batch = self.store.batch()?;
-        	let mut itt = batch.iter(&(vec![SERVER_PREFIX])[..], |_, v| {
+        	let mut itt = batch.iter(&(vec![SERVER_PREFIX])[..], |k, v| {
+			let id = base64::encode(&k[1..]);
+                	let id = urlencoding::encode(&id).to_string();
 			let mut cursor = Cursor::new(v.to_vec());
         		cursor.set_position(0);
         		let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
-			Ok(ServerInfo::read(&mut reader)?)
+			Ok((ServerInfo::read(&mut reader)?, id.clone()))
 		})?;
 
 		let mut ret = vec![];
 		loop {
 			match itt.next() {
-				Some(server) => ret.push(server),
+				Some((server,id)) => ret.push((server, id.to_string())),
 				None => break,
 			}
 		}
@@ -108,12 +110,23 @@ impl DSContext {
 		Ok(ret)
 	}
 
+	pub fn get_server_info(&self, id: String) -> Result<Option<ServerInfo>, Error> {
+		let batch = self.store.batch()?;
+		let id = urlencoding::decode(&id)?;
+		let mut id = base64::decode(&*id)?;
+		let mut key = vec![SERVER_PREFIX];
+		key.append(&mut id);
+		let ret: Option<ServerInfo> = batch.get_ser(&key)?;
+		Ok(ret)
+	}
+
 	pub fn add_server(&self, server_info: ServerInfo) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
-		key.append(&mut server_info.name.as_bytes().to_vec());
-		key.push(';' as u8);
-		key.append(&mut server_info.address.as_bytes().to_vec());
+		let id: [u8; 8] = rand::random();
+		let id = base64::encode(&id);
+		let id = urlencoding::encode(&id);
+		key.append(&mut id.as_bytes().to_vec());
 		batch.put_ser(&key, &server_info)?;
 		batch.commit()?;
 		Ok(())

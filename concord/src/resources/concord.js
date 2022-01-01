@@ -30,11 +30,19 @@ function load_server_bar() {
 		servers.forEach(function(server) {
 			//alert(server.name + ' ' + server.address);
 			var serverbar = document.getElementById('serverbartext');
+			/*
 			serverbar.appendChild(
 				document.createTextNode(
 					server.name + ' ' + server.address
 				)
 			);
+			*/
+			//serverbar.appendChild(document.createElement('br'));
+			var img = document.createElement('img');
+			img.src = '/get_server_icon?id=' + server.id;
+			img.className = 'server_icon';
+			img.title = server.name;
+			serverbar.appendChild(img);
 			serverbar.appendChild(document.createElement('br'));
 		});
 	});
@@ -45,17 +53,21 @@ function load_server_bar() {
 function add_server() {
 	var form = document.getElementById('create');
 	var icon = form.file.files[0];
-	var name = form.name.value;
+	if (icon) {
+		var name = form.name.value;
 
-	var req = new XMLHttpRequest();
-	var formData = new FormData();
-	formData.append("icon", icon);
-	req.addEventListener("load", function() {
-        	load_server_bar();
-        	close_interstitial();
-	});
-	req.open("POST", 'create_server?name='+name);
-	req.send(formData);
+		var req = new XMLHttpRequest();
+		var formData = new FormData();
+		formData.append("icon", icon);
+		req.addEventListener("load", function() {
+        		load_server_bar();
+        		close_interstitial();
+		});
+		req.open("POST", 'create_server?name='+name);
+		req.send(formData);
+	} else {
+		alert("ERROR: file must be specified.");
+	}
 }
 
 function init_concord() {

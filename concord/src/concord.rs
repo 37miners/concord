@@ -150,6 +150,7 @@ fn init_webroot(root_dir: String) {
 struct ServerInfoMin {
 	name: String,
 	address: String,
+	id: String,
 }
 
 pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
@@ -230,8 +231,9 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
 		for server in servers {
 			server_json.push(
 				ServerInfoMin {
-					name: server.name.clone(),
-					address: server.address.clone(),
+					name: server.0.name.clone(),
+					address: server.0.address.clone(),
+					id: server.1,
 				}
 			);
 		}
@@ -246,9 +248,36 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
 	});
 	rustlet_mapping!("/get_servers", "get_servers");
 
+	// create a new context for each rustlet, synchronization handled by batches
+	let ds_context = DSContext::new(root_dir.clone())?;
+
 	// get the icon for the specified server
 	rustlet!("get_server_icon", {
+                let query = request!("query");
+                let query_vec = querystring::querify(&query);
+                let mut id = "".to_string();
+                for query_param in query_vec {
+                        if query_param.0 == "id" {
+                                id = query_param.1.to_string();
+                                break;
+                        }
+                }
 
+		let sinfo = ds_context.get_server_info(id).map_err(|e| {
+			let error: Error = ErrorKind::ApplicationError(
+				format!("error getting server info: {}", e.to_string())
+			).into();
+			error
+		})?;
+
+		match sinfo {
+			Some(sinfo) => {
+				bin_write!(&sinfo.icon[..]);
+			},
+			None => {
+
+			},
+		}
 	});
 	rustlet_mapping!("/get_server_icon", "get_server_icon");
 

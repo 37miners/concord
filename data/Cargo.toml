@@ -19,11 +19,14 @@ grin_secp256k1zkp = { git = "https://github.com/bitcoinmw/rust-secp256k1-zkp", f
 blake2 = { package = "blake2-rfc", version = "0.2"}
 bytes = "0.5"
 byteorder = "1"
+urlencoding = "2.1.0"
 croaring = { version = "0.4.5", package = "croaring-mw", features = ["compat"] }
 libc = "0.2"
 failure = "0.1"
+base64 = "0.13.0"
 dirs = "3.0.2"
 fsutils = "0.1.0"
+rand = "0.8.4"
 failure_derive = "0.1"
 lmdb-zero = "0.4.4"
 memmap = "0.7"
