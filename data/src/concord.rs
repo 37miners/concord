@@ -144,6 +144,17 @@ impl DSContext {
 		Ok(())
 	}
 
+	pub fn modify_server(&self, id: String, server_info: ServerInfo) -> Result<(), Error> {
+                let batch = self.store.batch()?;
+                let mut key = vec![SERVER_PREFIX];
+                let id = urlencoding::decode(&id)?;
+                let mut id = base64::decode(&*id)?;
+                key.append(&mut id);
+                batch.put_ser(&key, &server_info)?;
+                batch.commit()?;
+                Ok(())
+	}
+
 	pub fn new(db_root: String) -> Result<DSContext, Error> {
                 let home_dir = match dirs::home_dir() {
                         Some(p) => p,

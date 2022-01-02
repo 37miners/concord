@@ -2,6 +2,7 @@
 
 var stopEnabled = false;
 var iconId = '';
+var curName = '';
 var menu = [{
             name: 'Invite',
             img: 'images/create.png',
@@ -12,7 +13,7 @@ var menu = [{
             name: 'Configure',
             img: 'images/update.png',
             fun: function () {
-                alert('i am an update button')
+		modify_server(iconId, curName);
             }
         }, {
             name: 'Delete',
@@ -25,7 +26,18 @@ var menu = [{
                 req.open("GET", '/delete_server?id='+iconId);
                 req.send();
             }
-        }];
+}];
+
+function makeid(length) {
+	var result           = '';
+	var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+	var charactersLength = characters.length;
+	for ( var i = 0; i < length; i++ ) {
+		result += characters.charAt(Math.floor(Math.random() * 
+		charactersLength));
+	}
+	return result;
+}
 
 document.oncontextmenu = function(e){
 	if(stopEnabled) {
@@ -44,18 +56,53 @@ function close_interstitial() {
         document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 }
 
 function create_server() {
 	document.getElementById("interstitialtextpadding2").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 }
 
 function join_server() {
         document.getElementById("interstitialtextpadding3").style.visibility = 'visible';
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+}
+
+function modify_server(iconId, curName) {
+	document.getElementById('curImage').src = '/get_server_icon?id=' + iconId;
+	document.forms['modify']['id'].value = iconId;
+	document.forms['modify']['name'].value = curName;
+	document.getElementById('interstitial').style.visibility = 'visible';
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'visible';
+}
+
+function modify_server_submit() {
+        var form = document.getElementById('modify');
+        var icon = form.file.files[0];
+	var iconId = document.forms['modify']['id'].value;
+        if (icon) {
+                var name = form.name.value;
+
+                var req = new XMLHttpRequest();
+                var formData = new FormData();
+                formData.append("icon", icon);
+                req.addEventListener("load", function() {
+                        load_server_bar();
+                        close_interstitial();
+                });
+                req.open("POST", 'modify_server?id=' + iconId + '&name='+encodeURIComponent(name));
+                req.send(formData);
+        } else {
+                alert("ERROR: file must be specified.");
+        }
 }
 
 function load_server_bar() {
@@ -69,13 +116,16 @@ function load_server_bar() {
 		servers.forEach(function(server) {
 			var serverbar = document.getElementById('serverbartext');
 			var img = document.createElement('img');
-			img.src = '/get_server_icon?id=' + server.id;
+			var rand = makeid(8);
+			img.src = '/get_server_icon?id=' + server.id + '&r=' + rand;
 			img.className = 'server_icon';
-			img.title = decodeURIComponent(server.name);
+			var sname = decodeURIComponent(server.name);
+			img.title = sname;
 			img.id = server.id;
 			img.onmouseover = function() {
 				stopEnabled = true;
 				iconId = server.id;
+				curName = sname;
 			};
 			img.onmouseout = function() {
 				stopEnabled = false;
@@ -124,6 +174,7 @@ function init_concord() {
         	document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
         	document.getElementById("interstitialtextpadding1").style.visibility = 'visible';
         	document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+                document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	}
 
 	plusdiv.appendChild(plus);

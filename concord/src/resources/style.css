@@ -133,6 +133,12 @@ body {
 	position: fixed;
 }
 
+.interstitialtextpadding4 {
+        padding: 3px;
+        visibility: hidden;
+        position: fixed;
+}
+
 .close_icon {
 	height: 30px;
 	width: 30px;

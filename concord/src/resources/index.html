@@ -47,7 +47,7 @@
 				</div>
 				<div id="interstitialtextpadding2" class="interstitialtextpadding2">
                                         <form id="create" method="post" onsubmit="JavaScript:function(){ return false;}">
-                                                Server Name: <input type="text" id="name" size=50/>
+                                                Server Name: <input autocomplete="off" type="text" id="name" size=50/>
 						<br/><br/>
 						Icon: <input type="file" id="file" name="filename"/>
                                         </form>
@@ -62,7 +62,7 @@
 				</div>
 				<div id="interstitialtextpadding3" class="interstitialtextpadding3">
 					<form>
-						Invite Link: <input type="text" size=65/>
+						Invite Link: <input autocomplete="off" type="text" size=65/>
 					</form>
                                         <a
                                                 href="JavaScript:add_server();"
@@ -72,6 +72,25 @@
                                         >
                                                 Join Server
                                         </a>
+				</div>
+				<div id="interstitialtextpadding4" class="interstitialtextpadding4">
+					<form name="modify" id="modify" method="post" onsubmit="JavaScript:function() { return false; }">
+						Server Name: <input autocomplete="off" type="text" name="name" id="name" size=50/>
+						<br/><br/>
+						Current Icon: <img id=curImage src='' class = 'server_icon'/>
+						<br/><br/>
+						New Icon: <input type="file" id="file" name="filename"/>
+						<input type="hidden" name="id" value=""/>
+					</form>
+                                        <a
+                                                href="JavaScript:modify_server_submit();"
+                                                class="button4 padding4"
+                                                style="background-color:#303179"
+                                                title="Modify Server"
+                                        >
+						Modify Server
+					</a>
+
 				</div>
 			</div>
 		</div>

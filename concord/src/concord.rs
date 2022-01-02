@@ -269,6 +269,7 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
 						.into();
 						error
 					})?;
+					break;
 				}
 				_ => {}
 			}
@@ -348,7 +349,7 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
         // create a new context for each rustlet, synchronization handled by batches
         let ds_context = DSContext::new(root_dir.clone())?;
 
-	// get the icon for the specified server
+	// delete the specified server
         rustlet!("delete_server", {
                 let query = request!("query");
                 let query_vec = querystring::querify(&query);
@@ -368,6 +369,59 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
                 })?;
         });
         rustlet_mapping!("/delete_server", "delete_server");
+
+        // create a new context for each rustlet, synchronization handled by batches
+        let ds_context = DSContext::new(root_dir.clone())?;
+
+        // modify the specified server
+        rustlet!("modify_server", {
+                let query = request!("query");
+                let query_vec = querystring::querify(&query);
+                let mut id = "".to_string();
+		let mut name = "".to_string();
+                for query_param in query_vec {
+                        if query_param.0 == "id" {
+                                id = query_param.1.to_string();
+                        } else if query_param.0 == "name" {
+				name = query_param.1.to_string();
+			}
+                }
+
+                let content = request_content!();
+                let content = &mut &content[..];
+                let mut headers = hyper::header::Headers::new();
+                for i in 0..header_len!() {
+                        headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
+                }
+                let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
+                for node in &res {
+                        match node {
+                                mime_multipart::Node::File(filepart) => {
+                                        let mut f = File::open(&filepart.path)?;
+                                        let size = filepart.size.unwrap_or(0);
+                                        let mut buf = vec![0 as u8; size];
+                                        f.read(&mut buf)?;
+                                        let server_info = ServerInfo {
+                                                address: "address".to_string(),
+                                                name: name.clone(),
+                                                icon: buf,
+                                        };
+
+                                        ds_context.modify_server(id.clone(), server_info).map_err(|e| {
+                                                let error: Error = ErrorKind::ApplicationError(format!(
+                                                        "error modifying server: {}",
+                                                        e.to_string()
+                                                ))
+                                                .into();
+                                                error
+                                        })?;
+					break;
+                                }
+                                _ => {}
+                        }
+                }
+        });
+        rustlet_mapping!("/modify_server", "modify_server");
 
 	Ok(())
 }
