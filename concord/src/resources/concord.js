@@ -74,7 +74,8 @@ function join_server() {
 }
 
 function modify_server(iconId, curName) {
-	document.getElementById('curImage').src = '/get_server_icon?id=' + iconId;
+	var rand = makeid(8);
+	document.getElementById('curImage').src = '/get_server_icon?id=' + iconId + '&r=' + rand;
 	document.forms['modify']['id'].value = iconId;
 	document.forms['modify']['name'].value = curName;
 	document.getElementById('interstitial').style.visibility = 'visible';
