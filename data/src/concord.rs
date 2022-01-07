@@ -28,6 +28,28 @@ pub struct DSContext {
 	store: Store,
 }
 
+// Message types
+pub enum MessageType {
+	Text,
+	Binary,
+}
+
+// The key to a message entry
+pub struct MessageKey {
+	pub server_id: [u8; 8],
+	pub channel_id: u32,
+	pub timestamp: u64,
+	pub pubkey: [u8; 32],
+	pub nonce: u16,
+}
+
+// information associated with a message
+pub struct Message {
+	pub payload: Vec<u8>,
+	pub signature: [u8; 64],
+	pub message_type: MessageType,
+}
+
 // information about the server
 #[derive(Debug)]
 pub struct ServerInfo {
@@ -193,6 +215,11 @@ impl DSContext {
 			Some(_) => Ok(true),
 			None => Ok(false),
 		}
+	}
+
+	// post a message to the db
+	pub fn post_message(&self, message: Message) -> Result<(), Error> {
+		Ok(())
 	}
 
 	// create a dscontext instance

@@ -39,18 +39,6 @@ function makeid(length) {
 	return result;
 }
 
-document.oncontextmenu = function(e){
-	if(stopEnabled) {
-		stopEvent(e);
-	}
-}
-function stopEvent(event){
-	if(event.preventDefault != undefined)
-		event.preventDefault();
-	if(event.stopPropagation != undefined)
-		event.stopPropagation();
-}
-
 function close_interstitial() {
 	document.getElementById('interstitial').style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
