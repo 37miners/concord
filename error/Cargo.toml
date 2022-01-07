@@ -11,7 +11,8 @@ edition = "2018"
 
 [dependencies]
 
-librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+#librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
+librustlet = { path = "../../rustlet/rustlet" }
 failure = "0.1"
 failure_derive = "0.1"
 futures = "0.3.0"

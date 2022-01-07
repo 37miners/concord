@@ -57,6 +57,16 @@ function close_interstitial() {
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+}
+
+function show_auth_error() {
+	document.getElementById('interstitial').style.visibility = 'visible';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding5").style.visibility = 'visible';
 }
 
 function create_server() {
@@ -64,6 +74,7 @@ function create_server() {
 	document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 }
 
 function join_server() {
@@ -71,6 +82,7 @@ function join_server() {
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 }
 
 function modify_server(iconId, curName) {
@@ -83,6 +95,7 @@ function modify_server(iconId, curName) {
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding4").style.visibility = 'visible';
+	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 }
 
 function modify_server_submit() {
@@ -114,28 +127,33 @@ function load_server_bar() {
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
 		var servers = JSON.parse(this.responseText);
-		servers.forEach(function(server) {
-			var serverbar = document.getElementById('serverbartext');
-			var img = document.createElement('img');
-			var rand = makeid(8);
-			img.src = '/get_server_icon?id=' + server.id + '&r=' + rand;
-			img.className = 'server_icon';
-			var sname = decodeURIComponent(server.name);
-			img.title = sname;
-			img.id = server.id;
-			img.onmouseover = function() {
-				stopEnabled = true;
-				iconId = server.id;
-				curName = sname;
-			};
-			img.onmouseout = function() {
-				stopEnabled = false;
-			};
+		if (servers.error !== undefined) {
+			// authentication error
+			show_auth_error();
+		} else {
+			servers.forEach(function(server) {
+				var serverbar = document.getElementById('serverbartext');
+				var img = document.createElement('img');
+				var rand = makeid(8);
+				img.src = '/get_server_icon?id=' + server.id + '&r=' + rand;
+				img.className = 'server_icon';
+				var sname = decodeURIComponent(server.name);
+				img.title = sname;
+				img.id = server.id;
+				img.onmouseover = function() {
+					stopEnabled = true;
+					iconId = server.id;
+					curName = sname;
+				};
+				img.onmouseout = function() {
+					stopEnabled = false;
+				};
 
-			serverbar.appendChild(img);
-			serverbar.appendChild(document.createElement('br'));
-			$('.server_icon').contextMenu(menu, {triggerOn:'contextmenu'});
-		});
+				serverbar.appendChild(img);
+				serverbar.appendChild(document.createElement('br'));
+				$('.server_icon').contextMenu(menu, {triggerOn:'contextmenu'});
+			});
+		}
 	});
 	req.open("GET", '/get_servers');
 	req.send();
@@ -176,6 +194,7 @@ function init_concord() {
         	document.getElementById("interstitialtextpadding1").style.visibility = 'visible';
         	document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
                 document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	}
 
 	plusdiv.appendChild(plus);

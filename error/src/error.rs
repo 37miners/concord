@@ -17,6 +17,7 @@ use std::fmt;
 use std::fmt::Display;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
+use std::num::ParseIntError;
 
 /// Base Error struct which is used throught this crate and other crates
 #[derive(Debug, Fail)]
@@ -78,6 +79,9 @@ pub enum ErrorKind {
 	/// From Utf8 Error
 	#[fail(display = "FromUtf8Error: {}", _0)]
 	FromUtf8Error(String),
+	/// ParseIntError
+	#[fail(display = "ParseIntError: {}", _0)]
+	ParseIntError(String),
 }
 
 impl Display for Error {
@@ -169,3 +173,18 @@ impl From<FromUtf8Error> for Error {
 	}
 }
 
+impl From<librustlet::ErrorKind> for Error {
+        fn from(e: librustlet::ErrorKind) -> Error {
+                Error {
+                        inner: Context::new(ErrorKind::LibRustletError(format!("{}", e))),
+                }
+        }
+}
+
+impl From<ParseIntError> for Error {
+	fn from(e: ParseIntError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::ParseIntError(format!("{}", e))),
+		}
+	}
+}

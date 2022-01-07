@@ -16,5 +16,7 @@
 extern crate serde_derive;
 
 mod concord;
+mod auth;
+mod server;
 
 pub use crate::concord::concord_init;

@@ -21,6 +21,7 @@ use concorderror::Error;
 nioruntime_log::debug!(); // set log level to debug
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
+// main which just calls 'real_main'
 fn main() {
 	match real_main() {
 		Ok(_) => {},
@@ -31,10 +32,19 @@ fn main() {
 	std::thread::park(); // park the thread so we don't exit
 }
 
+// real main which handles errors
 fn real_main() -> Result<(), Error> {
+	// for now we just hard code host/port here. TODO: make configurable
+	let host = "127.0.0.1".to_string();
+	let port = 8093;
+	let uri = format!("{}:{}", host, port);
+
+	// init our rustlet container
 	rustlet_init!(RustletConfig {
 		http_config: HttpConfig {
-			port: 8093,
+			host,
+			port,
+			tor_port: 1234,
 			root_dir: "~/.concord".to_string(),
 			server_name: format!("Concord {}", VERSION),
 			..HttpConfig::default()
@@ -42,7 +52,8 @@ fn real_main() -> Result<(), Error> {
 		..RustletConfig::default()
 	});
 
-	concord_init("~/.concord".to_string())?; // init concord
+	// init concord
+	concord_init("~/.concord".to_string(), uri)?; // init concord
 	Ok(())
 }
 

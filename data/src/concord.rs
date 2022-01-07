@@ -22,10 +22,13 @@ use std::io::Cursor;
 
 const DB_NAME: &str = "concord";
 
+// the context to use for accessing concord data. Multiple instances
+// may exist and LMDB handles concurrency.
 pub struct DSContext {
 	store: Store,
 }
 
+// information about the server
 #[derive(Debug)]
 pub struct ServerInfo {
 	pub address: String,
@@ -33,6 +36,7 @@ pub struct ServerInfo {
 	pub icon: Vec<u8>,
 }
 
+// the Writeable implmenetation for serializing ServerInfo
 impl Writeable for ServerInfo {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let address_len = self.address.len();
@@ -57,6 +61,7 @@ impl Writeable for ServerInfo {
 	}
 }
 
+// the Readable implmentation for deserializing ServerInfo
 impl Readable for ServerInfo {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let address_len = reader.read_u32()?;
@@ -85,11 +90,15 @@ impl Readable for ServerInfo {
 	}
 }
 
+// data prefixes
 const SERVER_PREFIX: u8 = 0;
+const AUTH_PREFIX: u8 = 1;
 
 impl DSContext {
+	// get a list of servers in the local database
 	pub fn get_servers(&self) -> Result<Vec<(ServerInfo, String)>, Error> {
         	let batch = self.store.batch()?;
+		// get the iterator for each server info
         	let mut itt = batch.iter(&(vec![SERVER_PREFIX])[..], |k, v| {
 			let id = base64::encode(&k[1..]);
                 	let id = urlencoding::encode(&id).to_string();
@@ -110,6 +119,7 @@ impl DSContext {
 		Ok(ret)
 	}
 
+	// get server info about a specific server id
 	pub fn get_server_info(&self, id: String) -> Result<Option<ServerInfo>, Error> {
 		let batch = self.store.batch()?;
 		let id = urlencoding::decode(&id)?;
@@ -121,6 +131,7 @@ impl DSContext {
 		Ok(ret)
 	}
 
+	// add a server
 	pub fn add_server(&self, server_info: ServerInfo) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
@@ -133,6 +144,7 @@ impl DSContext {
 		Ok(())
 	}
 
+	// delete a server
 	pub fn delete_server(&self, id: String) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
@@ -144,6 +156,7 @@ impl DSContext {
 		Ok(())
 	}
 
+	// modify a server
 	pub fn modify_server(&self, id: String, server_info: ServerInfo) -> Result<(), Error> {
                 let batch = self.store.batch()?;
                 let mut key = vec![SERVER_PREFIX];
@@ -155,6 +168,34 @@ impl DSContext {
                 Ok(())
 	}
 
+	// add an auth cookie to the db
+	pub fn add_auth_cookie(&self, token: String) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![AUTH_PREFIX];
+		let token: u128 = token.parse()?;
+		let mut token = token.to_be_bytes().to_vec();
+		key.append(&mut token);
+		let value = 0u8;
+		batch.put_ser(&key, &value)?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	// validate an auth cookie
+	pub fn check_auth_cookie(&self, token: String) -> Result<bool, Error> {
+                let batch = self.store.batch()?;
+                let mut key = vec![AUTH_PREFIX];
+		let token: u128 = token.parse()?;
+                let mut token = token.to_be_bytes().to_vec();
+                key.append(&mut token);
+		let value: Option<u8> = batch.get_ser(&key)?;
+		match value {
+			Some(_) => Ok(true),
+			None => Ok(false),
+		}
+	}
+
+	// create a dscontext instance
 	pub fn new(db_root: String) -> Result<DSContext, Error> {
                 let home_dir = match dirs::home_dir() {
                         Some(p) => p,

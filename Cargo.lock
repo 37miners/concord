@@ -178,7 +178,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4152116fd6e9dadb291ae18fc1ec3575ed6d84c29642d97890f4b4a3417297e4"
 dependencies = [
- "generic-array 0.14.4",
+ "generic-array 0.14.5",
 ]
 
 [[package]]
@@ -198,9 +198,9 @@ checksum = "2e2c71c44e5bbc64de4ecfac946e05f9bba5cc296ea7bab4d3eda242a3ffa73c"
 
 [[package]]
 name = "bumpalo"
-version = "3.8.0"
+version = "3.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8f1e260c3a9040a7c19a12468758f4c16f31a81a1fe087482be9570ec864bb6c"
+checksum = "a4a45a46ab1f2412e53d3a0ade76ffad2025804294569aae387231a0cd6e0899"
 
 [[package]]
 name = "byte-tools"
@@ -311,7 +311,7 @@ dependencies = [
  "concorddata",
  "concorderror",
  "concordlib",
- "librustlet 0.0.2-beta1",
+ "librustlet 0.0.2-beta1 (git+http://github.com/37miners/rustlet?branch=master)",
 ]
 
 [[package]]
@@ -354,7 +354,7 @@ dependencies = [
  "failure_derive",
  "futures",
  "lazy_static",
- "librustlet 0.0.1",
+ "librustlet 0.0.2-beta1",
  "lmdb-zero",
  "nix",
  "rand 0.8.4",
@@ -371,12 +371,15 @@ dependencies = [
  "dirs",
  "fsutils",
  "hyper",
- "librustlet 0.0.2-beta1",
+ "librustlet 0.0.2-beta1 (git+http://github.com/37miners/rustlet?branch=master)",
  "mime_multipart",
+ "nioruntime_err",
  "querystring",
+ "rand 0.8.4",
  "serde",
  "serde_derive",
  "serde_json",
+ "webbrowser",
 ]
 
 [[package]]
@@ -494,7 +497,7 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3dd60d1080a57a05ab032377049e0591415d2b31afd7028356dbf3cc6dcb066"
 dependencies = [
- "generic-array 0.14.4",
+ "generic-array 0.14.5",
 ]
 
 [[package]]
@@ -794,9 +797,9 @@ dependencies = [
 
 [[package]]
 name = "generic-array"
-version = "0.14.4"
+version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
+checksum = "fd48d33ec7f05fbfa152300fdad764757cbded343c1aa1cff2fbaf4134851803"
 dependencies = [
  "typenum",
  "version_check 0.9.4",
@@ -988,15 +991,14 @@ dependencies = [
 
 [[package]]
 name = "librustlet"
-version = "0.0.1"
-source = "git+http://github.com/37miners/rustlet?tag=0.0.1#ebdc4646b8c166269f502bd09dab5a59fb1337b7"
+version = "0.0.2-beta1"
 dependencies = [
  "lazy_static",
- "nioruntime_err 0.0.1",
- "nioruntime_evh 0.0.1",
- "nioruntime_http 0.0.1",
- "nioruntime_log 0.0.1",
- "nioruntime_util 0.0.1",
+ "nioruntime_err",
+ "nioruntime_evh",
+ "nioruntime_http",
+ "nioruntime_log",
+ "nioruntime_util",
  "querystring",
  "rand 0.8.4",
 ]
@@ -1004,14 +1006,14 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#833b186e51f7eefb549167a72a008214688a759e"
+source = "git+http://github.com/37miners/rustlet?branch=master#b92e84e347f19f515d11644af73423b51f328818"
 dependencies = [
  "lazy_static",
- "nioruntime_err 0.0.2-beta1",
- "nioruntime_evh 0.0.2-beta1",
- "nioruntime_http 0.0.2-beta1",
- "nioruntime_log 0.0.2-beta1",
- "nioruntime_util 0.0.2-beta1",
+ "nioruntime_err",
+ "nioruntime_evh",
+ "nioruntime_http",
+ "nioruntime_log",
+ "nioruntime_util",
  "querystring",
  "rand 0.8.4",
 ]
@@ -1123,25 +1125,8 @@ dependencies = [
 
 [[package]]
 name = "nioruntime_err"
-version = "0.0.1"
-source = "git+http://github.com/bitcoinmw/nioruntime?tag=0.0.1#bec261ef9ab662665be4f2d173cf6adb1bee602f"
-dependencies = [
- "byteorder",
- "bytes",
- "chrono",
- "failure",
- "failure_derive",
- "futures",
- "lazy_static",
- "nix",
- "rand 0.8.4",
- "serde",
-]
-
-[[package]]
-name = "nioruntime_err"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "byteorder",
  "bytes",
@@ -1158,38 +1143,16 @@ dependencies = [
 
 [[package]]
 name = "nioruntime_evh"
-version = "0.0.1"
-source = "git+http://github.com/bitcoinmw/nioruntime?tag=0.0.1#bec261ef9ab662665be4f2d173cf6adb1bee602f"
-dependencies = [
- "errno",
- "futures",
- "kqueue-sys",
- "libc",
- "nioruntime_err 0.0.1",
- "nioruntime_log 0.0.1",
- "nioruntime_util 0.0.1",
- "nix",
- "portpicker",
- "rand 0.8.4",
- "rustls",
- "rustls-pemfile",
- "wepoll-sys",
- "winapi 0.2.8",
- "ws2_32-sys",
-]
-
-[[package]]
-name = "nioruntime_evh"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "errno",
  "futures",
  "kqueue-sys",
  "libc",
- "nioruntime_err 0.0.2-beta1",
- "nioruntime_log 0.0.2-beta1",
- "nioruntime_util 0.0.2-beta1",
+ "nioruntime_err",
+ "nioruntime_log",
+ "nioruntime_util",
  "nix",
  "portpicker",
  "rand 0.8.4",
@@ -1203,27 +1166,8 @@ dependencies = [
 
 [[package]]
 name = "nioruntime_http"
-version = "0.0.1"
-source = "git+http://github.com/bitcoinmw/nioruntime?tag=0.0.1#bec261ef9ab662665be4f2d173cf6adb1bee602f"
-dependencies = [
- "bytefmt",
- "chrono",
- "dirs",
- "fsutils",
- "itoa 0.4.8",
- "lazy_static",
- "nioruntime_err 0.0.1",
- "nioruntime_evh 0.0.1",
- "nioruntime_log 0.0.1",
- "nioruntime_util 0.0.1",
- "num-format",
- "rand 0.8.4",
-]
-
-[[package]]
-name = "nioruntime_http"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "bytefmt",
  "chrono",
@@ -1232,43 +1176,27 @@ dependencies = [
  "grin_secp256k1zkp",
  "itoa 0.4.8",
  "lazy_static",
- "nioruntime_err 0.0.2-beta1",
- "nioruntime_evh 0.0.2-beta1",
- "nioruntime_log 0.0.2-beta1",
+ "nioruntime_err",
+ "nioruntime_evh",
+ "nioruntime_log",
  "nioruntime_tor",
- "nioruntime_util 0.0.2-beta1",
+ "nioruntime_util",
  "num-format",
  "rand 0.6.5",
 ]
 
 [[package]]
 name = "nioruntime_log"
-version = "0.0.1"
-source = "git+http://github.com/bitcoinmw/nioruntime?tag=0.0.1#bec261ef9ab662665be4f2d173cf6adb1bee602f"
-dependencies = [
- "chrono",
- "failure",
- "failure_derive",
- "futures",
- "lazy_static",
- "nioruntime_err 0.0.1",
- "nioruntime_util 0.0.1",
- "nix",
- "rand 0.8.4",
-]
-
-[[package]]
-name = "nioruntime_log"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "chrono",
  "failure",
  "failure_derive",
  "futures",
  "lazy_static",
- "nioruntime_err 0.0.2-beta1",
- "nioruntime_util 0.0.2-beta1",
+ "nioruntime_err",
+ "nioruntime_util",
  "nix",
  "rand 0.8.4",
 ]
@@ -1276,7 +1204,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_tor"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "chrono",
  "data-encoding",
@@ -1285,11 +1213,12 @@ dependencies = [
  "failure",
  "futures",
  "grin_secp256k1zkp",
+ "lazy_static",
  "libc",
  "log 0.4.14",
- "nioruntime_err 0.0.2-beta1",
- "nioruntime_log 0.0.2-beta1",
- "nioruntime_util 0.0.2-beta1",
+ "nioruntime_err",
+ "nioruntime_log",
+ "nioruntime_util",
  "nix",
  "portpicker",
  "rand 0.8.4",
@@ -1308,26 +1237,8 @@ dependencies = [
 
 [[package]]
 name = "nioruntime_util"
-version = "0.0.1"
-source = "git+http://github.com/bitcoinmw/nioruntime?tag=0.0.1#bec261ef9ab662665be4f2d173cf6adb1bee602f"
-dependencies = [
- "byteorder",
- "bytes",
- "chrono",
- "failure",
- "failure_derive",
- "futures",
- "lazy_static",
- "nioruntime_err 0.0.1",
- "nix",
- "rand 0.8.4",
- "serde",
-]
-
-[[package]]
-name = "nioruntime_util"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#66458b054824f494810c9df1adaa486b01749c3e"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e2d68c3e5a8ce81d9cae83562ee2c902c56a8055"
 dependencies = [
  "byteorder",
  "bytes",
@@ -1336,7 +1247,7 @@ dependencies = [
  "failure_derive",
  "futures",
  "lazy_static",
- "nioruntime_err 0.0.2-beta1",
+ "nioruntime_err",
  "nix",
  "rand 0.8.4",
  "serde",
@@ -1949,9 +1860,9 @@ dependencies = [
 
 [[package]]
 name = "sha2"
-version = "0.9.8"
+version = "0.9.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b69f9a4c9740d74c5baa3fd2e547f9525fa8088a8a958e0ca2409a514e33f5fa"
+checksum = "4d58a1e1bf39749807d89cf2d98ac2dfa0ff1cb3faa38fbb64dd88ac8013d800"
 dependencies = [
  "block-buffer 0.9.0",
  "cfg-if 1.0.0",
@@ -1981,9 +1892,9 @@ checksum = "7fdf1b9db47230893d76faad238fd6097fd6d6a9245cd7a4d90dbd639536bbd2"
 
 [[package]]
 name = "signature"
-version = "1.4.0"
+version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "02658e48d89f2bec991f9a78e69cfa4c316f8d6a6c4ec12fae1aeb263d486788"
+checksum = "f054c6c1a6e95179d6f23ed974060dcefb2d9388bb7256900badad682c499de4"
 
 [[package]]
 name = "slab"
@@ -2023,9 +1934,9 @@ checksum = "171758edb47aa306a78dfa4ab9aeb5167405bd4e3dc2b64e88f6a84bbe98bd63"
 
 [[package]]
 name = "syn"
-version = "1.0.84"
+version = "1.0.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ecb2e6da8ee5eb9a61068762a32fa9619cc591ceb055b3687f4cd4051ec2e06b"
+checksum = "a684ac3dcd8913827e18cd09a68384ee66c1de24157e3c556c9ab16d85695fb7"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2315,6 +2226,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "webbrowser"
+version = "0.5.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ecad156490d6b620308ed411cfee90d280b3cbd13e189ea0d3fada8acc89158a"
+dependencies = [
+ "web-sys",
+ "widestring",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "webpki"
 version = "0.22.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2350,6 +2272,12 @@ checksum = "d011071ae14a2f6671d0b74080ae0cd8ebf3a6f8c9589a2cd45f23126fe29724"
 dependencies = [
  "libc",
 ]
+
+[[package]]
+name = "widestring"
+version = "0.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c168940144dd21fd8046987c16a46a33d5fc84eec29ef9dcddc2ac9e31526b7c"
 
 [[package]]
 name = "winapi"

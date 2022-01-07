@@ -12,14 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use concorddata::concord::DSContext;
-use concorddata::concord::ServerInfo;
+//! Entry point for concord module initilization logic
+
 use concorderror::Error as ConcordError;
 use librustlet::*;
 use nioruntime_log::*;
 
 use std::fs::File;
-use std::io::Read;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
@@ -41,10 +40,12 @@ fn create_file_from_bytes(
 
 // setup the webroot dir for concord
 fn init_webroot(root_dir: String) {
+	// create the directory structure
 	let js_dir = format!("{}/www/js", root_dir);
 	let css_dir = format!("{}/www/css", root_dir);
 	let images_dir = format!("{}/www/images", root_dir);
 
+	// if the js dir doesn't exist it means we're going to init things
 	if !Path::new(&js_dir).exists() {
 		fsutils::mkdir(&js_dir);
 		fsutils::mkdir(&css_dir);
@@ -210,14 +211,9 @@ fn init_webroot(root_dir: String) {
 	}
 }
 
-#[derive(Serialize, Deserialize)]
-struct ServerInfoMin {
-	name: String,
-	address: String,
-	id: String,
-}
-
-pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
+// We initialize concord here.
+pub fn concord_init(root_dir: String, uri: String) -> Result<(), ConcordError> {
+	// get homedir updated root_dir
         let home_dir = match dirs::home_dir() {
                 Some(p) => p,
                 None => PathBuf::new(),
@@ -226,203 +222,10 @@ pub fn concord_init(root_dir: String) -> Result<(), ConcordError> {
         .display()
         .to_string();
         let root_dir = root_dir.replace("~", &home_dir);
-        let ds_context = DSContext::new(root_dir.clone())?;
-	init_webroot(root_dir.clone());
 
-	// create a server on this concord instance
-	rustlet!("create_server", {
-		let query = request!("query");
-		let query_vec = querystring::querify(&query);
-		let mut name = "".to_string();
-		for query_param in query_vec {
-			if query_param.0 == "name" {
-				name = query_param.1.to_string();
-				break;
-			}
-		}
-
-		let content = request_content!();
-		let content = &mut &content[..];
-		let mut headers = hyper::header::Headers::new();
-		for i in 0..header_len!() {
-			headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
-		}
-		let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
-		for node in &res {
-			match node {
-				mime_multipart::Node::File(filepart) => {
-					let mut f = File::open(&filepart.path)?;
-					let size = filepart.size.unwrap_or(0);
-					let mut buf = vec![0 as u8; size];
-					f.read(&mut buf)?;
-					let server_info = ServerInfo {
-						address: "address".to_string(),
-						name: name.clone(),
-						icon: buf,
-					};
-
-					ds_context.add_server(server_info).map_err(|e| {
-						let error: Error = ErrorKind::ApplicationError(format!(
-							"error adding server: {}",
-							e.to_string()
-						))
-						.into();
-						error
-					})?;
-					break;
-				}
-				_ => {}
-			}
-		}
-	});
-	rustlet_mapping!("/create_server", "create_server");
-
-	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
-
-	// get all servers associated with this instance of concord
-	rustlet!("get_servers", {
-		let servers = ds_context.get_servers().map_err(|e| {
-			let error: Error = ErrorKind::ApplicationError(
-				format!(
-					"Error getting servers: {}",
-					e.to_string()
-				)
-			).into();
-			error
-		})?;
-
-		let mut server_json = vec![];
-		for server in servers {
-			server_json.push(
-				ServerInfoMin {
-					name: server.0.name.clone(),
-					address: server.0.address.clone(),
-					id: server.1,
-				}
-			);
-		}
-		let json = serde_json::to_string(&server_json).map_err(|e| {
-			let error: Error = ErrorKind::ApplicationError(
-				format!("Json Error: {}", e.to_string())
-			).into();
-			error
-		})?;
-		response!("{}", json);
-
-	});
-	rustlet_mapping!("/get_servers", "get_servers");
-
-	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
-
-	// get the icon for the specified server
-	rustlet!("get_server_icon", {
-                let query = request!("query");
-                let query_vec = querystring::querify(&query);
-                let mut id = "".to_string();
-                for query_param in query_vec {
-                        if query_param.0 == "id" {
-                                id = query_param.1.to_string();
-                                break;
-                        }
-                }
-
-		let sinfo = ds_context.get_server_info(id).map_err(|e| {
-			let error: Error = ErrorKind::ApplicationError(
-				format!("error getting server info: {}", e.to_string())
-			).into();
-			error
-		})?;
-
-		match sinfo {
-			Some(sinfo) => {
-				bin_write!(&sinfo.icon[..]);
-			},
-			None => {
-
-			},
-		}
-	});
-	rustlet_mapping!("/get_server_icon", "get_server_icon");
-
-        // create a new context for each rustlet, synchronization handled by batches
-        let ds_context = DSContext::new(root_dir.clone())?;
-
-	// delete the specified server
-        rustlet!("delete_server", {
-                let query = request!("query");
-                let query_vec = querystring::querify(&query);
-                let mut id = "".to_string();
-                for query_param in query_vec {
-                        if query_param.0 == "id" {
-                                id = query_param.1.to_string();
-                                break;
-                        }
-                }
-
-                ds_context.delete_server(id).map_err(|e| {
-                        let error: Error = ErrorKind::ApplicationError(
-                                format!("error deleting server: {}", e.to_string())
-                        ).into();
-                        error
-                })?;
-        });
-        rustlet_mapping!("/delete_server", "delete_server");
-
-        // create a new context for each rustlet, synchronization handled by batches
-        let ds_context = DSContext::new(root_dir.clone())?;
-
-        // modify the specified server
-        rustlet!("modify_server", {
-                let query = request!("query");
-                let query_vec = querystring::querify(&query);
-                let mut id = "".to_string();
-		let mut name = "".to_string();
-                for query_param in query_vec {
-                        if query_param.0 == "id" {
-                                id = query_param.1.to_string();
-                        } else if query_param.0 == "name" {
-				name = query_param.1.to_string();
-			}
-                }
-
-                let content = request_content!();
-                let content = &mut &content[..];
-                let mut headers = hyper::header::Headers::new();
-                for i in 0..header_len!() {
-                        headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
-                }
-                let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
-                for node in &res {
-                        match node {
-                                mime_multipart::Node::File(filepart) => {
-                                        let mut f = File::open(&filepart.path)?;
-                                        let size = filepart.size.unwrap_or(0);
-                                        let mut buf = vec![0 as u8; size];
-                                        f.read(&mut buf)?;
-                                        let server_info = ServerInfo {
-                                                address: "address".to_string(),
-                                                name: name.clone(),
-                                                icon: buf,
-                                        };
-
-                                        ds_context.modify_server(id.clone(), server_info).map_err(|e| {
-                                                let error: Error = ErrorKind::ApplicationError(format!(
-                                                        "error modifying server: {}",
-                                                        e.to_string()
-                                                ))
-                                                .into();
-                                                error
-                                        })?;
-					break;
-                                }
-                                _ => {}
-                        }
-                }
-        });
-        rustlet_mapping!("/modify_server", "modify_server");
+	init_webroot(root_dir.clone()); // setup webroot
+	crate::auth::init_auth(root_dir.clone(), uri)?; // auth module
+	crate::server::init_server(root_dir)?; // server module
 
 	Ok(())
 }
-

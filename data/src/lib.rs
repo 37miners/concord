@@ -23,7 +23,6 @@ extern crate serde_derive;
 
 pub mod lmdb;
 pub mod concord;
-//pub mod error;
 pub mod ser;
 pub mod hash;
 pub mod hex;
