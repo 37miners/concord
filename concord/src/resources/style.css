@@ -187,3 +187,18 @@ a.button4:hover{
 .padding4 {
 	padding-left: 100px;
 }
+
+.message_input {
+        position: absolute;
+        height: 30px;
+        bottom: 10px;
+        width: 100%;
+        right: 0px;
+        left: -2px;
+}
+
+.input_div {
+        width: 100%;
+        position: relative;
+        bottom: 0px;
+}

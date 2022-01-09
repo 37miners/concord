@@ -100,7 +100,7 @@ function modify_server_submit() {
                         load_server_bar();
                         close_interstitial();
                 });
-                req.open("POST", 'modify_server?id=' + iconId + '&name='+encodeURIComponent(name));
+                req.open("POST", '/modify_server?id=' + iconId + '&name='+encodeURIComponent(name));
                 req.send(formData);
         } else {
                 alert("ERROR: file must be specified.");
@@ -160,7 +160,7 @@ function add_server() {
         		load_server_bar();
         		close_interstitial();
 		});
-		req.open("POST", 'create_server?name='+encodeURIComponent(name));
+		req.open("POST", '/create_server?name='+encodeURIComponent(name));
 		req.send(formData);
 	} else {
 		alert("ERROR: file must be specified.");
@@ -202,6 +202,32 @@ function init_concord() {
         var div3 = document.createElement('div');
         div3.innerHTML = '&nbsp;';
         div3.className = 'messagebar';
+
+	var input_div = document.createElement('div');
+	var textarea = document.createElement('input');
+	textarea.type = 'text';
+	textarea.className = 'message_input';
+
+	textarea.addEventListener('keydown', function(evt) {
+		if (evt.keyCode == 13) {
+			var req = new XMLHttpRequest();
+			var formData = new FormData();
+			formData.append("payload", this.value);
+			var this_ref = this;
+			req.addEventListener("load", function() {
+				this_ref.value = '';
+			});
+			var ms = Date.now();
+			req.open("POST", '/send_message?server_id=GhEvf%2FiAxSI%3D&channel_id=1234&timestamp=' + ms);
+			req.send(formData);
+		
+		}
+	});
+
+	div3.appendChild(input_div);
+	input_div.appendChild(textarea);
+	input_div.className = 'input_div';
+
         document.body.appendChild(div3);
 
         var div4 = document.createElement('div');

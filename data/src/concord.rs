@@ -15,6 +15,7 @@
 use crate::lmdb::Store;
 use crate::ser::{Readable, Writeable, Reader, Writer, BinReader, ProtocolVersion};
 use concorderror::Error;
+use crate::ser::serialize_default;
 
 use std::convert::TryInto;
 use std::path::PathBuf;
@@ -29,25 +30,135 @@ pub struct DSContext {
 }
 
 // Message types
+#[derive(Clone)]
 pub enum MessageType {
 	Text,
 	Binary,
 }
 
 // The key to a message entry
+#[derive(Clone)]
 pub struct MessageKey {
+	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
 	pub channel_id: u32,
 	pub timestamp: u64,
-	pub pubkey: [u8; 32],
+	pub user_pubkey: [u8; 32],
 	pub nonce: u16,
 }
 
+// the Writeable implmenetation for serializing MessageKey
+impl Writeable for MessageKey {
+        fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(MESSAGE_PREFIX)?;
+                for i in 0..32 {
+                        writer.write_u8(self.server_pubkey[i])?;
+                }
+		for i in 0..8 {
+			writer.write_u8(self.server_id[i])?;
+		}
+		writer.write_u32(self.channel_id)?;
+		writer.write_u64(self.timestamp)?;
+		for i in 0..32 {
+			writer.write_u8(self.user_pubkey[i])?;
+		}
+		writer.write_u16(self.nonce)?;
+		Ok(())
+	}
+}
+
+// the Readable implmentation for deserializing MessageKey
+impl Readable for MessageKey {
+        fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let _ = reader.read_u8()?;
+                let mut server_pubkey = vec![];
+                for _ in 0..32 {
+                        server_pubkey.push(reader.read_u8()?);
+                }
+		let mut server_id = vec![];
+		for _ in 0..8 {
+			server_id.push(reader.read_u8()?);
+		}
+		let channel_id = reader.read_u32()?;
+		let timestamp = reader.read_u64()?;
+		let mut user_pubkey = vec![];
+                for _ in 0..32 {
+                        user_pubkey.push(reader.read_u8()?);
+                }
+		let nonce = reader.read_u16()?;
+
+		let server_pubkey = server_pubkey.as_slice().try_into()?;
+		let server_id = server_id.as_slice().try_into()?;
+		let user_pubkey = user_pubkey.as_slice().try_into()?;
+
+		Ok(
+			MessageKey {
+				server_pubkey,
+				server_id,
+				channel_id,
+				timestamp,
+				user_pubkey,
+				nonce,
+			}
+		)
+	}
+}
+
 // information associated with a message
+#[derive(Clone)]
 pub struct Message {
 	pub payload: Vec<u8>,
 	pub signature: [u8; 64],
 	pub message_type: MessageType,
+}
+
+// the Writeable implmenetation for serializing Message
+impl Writeable for Message {
+        fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let payload_len = self.payload.len();
+		writer.write_u32(payload_len.try_into().unwrap_or(0))?;
+		for i in 0..payload_len {
+			writer.write_u8(self.payload[i])?;
+		}
+		for i in 0..64 {
+			writer.write_u8(self.signature[i])?;
+		}
+		match self.message_type {
+			MessageType::Text => writer.write_u8(0)?,
+			MessageType::Binary => writer.write_u8(1)?,
+		}
+
+                Ok(())
+        }
+}
+
+// the Readable implmentation for deserializing Message
+impl Readable for Message {
+        fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let payload_len = reader.read_u32()?;
+		let mut payload = vec![];
+		for _ in 0..payload_len {
+			payload.push(reader.read_u8()?);
+		}
+		let mut signature = vec![];
+		for _ in 0..64 {
+			signature.push(reader.read_u8()?);
+		}
+		let message_type = match reader.read_u8()? {
+			0 => MessageType::Text,
+			_ => MessageType::Binary,
+		};
+
+		let signature = signature.as_slice().try_into()?;
+
+		Ok(
+			Message {
+				payload,
+				signature,
+				message_type,
+			}
+		)
+	}
 }
 
 // information about the server
@@ -115,6 +226,7 @@ impl Readable for ServerInfo {
 // data prefixes
 const SERVER_PREFIX: u8 = 0;
 const AUTH_PREFIX: u8 = 1;
+const MESSAGE_PREFIX: u8 = 2;
 
 impl DSContext {
 	// get a list of servers in the local database
@@ -218,8 +330,64 @@ impl DSContext {
 	}
 
 	// post a message to the db
-	pub fn post_message(&self, message: Message) -> Result<(), Error> {
+	pub fn post_message(&self, key: MessageKey, message: Message) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut buffer = vec![];
+                serialize_default(&mut buffer, &key)?;
+		batch.put_ser(&buffer, &message)?;
+		batch.commit()?;
 		Ok(())
+	}
+
+	// for now we just create a new iterator each time we paginate.
+	// TODO: store iterators so that faster access can be acheived.
+	pub fn get_messages(
+		&self,
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+		channel_id: u32,
+		offset: u64,
+		len: usize,
+	) -> Result<Vec<(MessageKey, Message)>, Error> {
+		let batch = self.store.batch()?;
+                // get the iterator for each message
+		let mut key_vec = vec![MESSAGE_PREFIX];
+		key_vec.append(&mut server_pubkey.to_vec());
+		key_vec.append(&mut server_id.to_vec());
+		key_vec.append(&mut channel_id.to_be_bytes().to_vec());
+		
+                let mut itt = batch.iter(&(key_vec[..]), |k, v| {
+                        let mut cursor = Cursor::new(k.to_vec());
+                        cursor.set_position(0);
+                        let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+			let mkey = MessageKey::read(&mut reader)?;
+
+			let mut cursor = Cursor::new(v.to_vec());
+			cursor.set_position(0);
+			let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+			let mval = Message::read(&mut reader)?;
+			Ok((mkey, mval))
+                })?;
+
+                let mut ret = vec![];
+		let mut itt_count = 0;
+                loop {
+			let next = itt.next();
+                        match next {
+                                Some((mkey,mval)) => {
+					if itt_count >= offset {
+						ret.push((mkey, mval));
+					}
+					if ret.len() >= len {
+						break;
+					}
+					itt_count += 1;
+				},
+                                None => { break; },
+                        }
+                }
+
+		Ok(ret)
 	}
 
 	// create a dscontext instance

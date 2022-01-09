@@ -225,7 +225,8 @@ pub fn concord_init(root_dir: String, uri: String) -> Result<(), ConcordError> {
 
 	init_webroot(root_dir.clone()); // setup webroot
 	crate::auth::init_auth(root_dir.clone(), uri)?; // auth module
-	crate::server::init_server(root_dir)?; // server module
+	crate::server::init_server(root_dir.clone())?; // server module
+	crate::message::init_message(root_dir.clone())?; // message module
 
 	Ok(())
 }

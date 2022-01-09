@@ -18,6 +18,7 @@ use std::fmt::Display;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::num::ParseIntError;
+use std::array::TryFromSliceError;
 
 /// Base Error struct which is used throught this crate and other crates
 #[derive(Debug, Fail)]
@@ -82,6 +83,9 @@ pub enum ErrorKind {
 	/// ParseIntError
 	#[fail(display = "ParseIntError: {}", _0)]
 	ParseIntError(String),
+	/// TryFromSliceError
+	#[fail(display = "TryFromSliceError: {}", _0)]
+	TryFromSliceError(String),
 }
 
 impl Display for Error {
@@ -185,6 +189,14 @@ impl From<ParseIntError> for Error {
 	fn from(e: ParseIntError) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::ParseIntError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<TryFromSliceError> for Error {
+	fn from(e: TryFromSliceError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::TryFromSliceError(format!("{}", e))),
 		}
 	}
 }

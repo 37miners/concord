@@ -134,7 +134,7 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
         rustlet_mapping!("/auth", "auth");
 
 	// open the web browser	
-	webbrowser::open(&format!("http://{}/auth?token={}", uri, auth_token))?;
+	//webbrowser::open(&format!("http://{}/auth?token={}", uri, auth_token))?;
 
 	Ok(())
 }
