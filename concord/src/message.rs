@@ -53,7 +53,7 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
 
 		let mut server_pubkey: Option<[u8; 32]> = None;
 		let mut server_id: Option<[u8; 8]> = None;
-		let mut channel_id: Option<u32> = None;
+		let mut channel_id: Option<u64> = None;
 		let mut timestamp: Option<u64> = None;
 		let mut nonce: Option<u16> = None;
 		let mut payload: Option<Vec<u8>> = None;
@@ -203,7 +203,7 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
 
                 let mut server_pubkey: Option<[u8; 32]> = None;
                 let mut server_id: Option<[u8; 8]> = None;
-                let mut channel_id: Option<u32> = None;
+                let mut channel_id: Option<u64> = None;
 		let mut len = 100;
 		let mut offset = 0;
 
@@ -229,9 +229,13 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
 		let server_pubkey = match server_pubkey {
 			Some(server_pubkey) => server_pubkey,
 			None => {
-				// TODO: get our pubkey
-				let server_pubkey: [u8; 32] = rand::random();
-				server_pubkey
+				match tor_pubkey!() {
+					Some(key) => key,
+					None => {
+						response!("tor not configured!");
+						return Ok(());
+					},
+				}
 			},
 		};
 

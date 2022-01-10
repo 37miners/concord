@@ -14,6 +14,8 @@
 
 use concorddata::concord::DSContext;
 use concorddata::concord::ServerInfo;
+use concorddata::concord::Channel;
+use concorddata::concord::ChannelKey;
 use concorderror::Error as ConcordError;
 use crate::auth::check_auth;
 use librustlet::*;
@@ -48,6 +50,13 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 			return Ok(());
 		}
 
+		let server_pubkey = tor_pubkey!();
+		if server_pubkey.is_none() {
+			response!("tor not configured!");
+			return Ok(());
+		}
+		let server_pubkey = server_pubkey.unwrap();
+
 		// get query parameters
                 let query = request!("query");
                 let query_vec = querystring::querify(&query);
@@ -80,7 +89,7 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
                                                 icon: buf,
                                         };
 
-                                        ds_context.add_server(server_info).map_err(|e| {
+                                        let server_id = ds_context.add_server(server_info).map_err(|e| {
                                                 let error: Error = ErrorKind::ApplicationError(format!(
                                                         "error adding server: {}",
                                                         e.to_string()
@@ -88,6 +97,27 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
                                                 .into();
                                                 error
                                         })?;
+
+                			let channel_key = ChannelKey {
+                        			server_pubkey,
+                        			server_id,
+						channel_id: 0,
+                			};
+					let channel = Channel {
+						name: "mainchat".to_string(),
+						description: "Welcome to mainchat!".to_string(),
+						channel_id: 0,
+					};
+
+					ds_context.set_channel(channel_key, channel).map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+                                                        "error adding channel: {}",
+                                                        e.to_string()
+                                                ))
+                                                .into();
+                                                error
+					})?;
+
                                         break;
                                 }
                                 _ => {}

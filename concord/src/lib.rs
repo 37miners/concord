@@ -19,5 +19,6 @@ mod concord;
 mod auth;
 mod server;
 mod message;
+mod channel;
 
 pub use crate::concord::concord_init;

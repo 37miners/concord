@@ -85,12 +85,17 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
 	config.show_stdout = true;
 	log_config_multi!(MAIN_LOG, config.clone())?;
 
+	log_no_ts_multi!(
+		INFO,
+		MAIN_LOG,
+		"-------------------------------------------------------------------------------------------------------------------------------"
+	);
 
 	// log to stdout/log for future reference.
 	log_multi!(
 		INFO,
 		MAIN_LOG,
-		"Authentication URL: http://{}/auth?token={}",
+		"Authentication URL:   http://{}/auth?token={}",
 		uri,
 		auth_token,
 	);
@@ -99,6 +104,12 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
                 MAIN_LOG,
                 "Authentication Token: {}",
                 auth_token,
+        );
+
+        log_no_ts_multi!(
+                INFO,
+                MAIN_LOG,
+                "-------------------------------------------------------------------------------------------------------------------------------"
         );
 
 	config.show_stdout = false;

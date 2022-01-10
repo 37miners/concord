@@ -41,7 +41,7 @@ pub enum MessageType {
 pub struct MessageKey {
 	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
-	pub channel_id: u32,
+	pub channel_id: u64,
 	pub timestamp: u64,
 	pub user_pubkey: [u8; 32],
 	pub nonce: u16,
@@ -57,7 +57,7 @@ impl Writeable for MessageKey {
 		for i in 0..8 {
 			writer.write_u8(self.server_id[i])?;
 		}
-		writer.write_u32(self.channel_id)?;
+		writer.write_u64(self.channel_id)?;
 		writer.write_u64(self.timestamp)?;
 		for i in 0..32 {
 			writer.write_u8(self.user_pubkey[i])?;
@@ -79,7 +79,7 @@ impl Readable for MessageKey {
 		for _ in 0..8 {
 			server_id.push(reader.read_u8()?);
 		}
-		let channel_id = reader.read_u32()?;
+		let channel_id = reader.read_u64()?;
 		let timestamp = reader.read_u64()?;
 		let mut user_pubkey = vec![];
                 for _ in 0..32 {
@@ -223,10 +223,113 @@ impl Readable for ServerInfo {
 	}
 }
 
+#[derive(Debug)]
+pub struct ChannelKey {
+        pub server_pubkey: [u8; 32],
+        pub server_id: [u8; 8],
+        pub channel_id: u64,
+}
+
+impl Writeable for ChannelKey {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..32 {
+			writer.write_u8(self.server_pubkey[i])?;
+		}
+		for i in 0..8 {
+			writer.write_u8(self.server_id[i])?;
+		}
+		writer.write_u64(self.channel_id)?;
+
+		Ok(())
+	}
+}
+
+impl Readable for ChannelKey {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut server_pubkey = [0u8; 32];
+		let mut server_id = [0u8; 8];
+
+		for i in 0..32 {
+			server_pubkey[i] = reader.read_u8()?;
+		}
+
+                for i in 0..8 {
+                        server_id[i] = reader.read_u8()?;
+                }
+
+		let channel_id = reader.read_u64()?;
+
+		let channel_key = ChannelKey {
+			server_pubkey,
+			server_id,
+			channel_id,
+		};
+
+		Ok(channel_key)
+	}
+}
+
+#[derive(Debug)]
+pub struct Channel {
+	pub name: String,
+	pub description: String,
+	pub channel_id: u64,
+}
+
+// the Writeable implmenetation for serializing Channel
+impl Writeable for Channel {
+        fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+                let name_len = self.name.len();
+                let name_bytes = self.name.as_bytes();
+                writer.write_u32(name_len.try_into().unwrap_or(0))?;
+                for i in 0..name_len {
+                        writer.write_u8(name_bytes[i])?;
+                }
+                let description_len = self.description.len();
+                let description_bytes = self.description.as_bytes();
+                writer.write_u32(description_len.try_into().unwrap_or(0))?;
+                for i in 0..description_len {
+                        writer.write_u8(description_bytes[i])?;
+                }
+		writer.write_u64(self.channel_id)?;
+
+		Ok(())
+	}
+}
+
+// the Readable implmentation for deserializing Channel 
+impl Readable for Channel {
+        fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+                let len = reader.read_u32()?;
+                let mut name = vec![];
+                for _ in 0..len {
+                        name.push(reader.read_u8()?);
+                }
+		let name = std::str::from_utf8(&name)?.to_string();
+
+                let len = reader.read_u32()?;
+                let mut description = vec![];
+                for _ in 0..len {
+                        description.push(reader.read_u8()?);
+                }
+                let description = std::str::from_utf8(&description)?.to_string();
+		let channel_id = reader.read_u64()?;
+
+		let channel = Channel {
+			name,
+			description,
+			channel_id,
+		};
+
+		Ok(channel)
+	}
+}
+
 // data prefixes
 const SERVER_PREFIX: u8 = 0;
 const AUTH_PREFIX: u8 = 1;
 const MESSAGE_PREFIX: u8 = 2;
+const CHANNEL_PREFIX: u8 = 3;
 
 impl DSContext {
 	// get a list of servers in the local database
@@ -266,16 +369,14 @@ impl DSContext {
 	}
 
 	// add a server
-	pub fn add_server(&self, server_info: ServerInfo) -> Result<(), Error> {
+	pub fn add_server(&self, server_info: ServerInfo) -> Result<[u8; 8], Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
 		let id: [u8; 8] = rand::random();
-		let id = base64::encode(&id);
-		let id = urlencoding::encode(&id);
-		key.append(&mut id.as_bytes().to_vec());
+		key.append(&mut id.to_vec());
 		batch.put_ser(&key, &server_info)?;
 		batch.commit()?;
-		Ok(())
+		Ok(id)
 	}
 
 	// delete a server
@@ -345,7 +446,7 @@ impl DSContext {
 		&self,
 		server_pubkey: [u8; 32],
 		server_id: [u8; 8],
-		channel_id: u32,
+		channel_id: u64,
 		offset: u64,
 		len: usize,
 	) -> Result<Vec<(MessageKey, Message)>, Error> {
@@ -388,6 +489,66 @@ impl DSContext {
                 }
 
 		Ok(ret)
+	}
+
+        pub fn get_channels(
+                &self,
+                server_pubkey: [u8; 32],
+                server_id: [u8; 8],
+        ) -> Result<Vec<Channel>, Error> {
+                let batch = self.store.batch()?;
+                // get the iterator for each channel
+                let mut key_vec = vec![CHANNEL_PREFIX];
+                key_vec.append(&mut server_pubkey.to_vec());
+                key_vec.append(&mut server_id.to_vec());
+
+                let mut itt = batch.iter(&(key_vec[..]), |_, v| {
+                        let mut cursor = Cursor::new(v.to_vec());
+                        cursor.set_position(0);
+                        let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+                        let cval = Channel::read(&mut reader)?;
+                        Ok(cval)
+                })?;
+
+                let mut ret = vec![];
+                loop {
+                        let next = itt.next();
+                        match next {
+                                Some(cval) => {
+					ret.push(cval);
+                                },
+                                None => { break; },
+                        }
+                }
+
+                Ok(ret)
+	}
+
+	pub fn set_channel(
+		&self,
+		channel_key: ChannelKey,
+		channel: Channel,
+	) -> Result<(), Error> {
+                let batch = self.store.batch()?;
+                let mut buffer = vec![];
+                serialize_default(&mut buffer, &channel_key)?;
+		let mut buffer2 = vec![CHANNEL_PREFIX];
+		buffer2.append(&mut buffer);
+                batch.put_ser(&buffer2, &channel)?;
+                batch.commit()?;
+                Ok(())
+	}
+
+	pub fn delete_channel(
+		&self,
+		channel_key: ChannelKey,
+	) -> Result<(), Error> {
+                let batch = self.store.batch()?;
+                let mut buffer = vec![];
+                serialize_default(&mut buffer, &channel_key)?;
+                batch.delete(&buffer)?;
+                batch.commit()?;
+                Ok(())
 	}
 
 	// create a dscontext instance
