@@ -36,21 +36,14 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 	// create a ds context. Each rustlet needs it's own
 	let ds_context = DSContext::new(root_dir.clone())?;
 
-	// each rustlet also needs a root_dir_clone
-	let root_dir_clone = root_dir.clone();
-	let root_dir_clone2 = root_dir.clone();
-	let root_dir_clone3 = root_dir.clone();
-	let root_dir_clone4 = root_dir.clone();
-	let root_dir_clone5 = root_dir.clone();
-
         // create a server on this concord instance
         rustlet!("create_server", {
 		// make sure we're authenticated
-		if ! check_auth(&root_dir_clone) {
+		if ! check_auth(&ds_context) {
 			return Ok(());
 		}
 
-		let server_pubkey = tor_pubkey!();
+		let server_pubkey = pubkey!();
 		if server_pubkey.is_none() {
 			response!("tor not configured!");
 			return Ok(());
@@ -132,7 +125,7 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
         // get all servers associated with this instance of concord
         rustlet!("get_servers", {
 		// make sure we're authenticated
-                if ! check_auth(&root_dir_clone2) {
+                if ! check_auth(&ds_context) {
                         return Ok(());
                 }
 
@@ -173,7 +166,7 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
         // get the icon for the specified server
         rustlet!("get_server_icon", {
 		// make sure we're authenticated
-                if ! check_auth(&root_dir_clone3) {
+                if ! check_auth(&ds_context) {
                         return Ok(());
                 }
                 let query = request!("query");
@@ -211,7 +204,7 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
         // delete the specified server
         rustlet!("delete_server", {
 		// make sure we're authenticated
-                if ! check_auth(&root_dir_clone4) {
+                if ! check_auth(&ds_context) {
                         return Ok(());
                 }
 
@@ -240,7 +233,7 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 
         // modify the specified server
         rustlet!("modify_server", {
-                if ! check_auth(&root_dir_clone5) {
+                if ! check_auth(&ds_context) {
                         return Ok(());
                 }
                 let query = request!("query");

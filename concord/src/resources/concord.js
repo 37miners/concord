@@ -1,5 +1,8 @@
 // concord's own js functions
 
+var cur_server = '';
+var cur_channel = '';
+
 var stopEnabled = false;
 var iconId = '';
 var curName = '';
@@ -46,6 +49,7 @@ function close_interstitial() {
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 }
 
 function show_auth_error() {
@@ -55,6 +59,7 @@ function show_auth_error() {
         document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'visible';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 }
 
 function create_server() {
@@ -63,6 +68,7 @@ function create_server() {
 	document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 }
 
 function join_server() {
@@ -71,6 +77,7 @@ function join_server() {
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 }
 
 function modify_server(iconId, curName) {
@@ -84,6 +91,7 @@ function modify_server(iconId, curName) {
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding4").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 }
 
 function modify_server_submit() {
@@ -105,6 +113,35 @@ function modify_server_submit() {
         } else {
                 alert("ERROR: file must be specified.");
         }
+}
+
+function create_channel() {
+	var server_id = document.forms['channel']['server_id'].value;
+	var name = document.forms['channel']['name'].value;
+	var description = document.forms['channel']['description'].value;
+
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		close_interstitial();
+	});
+	req.open(
+		"GET",
+		'/set_channel?name='+encodeURIComponent(name)+
+		'&description='+encodeURIComponent(description)+
+		'&server_id='+server_id
+	);
+	req.send();
+}
+
+function do_add_channel(server_id) {
+	document.forms['channel']['server_id'].value = server_id;
+        document.getElementById('interstitial').style.visibility = 'visible';
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding6").style.visibility = 'visible';
 }
 
 function load_server_bar() {
@@ -136,6 +173,70 @@ function load_server_bar() {
 				img.onmouseout = function() {
 					stopEnabled = false;
 				};
+				img.onclick = function() {
+					var req = new XMLHttpRequest();
+					req.addEventListener("load", function() {
+						var server_name_div = document.getElementById('server_name');
+						server_name_div.innerHTML = sname;
+						var add_channel = document.createElement('img');
+						add_channel.onclick = function(evt) {
+							do_add_channel(server.id);
+						};
+						add_channel.src = '/images/create.png';
+						server_name_div.appendChild(add_channel);
+						var channels = JSON.parse(this.responseText);
+						var channel_list = document.getElementById('channel_list');
+						channel_list.innerHTML = '';
+						channels.forEach(function(channel) {
+							var channel_div = document.createElement('div');
+							var channel_text = document.createTextNode('#' + channel.name);
+							var channel_link = document.createElement('a');
+							channel_link.onclick = function() {
+								cur_channel = channel.id;
+								cur_server = server.id;
+								var req = new XMLHttpRequest();
+								req.addEventListener("load", function() {
+									var chat_area = document.getElementById('chat_area');
+									chat_area.innerHTML = '';
+									var messages = JSON.parse(this.responseText);
+									messages.forEach(function(message) {
+										var m = document.createTextNode('> '+message.text);
+										chat_area.appendChild(m);
+										chat_area.appendChild(document.createElement('br'));
+									});
+								});
+								req.open(
+									"GET",
+									'/query_messages?server_id='+server.id+
+									'&channel_id='+channel.id
+								);
+								req.send();
+							}
+							channel_link.appendChild(channel_text);
+							channel_div.appendChild(channel_link);
+							channel_div.className = 'channel_div';
+							channel_list.appendChild(channel_div);
+							var delete_button = document.createElement('img');
+							delete_button.src = '/images/delete.png';
+							delete_button.className = 'delete_channel';
+							delete_button.onclick = function(evt) {
+								var req = new XMLHttpRequest();
+								req.addEventListener("load", function() {
+							
+								});
+								req.open(
+									"GET",
+									'/delete_channel?server_id='+server.id+
+									'&channel_id='+channel.id
+								);
+								req.send();
+							};
+							channel_div.appendChild(delete_button);
+						});
+					});
+					req.open("GET", '/get_channels?server_id='+server.id);
+					req.send();
+				}
 
 				serverbar.appendChild(img);
 				serverbar.appendChild(document.createElement('br'));
@@ -183,6 +284,7 @@ function init_concord() {
         	document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
                 document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	}
 
 	plusdiv.appendChild(plus);
@@ -195,8 +297,15 @@ function init_concord() {
 	div1.appendChild(serverbartext);
 
         var div2 = document.createElement('div');
-        div2.innerHTML = 'channelbar';
+	var server_name = document.createElement('div');
+	server_name.id = 'server_name';
+	server_name.innerHTML = '';
+	div2.appendChild(server_name);
         div2.className = 'channelbar';
+	var channel_list = document.createElement('div');
+	channel_list.id = 'channel_list';
+	channel_list.className = 'channel_list';
+	div2.appendChild(channel_list);
         document.body.appendChild(div2);
 
         var div3 = document.createElement('div');
@@ -218,14 +327,24 @@ function init_concord() {
 				this_ref.value = '';
 			});
 			var ms = Date.now();
-			req.open("POST", '/send_message?server_id=GhEvf%2FiAxSI%3D&channel_id=1234&timestamp=' + ms);
+			req.open(
+				"POST",
+				'/send_message?server_id='+cur_server+
+				'&channel_id='+cur_channel+
+				'&timestamp='+ms
+			);
 			req.send(formData);
 		
 		}
 	});
-
+	
+	var chat_area = document.createElement('div');
+	chat_area.innerHTML = '';
+	chat_area.className = 'chat_area';
+	chat_area.id = 'chat_area';
 	div3.appendChild(input_div);
 	input_div.appendChild(textarea);
+	input_div.appendChild(chat_area);
 	input_div.className = 'input_div';
 
         document.body.appendChild(div3);

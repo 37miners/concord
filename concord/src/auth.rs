@@ -25,17 +25,8 @@ const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
 
 // check whether a session is authorized. We assume that we are in the rustlet context
 // here.
-pub fn check_auth(root_dir: &String) -> bool {
+pub fn check_auth(ds_context: &DSContext) -> bool {
 	let auth = cookie!("auth"); // get auth cookie
-	let ds_context = DSContext::new(root_dir.clone());
-	match ds_context {
-		Ok(_) => {},
-		Err(e) => {
-			log_multi!(ERROR, MAIN_LOG, "Could not obtain ds context: {}", e.to_string());
-			response!("{}", NOT_AUTHORIZED);
-			return false;
-		},
-	}
 
 	// if there's no auth cookie, we're not authed
 	if auth.is_none() {
@@ -45,9 +36,6 @@ pub fn check_auth(root_dir: &String) -> bool {
 
 	// ok because we checked is_none and returned
 	let auth = auth.unwrap();
-
-	// ok because we checked is_err
-	let ds_context = ds_context.unwrap();
 
 	// check auth cookie value in db
 	let res = ds_context.check_auth_cookie(auth);

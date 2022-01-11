@@ -546,7 +546,12 @@ impl DSContext {
                 let batch = self.store.batch()?;
                 let mut buffer = vec![];
                 serialize_default(&mut buffer, &channel_key)?;
-                batch.delete(&buffer)?;
+		let mut buffer2 = vec![CHANNEL_PREFIX];
+                buffer2.append(&mut buffer);
+
+		// this throws an error if the item is not found. Don't think that's correct.
+		// ignore this error
+                let _ = batch.delete(&buffer2);
                 batch.commit()?;
                 Ok(())
 	}

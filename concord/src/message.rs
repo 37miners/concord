@@ -24,6 +24,14 @@ use std::convert::TryInto;
 
 nioruntime_log::debug!(); // set log level to debug
 
+#[derive(Serialize, Deserialize)]
+struct MessageInfo {
+	text: String,
+	verified: bool,
+	timestamp: String,
+	user_pubkey: String,
+}
+
 // build a signable message from a message/key.
 fn build_signable_message(key: MessageKey, message: Message) -> Result<Vec<u8>, Error> {
 	let mut ret = vec![];
@@ -125,7 +133,7 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
 			None => 0,
 		};
 
-		let user_pubkey = tor_pubkey!();
+		let user_pubkey = pubkey!();
 		if user_pubkey.is_none() {
 			response!("Configuration error! Tor must be configured!");
 			return Ok(());
@@ -229,7 +237,7 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
 		let server_pubkey = match server_pubkey {
 			Some(server_pubkey) => server_pubkey,
 			None => {
-				match tor_pubkey!() {
+				match pubkey!() {
 					Some(key) => key,
 					None => {
 						response!("tor not configured!");
@@ -266,15 +274,30 @@ pub fn init_message(root_dir: String) -> Result<(), ConcordError> {
                         error
                 })?;
 
-		response!("<html><body>");
-		for message in messages {
-			let payload = message.1.payload.clone();
-			let text = std::str::from_utf8(&payload)?;
+                let mut message_json = vec![];
+                for message in &messages {
 			let message_to_sign = build_signable_message(message.0.clone(), message.1.clone())?;
-			let verify_result = verify!(&message_to_sign, Some(message.0.user_pubkey), message.1.signature).unwrap_or(false);
-			response!("message={},sig={:?},verify={}</br>", text, message.1.signature, verify_result);
-		}
-		response!("</body></html>");
+                        message_json.push(
+                                MessageInfo {
+					text: std::str::from_utf8(&message.1.payload.clone())?.to_string(),
+					verified: verify!(
+						&message_to_sign,
+						Some(message.0.user_pubkey),
+						message.1.signature
+					).unwrap_or(false),
+					timestamp: format!("{}", message.0.timestamp),
+					user_pubkey: base64::encode(message.0.user_pubkey),
+                                }
+                        );
+                }
+                let json = serde_json::to_string(&message_json).map_err(|e| {
+                        let error: Error = ErrorKind::ApplicationError(
+                                format!("Json Error: {}", e.to_string())
+                        ).into();
+                        error
+                })?;
+                response!("{}", json);
+
 	});
 
 	rustlet_mapping!("/query_messages", "query_messages");

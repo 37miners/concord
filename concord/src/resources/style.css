@@ -202,3 +202,28 @@ a.button4:hover{
         position: relative;
         bottom: 0px;
 }
+
+.channel_list {
+	margin-top: 25px;
+}
+
+.delete_channel {
+	height: 15px;
+	width: 15px;
+	cursor: pointer;
+}
+
+.channel_div {
+	cursor: pointer;
+}
+
+.chat_area {
+    position: absolute;
+    height: 90%;
+    background: #FFFFCF;
+    top: 10px;
+    width: 100%;
+    right: 0px;
+    left: -2px;
+    overflow: scroll;
+}
