@@ -15,10 +15,11 @@
 #[macro_use]
 extern crate serde_derive;
 
-mod concord;
 mod auth;
-mod server;
-mod message;
 mod channel;
+mod concord;
+mod invite;
+mod message;
+mod server;
 
 pub use crate::concord::concord_init;

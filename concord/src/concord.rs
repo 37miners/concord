@@ -66,31 +66,35 @@ fn init_webroot(root_dir: String) {
 				);
 			}
 		}
-                let bytes = include_bytes!("resources/contextMenu.min.js");
-                match create_file_from_bytes("js/contextMenu.min.js".to_string(), root_dir.clone(), bytes) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/contextMenu.min.js");
+		match create_file_from_bytes("js/contextMenu.min.js".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/contextMenu.min.css");
-                match create_file_from_bytes("css/contextMenu.min.css".to_string(), root_dir.clone(), bytes) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/contextMenu.min.css");
+		match create_file_from_bytes(
+			"css/contextMenu.min.css".to_string(),
+			root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
 		let bytes = include_bytes!("resources/concord.js");
 		match create_file_from_bytes("js/concord.js".to_string(), root_dir.clone(), bytes) {
@@ -144,44 +148,44 @@ fn init_webroot(root_dir: String) {
 			}
 		}
 
-                let bytes = include_bytes!("resources/images/delete.png");
-                match create_file_from_bytes("images/delete.png".to_string(), root_dir.clone(), bytes) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/delete.png");
+		match create_file_from_bytes("images/delete.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/images/create.png");
-                match create_file_from_bytes("images/create.png".to_string(), root_dir.clone(), bytes) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/create.png");
+		match create_file_from_bytes("images/create.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
-                let bytes = include_bytes!("resources/images/update.png");
-                match create_file_from_bytes("images/update.png".to_string(), root_dir.clone(), bytes) {
-                        Ok(_) => {}
-                        Err(e) => {
-                                log_multi!(
-                                        ERROR,
-                                        MAIN_LOG,
-                                        "Creating file resulted in error: {}",
-                                        e.to_string()
-                                );
-                        }
-                }
+		let bytes = include_bytes!("resources/images/update.png");
+		match create_file_from_bytes("images/update.png".to_string(), root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 
 		let bytes = include_bytes!("resources/images/plus_fill.png");
 		match create_file_from_bytes("images/plus_fill.png".to_string(), root_dir.clone(), bytes) {
@@ -214,20 +218,21 @@ fn init_webroot(root_dir: String) {
 // We initialize concord here.
 pub fn concord_init(root_dir: String, uri: String) -> Result<(), ConcordError> {
 	// get homedir updated root_dir
-        let home_dir = match dirs::home_dir() {
-                Some(p) => p,
-                None => PathBuf::new(),
-        }
-        .as_path()
-        .display()
-        .to_string();
-        let root_dir = root_dir.replace("~", &home_dir);
+	let home_dir = match dirs::home_dir() {
+		Some(p) => p,
+		None => PathBuf::new(),
+	}
+	.as_path()
+	.display()
+	.to_string();
+	let root_dir = root_dir.replace("~", &home_dir);
 
 	init_webroot(root_dir.clone()); // setup webroot
 	crate::auth::init_auth(root_dir.clone(), uri)?; // auth module
 	crate::server::init_server(root_dir.clone())?; // server module
 	crate::message::init_message(root_dir.clone())?; // message module
 	crate::channel::init_channels(root_dir.clone())?; // channel module
+	crate::invite::init_invite(root_dir.clone())?; // invite module
 
 	Ok(())
 }

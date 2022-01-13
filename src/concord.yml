@@ -1,0 +1,22 @@
+name: concord
+author: 37 Miners, LLC
+
+args:
+    - root_dir:
+        help: The root directory for concord
+        short: r
+        long: root_dir
+        value_name: root_dir
+        takes_value: true
+    - port:
+        help: http server port
+        short: p
+        long: port
+        value_name: port
+        takes_value: true
+    - tor_port:
+        help: tor proxy port
+        short: t
+        long: tor_port
+        value_name: tor_port
+        takes_value: true

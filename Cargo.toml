@@ -2,6 +2,7 @@
 name = "concord"
 version = "1.0.0"
 edition = "2018"
+build = "src/build/build.rs"
 
 [dependencies]
 librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
@@ -9,3 +10,8 @@ librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
 concordlib = { path = "./concord" }
 concorderror = { path = "./error" }
 concorddata = { path = "./data" }
+
+clap = { version = "2.33", features = ["yaml"] }
+
+[build-dependencies]
+built = { version = "0.4", features = ["git2"]}

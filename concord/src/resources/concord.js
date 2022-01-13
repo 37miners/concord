@@ -10,7 +10,7 @@ var menu = [{
             name: 'Invite',
             img: 'images/create.png',
             fun: function () {
-                alert('i am a create button')
+		show_create_invite();
             }
         }, {
             name: 'Configure',
@@ -31,6 +31,32 @@ var menu = [{
             }
 }];
 
+function create_invite() {
+	var num = Number(document.forms["invite"]["max_accepts"].value);
+
+	if (isNaN(num) || num < 1) {
+		alert('max accepts must be a positive number');
+	} else {
+		var expiry = 0;
+
+		if (document.forms["invite"]["expiration"].value == "onehour") {
+			expiry = Date.now() + 1000 * 60 * 60;
+		} else if (document.forms["invite"]["expiration"].value == "oneday") {
+			expiry = Date.now() + 1000 * 60 * 60 * 24;
+		} else if (document.forms["invite"]["expiration"].value == "oneweek") {
+			expiry = Date.now() + 1000 * 60 * 60 * 24 * 7;
+		} else { // forever
+			expiry = 0;
+		}
+                var req = new XMLHttpRequest();
+                req.addEventListener("load", function() {
+			load_invite_list();
+                });
+                req.open("GET", '/create_invite?server_id='+iconId+'&count='+num+'&expiry='+expiry);
+                req.send();
+	}
+}
+
 function makeid(length) {
 	var result           = '';
 	var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -50,6 +76,7 @@ function close_interstitial() {
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
 function show_auth_error() {
@@ -60,6 +87,19 @@ function show_auth_error() {
         document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+}
+
+function show_create_invite() {
+        document.getElementById('interstitial').style.visibility = 'visible';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding7").style.visibility = 'visible';
+	load_invite_list();
 }
 
 function create_server() {
@@ -69,6 +109,7 @@ function create_server() {
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
 function join_server() {
@@ -78,6 +119,7 @@ function join_server() {
 	document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
 function modify_server(iconId, curName) {
@@ -92,6 +134,36 @@ function modify_server(iconId, curName) {
         document.getElementById("interstitialtextpadding4").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+}
+
+function load_invite_list() {
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		var invite_div = document.getElementById('invite_div');
+		invite_div.innerHTML = '';
+		var invites = JSON.parse(this.responseText);
+		invites.forEach(function(invite) {
+			invite_div.appendChild(document.createTextNode(invite.url));
+			var delete_button = document.createElement('img');
+			delete_button.src = '/images/delete.png';
+			delete_button.className = 'delete_invite';
+			delete_button.onclick = function() {
+				var req = new XMLHttpRequest();
+				req.addEventListener("load", function() {
+
+					load_invite_list();
+				});
+				req.open("GET", '/revoke_invite?invite_id='+invite.id);
+				req.send();
+			};
+			invite_div.appendChild(delete_button);
+			invite_div.appendChild(document.createElement('br'));
+		});
+	
+	});
+	req.open("GET", '/list_invites?server_id=' + iconId);
+	req.send();
 }
 
 function modify_server_submit() {
@@ -142,6 +214,7 @@ function do_add_channel(server_id) {
         document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'visible';
+	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
 function load_server_bar() {
@@ -285,6 +358,7 @@ function init_concord() {
                 document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	}
 
 	plusdiv.appendChild(plus);

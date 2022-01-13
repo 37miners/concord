@@ -117,8 +117,8 @@ body {
 }
 
 .interstitialtextpadding1 {
-    padding: 3px;
-    float: left;
+	padding: 3px;
+	position: fixed;
 }
 
 .interstitialtextpadding2 {
@@ -140,6 +140,18 @@ body {
 }
 
 .interstitialtextpadding5 {
+        padding: 3px;
+        visibility: hidden;
+        position: fixed;
+}
+
+.interstitialtextpadding6 {
+        padding: 3px;
+        visibility: hidden;
+        position: fixed;
+}
+
+.interstitialtextpadding7 {
         padding: 3px;
         visibility: hidden;
         position: fixed;
@@ -217,10 +229,16 @@ a.button4:hover{
 	cursor: pointer;
 }
 
+.delete_invite {
+        height: 15px;
+        width: 15px;
+        cursor: pointer;
+}
+
 .chat_area {
     position: absolute;
     height: 90%;
-    background: #FFFFCF;
+    background: #FFFFEF;
     top: 10px;
     width: 100%;
     right: 0px;

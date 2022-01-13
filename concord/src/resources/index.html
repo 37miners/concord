@@ -116,6 +116,29 @@
                                         >
                                                Create Channel 
                                         </a>
+				</div>
+				<div id="interstitialtextpadding7" class="interstitialtextpadding7">
+					Existing Invites:
+					<div id="invite_div">Here's the invites that exist: 1,2,3...</div>
+					Create a new Invite:
+					<form name="invite" id="invite" onsubmit=Javascript:function() { return false; }">
+					Max accepts: <input type="text" size=30 name="max_accepts" value=10 />
+					Expiration:
+					<select name="expiration" id="expiration">
+						<option value="onehour">1 Hour</option>
+						<option value="oneday">1 Day</option>
+						<option value="oneweek">1 Week</option>
+						<option value="forever">Forever</option>
+					</select>
+					</form>
+					<a
+                                                href="JavaScript:create_invite();"
+                                                class="button4 padding4"
+                                                style="background-color:#303179"
+                                                title="Create Invite"
+                                        >
+                                               Create Invite
+                                        </a>
 				<div>
 			</div>
 		</div>

@@ -19,14 +19,7 @@
 //! To use it simply implement `Writeable` or `Readable` and then use the
 //! `serialize` or `deserialize` functions on them as appropriate.
 
-use concorderror::{Error, ErrorKind};
 use crate::hash::{DefaultHashable, Hash, Hashed};
-use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
-use bytes::Buf;
-use std::convert::TryInto;
-use std::fmt::{self, Debug};
-use std::io::{self, Read, Write};
-use std::{cmp, marker, string};
 use crate::secp::constants::{
 	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
 };
@@ -34,6 +27,13 @@ use crate::secp::key::PublicKey;
 use crate::secp::pedersen::{Commitment, RangeProof};
 use crate::secp::Signature;
 use crate::secp::{ContextFlag, Secp256k1};
+use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
+use bytes::Buf;
+use concorderror::{Error, ErrorKind};
+use std::convert::TryInto;
+use std::fmt::{self, Debug};
+use std::io::{self, Read, Write};
+use std::{cmp, marker, string};
 
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(1_000);
 
@@ -221,6 +221,13 @@ pub trait Writer {
 		self.write_fixed_bytes(&bytes)
 	}
 
+	/// Writes a u128 as bytes
+	fn write_u128(&mut self, n: u128) -> Result<(), Error> {
+		let mut bytes = [0; 16];
+		BigEndian::write_u128(&mut bytes, n);
+		self.write_fixed_bytes(&bytes)
+	}
+
 	/// Writes a i64 as bytes
 	fn write_i64(&mut self, n: i64) -> Result<(), Error> {
 		let mut bytes = [0; 8];
@@ -255,6 +262,8 @@ pub trait Reader {
 	fn read_u32(&mut self) -> Result<u32, Error>;
 	/// Read a u64 from the underlying Read
 	fn read_u64(&mut self) -> Result<u64, Error>;
+	/// Read a u128 from the underlying Read
+	fn read_u128(&mut self) -> Result<u128, Error>;
 	/// Read a i32 from the underlying Read
 	fn read_i32(&mut self) -> Result<i32, Error>;
 	/// Read a i64 from the underlying Read
@@ -275,11 +284,7 @@ pub trait Reader {
 	fn read_empty_bytes(&mut self, length: usize) -> Result<(), Error> {
 		for _ in 0..length {
 			if self.read_u8()? != 0u8 {
-				return Err(
-					ErrorKind::CorruptedData(
-						"expected 0u8".to_string()
-					).into()
-				);
+				return Err(ErrorKind::CorruptedData("expected 0u8".to_string()).into());
 			}
 		}
 		Ok(())
@@ -347,11 +352,7 @@ where
 
 	let res: Vec<T> = IteratingReader::new(reader, count).collect();
 	if res.len() as u64 != count {
-		return Err(
-			ErrorKind::CountError(
-				format!("{} != {}", res.len(), count)
-			).into()
-		);
+		return Err(ErrorKind::CountError(format!("{} != {}", res.len(), count)).into());
 	}
 	Ok(res)
 }
@@ -497,6 +498,9 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 	fn read_u64(&mut self) -> Result<u64, Error> {
 		self.source.read_u64::<BigEndian>().map_err(map_io_err)
 	}
+	fn read_u128(&mut self) -> Result<u128, Error> {
+		self.source.read_u128::<BigEndian>().map_err(map_io_err)
+	}
 	fn read_i64(&mut self) -> Result<i64, Error> {
 		self.source.read_i64::<BigEndian>().map_err(map_io_err)
 	}
@@ -524,10 +528,12 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 		if b == val {
 			Ok(b)
 		} else {
-			Err(ErrorKind::UnexpectedData(format!("expected: {:?}, received: {:?}",
+			Err(ErrorKind::UnexpectedData(format!(
+				"expected: {:?}, received: {:?}",
 				vec![val],
-				vec![b]),
-			).into())
+				vec![b]
+			))
+			.into())
 		}
 	}
 
@@ -583,6 +589,10 @@ impl<'a> Reader for StreamingReader<'a> {
 		let buf = self.read_fixed_bytes(8)?;
 		Ok(BigEndian::read_u64(&buf[..]))
 	}
+	fn read_u128(&mut self) -> Result<u128, Error> {
+		let buf = self.read_fixed_bytes(8)?;
+		Ok(BigEndian::read_u128(&buf[..]))
+	}
 	fn read_i64(&mut self) -> Result<i64, Error> {
 		let buf = self.read_fixed_bytes(8)?;
 		Ok(BigEndian::read_i64(&buf[..]))
@@ -608,11 +618,12 @@ impl<'a> Reader for StreamingReader<'a> {
 		if b == val {
 			Ok(b)
 		} else {
-			Err(ErrorKind::UnexpectedData (
-				format!("expected: {:?}, received: {:?}",
+			Err(ErrorKind::UnexpectedData(format!(
+				"expected: {:?}, received: {:?}",
 				vec![val],
 				vec![b],
-			)).into())
+			))
+			.into())
 		}
 	}
 
@@ -680,6 +691,11 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 		Ok(self.inner.get_u64())
 	}
 
+	fn read_u128(&mut self) -> Result<u128, Error> {
+		self.has_remaining(16)?;
+		Ok(self.inner.get_u128())
+	}
+
 	fn read_i32(&mut self) -> Result<i32, Error> {
 		self.has_remaining(4)?;
 		Ok(self.inner.get_i32())
@@ -712,11 +728,12 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 		if b == val {
 			Ok(b)
 		} else {
-			Err(ErrorKind::UnexpectedData(
-				format!("expected: {:?}, received: {:?}",
+			Err(ErrorKind::UnexpectedData(format!(
+				"expected: {:?}, received: {:?}",
 				vec![val],
-				vec![b])
-			).into())
+				vec![b]
+			))
+			.into())
 		}
 	}
 

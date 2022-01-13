@@ -14,6 +14,7 @@ edition = "2018"
 librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
 #librustlet = { path = "../../rustlet/rustlet" }
 nioruntime_err = { git = "http://github.com/37miners/nioruntime", branch = "master" }
+nioruntime_tor = { git = "http://github.com/37miners/nioruntime", branch = "master" }
 #nioruntime_err = { path = "../../nioruntime/error" }
 
 concorddata = { path = "../data" }
