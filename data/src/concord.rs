@@ -29,11 +29,62 @@ pub struct DSContext {
 	store: Store,
 }
 
+pub struct UserPubKey {
+	pub user_pubkey: [u8; 32],
+}
+
+impl Writeable for UserPubKey {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..32 {
+			writer.write_u8(self.user_pubkey[i])?;
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for UserPubKey {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut user_pubkey = [0u8; 32];
+
+		for i in 0..32 {
+			user_pubkey[i] = reader.read_u8()?;
+		}
+
+		Ok(UserPubKey { user_pubkey })
+	}
+}
+
+pub struct Challenge {
+	pub challenge: [u8; 8],
+}
+
+impl Writeable for Challenge {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..8 {
+			writer.write_u8(self.challenge[i])?;
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for Challenge {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut challenge = [0u8; 8];
+
+		for i in 0..8 {
+			challenge[i] = reader.read_u8()?;
+		}
+
+		Ok(Challenge { challenge })
+	}
+}
+
 #[derive(Serialize)]
 pub struct Invite {
 	pub inviter: [u8; 32],
 	pub server_id: [u8; 8],
-	pub url: String,
 	pub expiry: u64,
 	pub cur: u64,
 	pub max: u64,
@@ -52,13 +103,6 @@ impl Writeable for Invite {
 		writer.write_u64(self.cur)?;
 		writer.write_u64(self.max)?;
 		writer.write_u128(self.id)?;
-
-		let url_len = self.url.len();
-		writer.write_u32(url_len.try_into().unwrap_or(0))?;
-		let url_bytes = self.url.as_bytes();
-		for i in 0..url_len {
-			writer.write_u8(url_bytes[i])?;
-		}
 
 		Ok(())
 	}
@@ -81,18 +125,10 @@ impl Readable for Invite {
 		let cur = reader.read_u64()?;
 		let max = reader.read_u64()?;
 		let id = reader.read_u128()?;
-		let url_len = reader.read_u32()?;
-		let mut url = vec![];
-		for _ in 0..url_len {
-			url.push(reader.read_u8()?);
-		}
-
-		let url = std::str::from_utf8(&url)?.to_string();
 
 		Ok(Invite {
 			server_id,
 			inviter,
-			url,
 			expiry,
 			cur,
 			max,
@@ -145,6 +181,7 @@ impl Readable for InviteKey {
 	}
 }
 
+#[derive(Serialize, Debug)]
 pub struct Member {
 	pub server_id: [u8; 8],
 	pub user_pubkey: [u8; 32],
@@ -152,11 +189,11 @@ pub struct Member {
 
 impl Writeable for Member {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
 		for i in 0..8 {
 			writer.write_u8(self.server_id[i])?;
+		}
+		for i in 0..32 {
+			writer.write_u8(self.user_pubkey[i])?;
 		}
 
 		Ok(())
@@ -168,12 +205,11 @@ impl Readable for Member {
 		let mut user_pubkey = [0u8; 32];
 		let mut server_id = [0u8; 8];
 
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-
 		for i in 0..8 {
 			server_id[i] = reader.read_u8()?;
+		}
+		for i in 0..32 {
+			user_pubkey[i] = reader.read_u8()?;
 		}
 
 		let member = Member {
@@ -489,6 +525,8 @@ const CHANNEL_PREFIX: u8 = 3;
 const MEMBER_PREFIX: u8 = 4;
 const INVITE_PREFIX: u8 = 5;
 const INVITE_ID_PREFIX: u8 = 6;
+const CHALLENGE_PREFIX: u8 = 7;
+const TOKEN_PREFIX: u8 = 8;
 
 impl DSContext {
 	// get a list of servers in the local database
@@ -770,19 +808,14 @@ impl DSContext {
 		server_id: [u8; 8],
 		expiry: u64,
 		count: u64,
-		onion: String,
 	) -> Result<u128, Error> {
 		let batch = self.store.batch()?;
 
 		let id: u128 = rand::random();
-		let id_bytes = base64::encode(id.to_be_bytes());
-		let id_bytes = urlencoding::encode(&id_bytes);
-		let url = format!("http://{}.onion/i?{}", onion, id_bytes);
 
 		let invite = Invite {
 			inviter,
 			server_id,
-			url,
 			expiry,
 			cur: 0,
 			max: count,
@@ -882,12 +915,11 @@ impl DSContext {
 		Ok(())
 	}
 
-	pub fn accept_invite(&self, invite_id: u128) -> Result<bool, Error> {
+	pub fn accept_invite(&self, invite_id: u128, user_pubkey: [u8; 32]) -> Result<bool, Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![INVITE_ID_PREFIX];
 		key.append(&mut invite_id.to_be_bytes().to_vec());
 		let invite: Option<Invite> = batch.get_ser(&key)?;
-
 		match invite {
 			Some(mut invite) => {
 				if invite.cur >= invite.max {
@@ -899,6 +931,19 @@ impl DSContext {
 					let mut buffer = vec![];
 					serialize_default(&mut buffer, &invite)?;
 					batch.put_ser(&key, &buffer)?;
+
+					// add to member table
+					let member = Member {
+						user_pubkey,
+						server_id: invite.server_id,
+					};
+
+					let mut buffer = vec![];
+					serialize_default(&mut buffer, &member)?;
+					let mut buffer2 = vec![MEMBER_PREFIX];
+					buffer2.append(&mut buffer);
+					batch.put_ser(&buffer2, &0u8)?;
+
 					batch.commit()?;
 
 					Ok(true)
@@ -908,6 +953,70 @@ impl DSContext {
 				// this is not a valid invite, reject
 				Ok(false)
 			}
+		}
+	}
+
+	pub fn get_members(&self, server_id: [u8; 8]) -> Result<Vec<Member>, Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![MEMBER_PREFIX];
+		key.append(&mut server_id.to_vec());
+
+		let mut itt = batch.iter(&(key[..]), |k, _| {
+			let mut cursor = Cursor::new(k[1..].to_vec());
+			cursor.set_position(0);
+			let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+			let member = Member::read(&mut reader)?;
+			Ok(member)
+		})?;
+
+		let mut ret = vec![];
+		loop {
+			let next = itt.next();
+			match next {
+				Some(member) => {
+					ret.push(member);
+				}
+				None => {
+					break;
+				}
+			}
+		}
+
+		Ok(ret)
+	}
+
+	pub fn create_auth_challenge(&self, user_pubkey: [u8; 32]) -> Result<[u8; 8], Error> {
+		let batch = self.store.batch()?;
+		let challenge: [u8; 8] = rand::random();
+		let mut key = vec![CHALLENGE_PREFIX];
+		key.append(&mut user_pubkey.to_vec());
+		let challenge_value = Challenge { challenge };
+		batch.put_ser(&key, &challenge_value)?;
+		batch.commit()?;
+		Ok(challenge)
+	}
+
+	pub fn validate_challenge(
+		&self,
+		user_pubkey: [u8; 32],
+		challenge: [u8; 8],
+	) -> Result<Option<String>, Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![CHALLENGE_PREFIX];
+		key.append(&mut user_pubkey.to_vec());
+		let challenge_stored: Option<Challenge> = batch.get_ser(&key)?;
+		match challenge_stored {
+			Some(challenge_stored) => {
+				let challenge_stored = challenge_stored.challenge;
+				for i in 0..challenge_stored.len() {
+					if challenge_stored[i] != challenge[i] {
+						return Ok(None);
+					}
+				}
+				let token: u128 = rand::random();
+				Ok(Some(format!("{}", token)))
+			}
+			None => Ok(None),
 		}
 	}
 

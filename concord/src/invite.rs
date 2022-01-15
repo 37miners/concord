@@ -14,9 +14,12 @@
 
 use concorddata::concord::DSContext;
 use concorderror::Error as ConcordError;
+use concordutil::torclient;
 use librustlet::*;
 use nioruntime_tor::ov3::OnionV3Address;
 use std::convert::TryInto;
+use url::Host::Domain;
+use url::Url;
 
 const ACCEPT_INVITE_SUCCESS: &str = "{\"success\": true}";
 const ACCEPT_INVITE_FAIL: &str = "{\"success\": false}";
@@ -37,6 +40,15 @@ pub struct InviteSerde {
 	cur: u64,
 	max: u64,
 	id: String,
+}
+
+// build a signable message from a message/key.
+fn build_signable_message(pubkey: String, timestamp: u128, link: String) -> Result<Vec<u8>, Error> {
+	let mut ret = vec![];
+	ret.append(&mut pubkey.as_bytes().to_vec());
+	ret.append(&mut timestamp.to_be_bytes().to_vec());
+	ret.append(&mut link.as_bytes().to_vec());
+	Ok(ret)
 }
 
 pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
@@ -67,8 +79,6 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		let server_id = base64::decode(&*server_id)?;
 		let server_id: [u8; 8] = server_id.as_slice().try_into()?;
 
-		let onion = OnionV3Address::from_bytes(pubkey);
-
 		let inviter = if inviter == "" {
 			pubkey
 		} else {
@@ -79,7 +89,7 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		};
 
 		let id = ds_context
-			.create_invite(inviter, server_id, expiry, count, onion.to_string())
+			.create_invite(inviter, server_id, expiry, count)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error creating invite: {}",
@@ -92,8 +102,9 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		let id = base64::encode(id.to_be_bytes());
 		let id = urlencoding::encode(&id);
 
+		let onion = OnionV3Address::from_bytes(pubkey);
 		let invite_url = InviteResponse {
-			invite_url: format!("http://{}.onion/i?invite_id={}", onion, id),
+			invite_url: format!("http://{}.onion/i?id={}", onion, id),
 		};
 
 		let json = serde_json::to_string(&invite_url).map_err(|e| {
@@ -110,22 +121,29 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 
 	// accept an invite
 	rustlet!("accept_invite", {
-		let invite_id = query!("invite_id");
+		let invite_id = query!("id");
 		let user_pubkey = query!("user_pubkey");
-		let timestamp: u64 = query!("timestamp").parse()?;
-		let signature = query!("signature");
-
+		let _timestamp: u64 = query!("timestamp").parse()?;
+		let _signature = query!("signature");
 		let invite_id = urlencoding::decode(&invite_id)?;
 		let invite_id = base64::decode(&*invite_id)?;
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
 		let invite_id = u128::from_be_bytes(invite_id);
 
-		let success = ds_context.accept_invite(invite_id).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("error accepting invite: {}", e.to_string()))
-					.into();
-			error
-		})?;
+		let user_pubkey = urlencoding::decode(&user_pubkey)?;
+		let user_pubkey = base64::decode(&*user_pubkey)?;
+		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
+
+		let success = ds_context
+			.accept_invite(invite_id, user_pubkey)
+			.map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"error accepting invite: {}",
+					e.to_string()
+				))
+				.into();
+				error
+			})?;
 
 		match success {
 			true => {
@@ -180,11 +198,18 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		})?;
 
 		let mut invites_serde = vec![];
+		let pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let onion = OnionV3Address::from_bytes(pubkey);
 		for invite in invites {
+			let id = base64::encode(invite.id.to_be_bytes());
+			let id = urlencoding::encode(&id);
+
+			let url = format!("http://{}.onion/i?id={}", onion, id);
+
 			invites_serde.push(InviteSerde {
 				inviter: invite.inviter,
 				server_id: invite.server_id,
-				url: invite.url,
+				url,
 				expiry: invite.expiry,
 				cur: invite.cur,
 				max: invite.max,
@@ -200,6 +225,53 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		response!("{}", json);
 	});
 	rustlet_mapping!("/list_invites", "list_invites");
+
+	rustlet!("join_server", {
+		let link = query!("link");
+		let link = urlencoding::decode(&link)?.to_string();
+
+		let timestamp = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)
+			.map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("time error: {}", e.to_string())).into();
+				error
+			})?
+			.as_millis();
+
+		let pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let onion = base64::encode(pubkey);
+		let onion = urlencoding::encode(&onion).to_string();
+
+		let signature = sign!(&build_signable_message(
+			onion.clone(),
+			timestamp,
+			link.clone()
+		)?)
+		.unwrap_or([0u8; 64]);
+		let signature = base64::encode(signature);
+		let signature = urlencoding::encode(&signature);
+
+		let join_link = format!(
+			"{}&timestamp={}&user_pubkey={}&signature={}",
+			link, timestamp, onion, signature,
+		);
+
+		let url = Url::parse(&join_link).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("url parse error: {}", e.to_string())).into();
+			error
+		})?;
+		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
+		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
+		let res = torclient::do_get(host.clone(), path.clone(), 9050).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
+			error
+		})?;
+		println!("join server: host: {} path: {}, res={:?}", host, path, res);
+	});
+	rustlet_mapping!("/join_server", "join_server");
 
 	Ok(())
 }

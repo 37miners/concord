@@ -1,0 +1,16 @@
+[package]
+name = "concordutil"
+version = "1.0.0"
+authors = ["37 Miners Developers"]
+description = "utils for concord"
+license = "Apache-2.0"
+repository = "https://github.com/37miners/concord"
+keywords = [ "crypto", "nioruntime", "mimblewimble" ]
+exclude = ["**/*.nio"]
+edition = "2018"
+
+[dependencies]
+
+concorderror = { path = "../error" }
+tor-stream = "0.3.0"
+socks = "0.3.2"

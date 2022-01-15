@@ -10,8 +10,14 @@ librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
 concordlib = { path = "./concord" }
 concorderror = { path = "./error" }
 concorddata = { path = "./data" }
+concordutil = { path = "./util" }
 
 clap = { version = "2.33", features = ["yaml"] }
+serde_json = "1.0.59"
+serde = "1"
+serde_derive = "1"
+tor-stream = "0.3.0"
+socks = "0.3.2"
 
 [build-dependencies]
 built = { version = "0.4", features = ["git2"]}

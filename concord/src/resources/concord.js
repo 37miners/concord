@@ -137,6 +137,15 @@ function modify_server(iconId, curName) {
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
+function join_server_link() {
+	var link = document.forms['join']['link'].value;
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+	});
+        req.open("GET", '/join_server?link=' + encodeURIComponent(link));
+        req.send();
+}
+
 function load_invite_list() {
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
@@ -249,6 +258,7 @@ function load_server_bar() {
 				img.onclick = function() {
 					var req = new XMLHttpRequest();
 					req.addEventListener("load", function() {
+						load_members(server.id);
 						var server_name_div = document.getElementById('server_name');
 						server_name_div.innerHTML = sname;
 						var add_channel = document.createElement('img');
@@ -424,10 +434,39 @@ function init_concord() {
         document.body.appendChild(div3);
 
         var div4 = document.createElement('div');
-        div4.innerHTML = 'statusbar';
+        div4.innerHTML = '';
         div4.className = 'statusbar';
+	div4.id = 'statusbar';
         document.body.appendChild(div4);
 
 	load_server_bar();
+}
+
+function load_members(sname) {
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+ 		var members = JSON.parse(this.responseText);
+                var status_bar = document.getElementById('statusbar');
+                status_bar.innerHTML = '';
+                members.forEach(function(member) {
+			if (member.user_type == 1) {
+				status_bar.appendChild(
+					document.createTextNode(
+						member.user_pubkey.substring(0, 10) +
+						" [owner]"
+					)
+				);
+			} else {
+                                status_bar.appendChild(
+                                        document.createTextNode(
+                                                member.user_pubkey.substring(0, 10)
+                                        )
+                                );
+			}
+			status_bar.appendChild(document.createElement('br'));
+		});
+	});
+	req.open("GET", '/get_members?server_id='+sname);
+	req.send();
 }
 

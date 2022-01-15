@@ -233,6 +233,7 @@ pub fn concord_init(root_dir: String, uri: String) -> Result<(), ConcordError> {
 	crate::message::init_message(root_dir.clone())?; // message module
 	crate::channel::init_channels(root_dir.clone())?; // channel module
 	crate::invite::init_invite(root_dir.clone())?; // invite module
+	crate::members::init_members(root_dir.clone())?; // members module
 
 	Ok(())
 }
