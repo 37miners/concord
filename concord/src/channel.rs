@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::ChannelKey;
 use concorddata::concord::DSContext;
@@ -28,9 +29,9 @@ struct ChannelInfo {
 	id: String,
 }
 
-pub fn init_channels(root_dir: String) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+pub fn init_channels(config: &ConcordConfig) -> Result<(), ConcordError> {
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// set channel information
 	rustlet!("set_channel", {
@@ -124,8 +125,8 @@ pub fn init_channels(root_dir: String) -> Result<(), ConcordError> {
 	});
 	rustlet_mapping!("/set_channel", "set_channel");
 
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// delete a channel
 	rustlet!("delete_channel", {
@@ -196,8 +197,8 @@ pub fn init_channels(root_dir: String) -> Result<(), ConcordError> {
 
 	rustlet_mapping!("/delete_channel", "delete_channel");
 
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("get_channels", {
 		let query = request!("query");

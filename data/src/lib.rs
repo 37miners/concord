@@ -15,15 +15,15 @@
 #[macro_use]
 extern crate log;
 extern crate failure_derive;
-pub use secp256k1zkp as secp;
 pub use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
+pub use secp256k1zkp as secp;
 
 #[macro_use]
 extern crate serde_derive;
 
-pub mod lmdb;
 pub mod concord;
-pub mod ser;
 pub mod hash;
 pub mod hex;
+pub mod lmdb;
+pub mod ser;
 pub use crate::hex::*;

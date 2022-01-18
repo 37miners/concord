@@ -18,11 +18,11 @@
 //!
 
 use crate::ser::{self, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use concorderror::{Error,ErrorKind};
+use crate::ToHex;
 use blake2::blake2b::Blake2b;
 use byteorder::{BigEndian, ByteOrder};
+use concorderror::{Error, ErrorKind};
 use std::{cmp::min, convert::AsRef, fmt, ops};
-use crate::ToHex;
 
 /// A hash consisting of all zeroes, used as a sentinel. No known preimage.
 pub const ZERO_HASH: Hash = Hash([0; 32]);
@@ -74,11 +74,10 @@ impl Hash {
 
 	/// Convert hex string back to hash.
 	pub fn from_hex(hex: &str) -> Result<Hash, Error> {
-		let bytes = crate::from_hex(hex)
-			.map_err(|_| {
-				let error: Error = ErrorKind::HexError(format!("failed to decode {}", hex)).into();
-				error
-			})?;
+		let bytes = crate::from_hex(hex).map_err(|_| {
+			let error: Error = ErrorKind::HexError(format!("failed to decode {}", hex)).into();
+			error
+		})?;
 		Ok(Hash::from_vec(&bytes))
 	}
 

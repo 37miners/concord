@@ -13,12 +13,14 @@
 // limitations under the License.
 
 use failure::{Backtrace, Context, Fail};
+use std::array::TryFromSliceError;
+use std::convert::Infallible;
 use std::fmt;
 use std::fmt::Display;
+use std::num::ParseIntError;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
-use std::num::ParseIntError;
-use std::array::TryFromSliceError;
+use std::time::SystemTimeError;
 
 /// Base Error struct which is used throught this crate and other crates
 #[derive(Debug, Fail)]
@@ -86,6 +88,18 @@ pub enum ErrorKind {
 	/// TryFromSliceError
 	#[fail(display = "TryFromSliceError: {}", _0)]
 	TryFromSliceError(String),
+	/// SystemTimeError
+	#[fail(display = "SystemTimeError: {}", _0)]
+	SystemTimeError(String),
+	/// Not Authorized
+	#[fail(display = "Not Auth Error: {}", _0)]
+	NotAuthorized(String),
+	/// Infallible
+	#[fail(display = "Infallible Error: {}", _0)]
+	InfallibleError(String),
+	/// Base58DecodeError
+	#[fail(display = "Base58DecodeError: {}", _0)]
+	Base58DecodeError(String),
 }
 
 impl Display for Error {
@@ -130,11 +144,11 @@ impl From<ErrorKind> for Error {
 }
 
 impl From<librustlet::Error> for Error {
-        fn from(e: librustlet::Error) -> Error {
-                Error {
-                        inner: Context::new(ErrorKind::LibRustletError(format!("{}", e))),
-                }
-        }
+	fn from(e: librustlet::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::LibRustletError(format!("{}", e))),
+		}
+	}
 }
 
 impl From<std::io::Error> for Error {
@@ -178,11 +192,11 @@ impl From<FromUtf8Error> for Error {
 }
 
 impl From<librustlet::ErrorKind> for Error {
-        fn from(e: librustlet::ErrorKind) -> Error {
-                Error {
-                        inner: Context::new(ErrorKind::LibRustletError(format!("{}", e))),
-                }
-        }
+	fn from(e: librustlet::ErrorKind) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::LibRustletError(format!("{}", e))),
+		}
+	}
 }
 
 impl From<ParseIntError> for Error {
@@ -197,6 +211,30 @@ impl From<TryFromSliceError> for Error {
 	fn from(e: TryFromSliceError) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::TryFromSliceError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<SystemTimeError> for Error {
+	fn from(e: SystemTimeError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::SystemTimeError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<Infallible> for Error {
+	fn from(e: Infallible) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::InfallibleError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<bs58::decode::Error> for Error {
+	fn from(e: bs58::decode::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::Base58DecodeError(format!("{}", e))),
 		}
 	}
 }

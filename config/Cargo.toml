@@ -1,0 +1,13 @@
+[package]
+name = "concordconfig"
+version = "1.0.0"
+authors = ["37 Miners Developers"]
+description = "config for concord"
+license = "Apache-2.0"
+repository = "https://github.com/37miners/concord"
+keywords = [ "crypto", "nioruntime", "mimblewimble" ]
+exclude = ["**/*.nio"]
+edition = "2018"
+
+[dependencies]
+

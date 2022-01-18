@@ -12,65 +12,88 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
+use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER, TOKEN_EXPIRATION};
 use concorderror::Error as ConcordError;
 use librustlet::*;
 use nioruntime_log::*;
+use std::borrow::Cow::Borrowed;
 use std::convert::TryInto;
 
 nioruntime_log::debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
 
-// not auth json message
 const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
+
+#[derive(Serialize)]
+struct TokenResponse {
+	token: String,
+}
+
+#[derive(Serialize)]
+struct ChallengeResponse {
+	challenge: String,
+}
 
 // check whether a session is authorized. We assume that we are in the rustlet context
 // here.
-pub fn check_auth(ds_context: &DSContext) -> bool {
-	let auth = cookie!("auth"); // get auth cookie
-
-	// if there's no auth cookie, we're not authed
-	if auth.is_none() {
-		response!("{}", NOT_AUTHORIZED);
-		return false;
-	}
-
-	// ok because we checked is_none and returned
-	let auth = auth.unwrap();
-
-	// check auth cookie value in db
-	let res = ds_context.check_auth_cookie(auth);
-
-	match res {
-		Ok(_) => {}
-		Err(e) => {
-			log_multi!(
-				ERROR,
-				MAIN_LOG,
-				"check_auth_cookie returned error: {}",
-				e.to_string()
-			);
-			response!("{}", NOT_AUTHORIZED);
-			return false;
+pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordError> {
+	let token = match cookie!("auth") {
+		Some(auth) => auth,
+		None => {
+			query!("token")
 		}
-	}
+	};
 
-	// ok because we checked for error and returned
-	let res = res.unwrap();
+	let user_pubkey = query!("user_pubkey");
+	let user_pubkey = if user_pubkey != "".to_string() {
+		let user_pubkey = urlencoding::decode(&user_pubkey)
+			.unwrap_or(Borrowed(""))
+			.to_string();
+		base64::decode(user_pubkey).unwrap_or([0u8; 32].to_vec())[..]
+			.try_into()
+			.unwrap_or([0u8; 32])
+	} else {
+		pubkey!().unwrap_or([0u8; 32])
+	};
 
-	// if we're not authed return error message
-	if !res {
-		response!("{}", NOT_AUTHORIZED);
-	}
+	let server_pubkey = query!("server_pubkey");
+	let server_pubkey = if server_pubkey != "".to_string() {
+		let server_pubkey = urlencoding::decode(&server_pubkey)
+			.unwrap_or(Borrowed(""))
+			.to_string();
+		base64::decode(server_pubkey).unwrap_or([0u8; 32].to_vec())[..]
+			.try_into()
+			.unwrap_or([0u8; 32])
+	} else {
+		pubkey!().unwrap_or([0u8; 32])
+	};
 
-	// otherwise we just return true
+	let server_id = query!("server_id");
+	let server_id = urlencoding::decode(&server_id)
+		.unwrap_or(Borrowed(""))
+		.to_string();
+	let server_id = base64::decode(server_id).unwrap_or([0u8; 8].to_vec())[..]
+		.try_into()
+		.unwrap_or([0u8; 8]);
 
-	return res;
+	ds_context.is_authorized(
+		user_pubkey,
+		server_pubkey,
+		token.parse().unwrap_or(0),
+		server_id,
+		auth_flag,
+	)?;
+
+	Ok(())
 }
 
 // initialize this module. Create rustlets, log info, open browser.
-pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
-	let ds_context = DSContext::new(root_dir.clone())?;
+pub fn init_auth(cconfig: &ConcordConfig) -> Result<(), ConcordError> {
+	let uri = format!("{}:{}", cconfig.host, cconfig.port);
+
+	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 	let auth_token: u128 = rand::random(); // generate a 128 bit auth token.
 
 	let mut config = get_config_multi!(MAIN_LOG)?;
@@ -109,24 +132,43 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
 		let token = query!("token");
 
 		if token.parse().unwrap_or(0) == auth_token.clone() {
-			let auth: u128 = rand::random();
-			let auth = &format!("{}", auth);
-			set_cookie!("auth", auth, "Expires=Fri, 01 Jan 2100 01:00:00 GMT;");
-			ds_context.add_auth_cookie(auth.to_string()).map_err(|e| {
+			let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+			let challenge = ds_context.create_auth_challenge(user_pubkey).map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
-					"Error adding auth cookie: {}",
+					"Error with auth challenge generation: {}",
 					e.to_string()
 				))
 				.into();
 				error
 			})?;
+			let token = ds_context
+				.validate_challenge(
+					user_pubkey,
+					user_pubkey,
+					challenge,
+					u128::MAX, // never expire
+					AUTH_FLAG_OWNER | AUTH_FLAG_MEMBER,
+				)
+				.map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Error with auth: {}", e.to_string()))
+							.into();
+					error
+				})?;
+
+			match token {
+				Some(token) => {
+					set_cookie!("auth", &token, "Expires=Fri, 01 Jan 2100 01:00:00 GMT;");
+				}
+				None => {}
+			}
 		}
 		// we redirect in either case. App will handle invalid token display issues.
 		set_redirect!("/");
 	});
 	rustlet_mapping!("/auth", "auth");
 
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 
 	rustlet!("get_challenge", {
 		let user_pubkey = query!("user_pubkey");
@@ -143,15 +185,22 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
 		})?;
 
 		let challenge = base64::encode(challenge);
-		let challenge = urlencoding::encode(&challenge);
+		let challenge = urlencoding::encode(&challenge).to_string();
 
-		response!("challenge={:?}", challenge);
+		let challenge = ChallengeResponse { challenge };
+		let json = serde_json::to_string(&challenge).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string())).into();
+			error
+		})?;
+		response!("{}", json);
 	});
 	rustlet_mapping!("/get_challenge", "get_challenge");
 
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 
 	rustlet!("challenge_auth", {
+		let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
 		let user_pubkey = query!("user_pubkey");
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
@@ -172,7 +221,13 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
 
 		if verification {
 			let valid = ds_context
-				.validate_challenge(user_pubkey, challenge)
+				.validate_challenge(
+					user_pubkey,
+					server_pubkey,
+					challenge,
+					TOKEN_EXPIRATION,
+					AUTH_FLAG_MEMBER,
+				)
 				.map_err(|e| {
 					let error: Error = ErrorKind::ApplicationError(format!(
 						"valid auth challenge error: {}",
@@ -181,15 +236,48 @@ pub fn init_auth(root_dir: String, uri: String) -> Result<(), ConcordError> {
 					.into();
 					error
 				})?;
-			response!("valid={:?}", valid);
+			if valid.is_some() {
+				let token = TokenResponse {
+					token: valid.unwrap(),
+				};
+
+				let json = serde_json::to_string(&token).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string()))
+							.into();
+					error
+				})?;
+
+				response!("{}", json);
+			} else {
+				response!("{}", NOT_AUTHORIZED);
+			}
 		} else {
-			response!("valid=false");
+			response!("{}", NOT_AUTHORIZED);
 		}
 	});
 	rustlet_mapping!("/challenge_auth", "challenge_auth");
 
 	// open the web browser
 	//webbrowser::open(&format!("http://{}/auth?token={}", uri, auth_token))?;
+
+	// create purge thread
+	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
+	std::thread::spawn(move || loop {
+		match ds_context.purge_tokens() {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Purge thread generated error: {}",
+					e.to_string(),
+				);
+			}
+		}
+
+		std::thread::sleep(std::time::Duration::from_millis(1000 * 60 * 5));
+	});
 
 	Ok(())
 }

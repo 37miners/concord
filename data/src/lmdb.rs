@@ -119,7 +119,8 @@ impl Store {
 			let error: Error = ErrorKind::FileErr(format!(
 				"Unable to create directory 'db_root' to store chain_data: {:?}",
 				e
-			)).into();
+			))
+			.into();
 			error
 		})?;
 
@@ -279,12 +280,10 @@ impl Store {
 	/// Note: Creates a new read transaction so will *not* see any uncommitted data.
 	pub fn get_ser<T: ser::Readable>(&self, key: &[u8]) -> Result<Option<T>, Error> {
 		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-				let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-				error
-			})?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 
@@ -296,12 +295,10 @@ impl Store {
 	/// Whether the provided key exists
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		let txn = lmdb::ReadTransaction::new(self.env.clone())?;
 		let access = txn.access();
 
@@ -315,12 +312,10 @@ impl Store {
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
 		let lock = self.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		let tx = Arc::new(lmdb::ReadTransaction::new(self.env.clone())?);
 		let cursor = Arc::new(tx.cursor(db.clone())?);
 		Ok(PrefixIterator::new(tx, cursor, prefix, deserialize))
@@ -347,12 +342,10 @@ impl<'a> Batch<'a> {
 	/// Writes a single key/value pair to the db
 	pub fn put(&self, key: &[u8], value: &[u8]) -> Result<(), Error> {
 		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		self.tx
 			.access()
 			.put(db, key, value, lmdb::put::Flags::empty())?;
@@ -393,12 +386,10 @@ impl<'a> Batch<'a> {
 	{
 		let access = self.tx.access();
 		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 
 		self.store.get_with(key, &access, &db, deserialize)
 	}
@@ -408,12 +399,10 @@ impl<'a> Batch<'a> {
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
 		let access = self.tx.access();
 		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		let res: Option<&lmdb::Ignore> = access.get(db, key).to_opt()?;
 		Ok(res.is_some())
 	}
@@ -439,12 +428,10 @@ impl<'a> Batch<'a> {
 	/// Deletes a key/value pair from the db
 	pub fn delete(&self, key: &[u8]) -> Result<(), Error> {
 		let lock = self.store.db.read();
-		let db = lock
-			.as_ref()
-			.ok_or_else(|| {
-                                let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
-                                error
-                        })?;
+		let db = lock.as_ref().ok_or_else(|| {
+			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
+			error
+		})?;
 		self.tx.access().del_key(db, key)?;
 		Ok(())
 	}

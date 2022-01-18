@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
+use concorddata::concord::AUTH_FLAG_OWNER;
 use concorderror::Error as ConcordError;
 use librustlet::*;
 use nioruntime_tor::ov3::OnionV3Address;
@@ -43,9 +45,9 @@ impl From<Member> for MemberJson {
 	}
 }
 
-pub fn init_members(root_dir: String) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+pub fn init_members(config: &ConcordConfig) -> Result<(), ConcordError> {
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("get_members", {
 		let server_id = query!("server_id");
@@ -60,17 +62,15 @@ pub fn init_members(root_dir: String) -> Result<(), ConcordError> {
 		})?;
 
 		let mut members_json: Vec<MemberJson> = vec![];
-		members_json.push(
-			Member {
-				server_id,
-				user_pubkey: pubkey!().unwrap_or([0u8; 32]),
-			}
-			.into(),
-		);
-		members_json[0].user_type = 1u8;
 
-		for member in members {
-			members_json.push(member.into());
+		for member in &members {
+			let mut member_json: MemberJson = member.0.clone().into();
+			member_json.user_type = if (member.1 & AUTH_FLAG_OWNER) != 0 {
+				1u8
+			} else {
+				0u8
+			};
+			members_json.push(member_json);
 		}
 
 		let json = serde_json::to_string(&members_json).map_err(|e| {

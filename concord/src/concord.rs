@@ -14,6 +14,7 @@
 
 //! Entry point for concord module initilization logic
 
+use concordconfig::ConcordConfig;
 use concorderror::Error as ConcordError;
 use librustlet::*;
 use nioruntime_log::*;
@@ -21,7 +22,6 @@ use nioruntime_log::*;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::path::PathBuf;
 
 nioruntime_log::debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
@@ -39,11 +39,11 @@ fn create_file_from_bytes(
 }
 
 // setup the webroot dir for concord
-fn init_webroot(root_dir: String) {
+fn init_webroot(config: &ConcordConfig) {
 	// create the directory structure
-	let js_dir = format!("{}/www/js", root_dir);
-	let css_dir = format!("{}/www/css", root_dir);
-	let images_dir = format!("{}/www/images", root_dir);
+	let js_dir = format!("{}/www/js", config.root_dir.clone());
+	let css_dir = format!("{}/www/css", config.root_dir.clone());
+	let images_dir = format!("{}/www/images", config.root_dir.clone());
 
 	// if the js dir doesn't exist it means we're going to init things
 	if !Path::new(&js_dir).exists() {
@@ -53,7 +53,7 @@ fn init_webroot(root_dir: String) {
 		let bytes = include_bytes!("resources/jquery-3.6.0.min.js");
 		match create_file_from_bytes(
 			"js/jquery-3.6.0.min.js".to_string(),
-			root_dir.clone(),
+			config.root_dir.clone(),
 			bytes,
 		) {
 			Ok(_) => {}
@@ -67,7 +67,11 @@ fn init_webroot(root_dir: String) {
 			}
 		}
 		let bytes = include_bytes!("resources/contextMenu.min.js");
-		match create_file_from_bytes("js/contextMenu.min.js".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"js/contextMenu.min.js".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -82,7 +86,7 @@ fn init_webroot(root_dir: String) {
 		let bytes = include_bytes!("resources/contextMenu.min.css");
 		match create_file_from_bytes(
 			"css/contextMenu.min.css".to_string(),
-			root_dir.clone(),
+			config.root_dir.clone(),
 			bytes,
 		) {
 			Ok(_) => {}
@@ -97,7 +101,7 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/concord.js");
-		match create_file_from_bytes("js/concord.js".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes("js/concord.js".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -110,7 +114,7 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/index.html");
-		match create_file_from_bytes("index.html".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes("index.html".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -123,7 +127,7 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/style.css");
-		match create_file_from_bytes("css/style.css".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes("css/style.css".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -136,7 +140,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/plus.png");
-		match create_file_from_bytes("images/plus.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/plus.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -149,7 +157,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/delete.png");
-		match create_file_from_bytes("images/delete.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/delete.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -162,7 +174,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/create.png");
-		match create_file_from_bytes("images/create.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/create.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -175,7 +191,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/update.png");
-		match create_file_from_bytes("images/update.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/update.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -188,7 +208,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/plus_fill.png");
-		match create_file_from_bytes("images/plus_fill.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/plus_fill.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -201,7 +225,11 @@ fn init_webroot(root_dir: String) {
 		}
 
 		let bytes = include_bytes!("resources/images/close_icon.png");
-		match create_file_from_bytes("images/close_icon.png".to_string(), root_dir.clone(), bytes) {
+		match create_file_from_bytes(
+			"images/close_icon.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -216,24 +244,15 @@ fn init_webroot(root_dir: String) {
 }
 
 // We initialize concord here.
-pub fn concord_init(root_dir: String, uri: String) -> Result<(), ConcordError> {
-	// get homedir updated root_dir
-	let home_dir = match dirs::home_dir() {
-		Some(p) => p,
-		None => PathBuf::new(),
-	}
-	.as_path()
-	.display()
-	.to_string();
-	let root_dir = root_dir.replace("~", &home_dir);
-
-	init_webroot(root_dir.clone()); // setup webroot
-	crate::auth::init_auth(root_dir.clone(), uri)?; // auth module
-	crate::server::init_server(root_dir.clone())?; // server module
-	crate::message::init_message(root_dir.clone())?; // message module
-	crate::channel::init_channels(root_dir.clone())?; // channel module
-	crate::invite::init_invite(root_dir.clone())?; // invite module
-	crate::members::init_members(root_dir.clone())?; // members module
+pub fn concord_init(config: &ConcordConfig) -> Result<(), ConcordError> {
+	init_webroot(config); // setup webroot
+	crate::auth::init_auth(config)?; // auth module
+	crate::server::init_server(config)?; // server module
+	crate::message::init_message(config)?; // message module
+	crate::channel::init_channels(config)?; // channel module
+	crate::invite::init_invite(config)?; // invite module
+	crate::members::init_members(config)?; // members module
+	crate::persistence::init_persistence(config)?; // persistence module
 
 	Ok(())
 }

@@ -11,8 +11,8 @@ edition = "2018"
 
 [dependencies]
 
-#librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.1" }
-librustlet = { path = "../../rustlet/rustlet" }
+librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
+#librustlet = { path = "../../rustlet/rustlet" }
 failure = "0.1"
 failure_derive = "0.1"
 futures = "0.3.0"
@@ -26,3 +26,4 @@ lmdb-zero = "0.4.4"
 byteorder = "1"
 bytes = "0.5"
 rustls = "0.20.0-beta1"
+bs58 = "0.4.0"

@@ -13,34 +13,46 @@
 // limitations under the License.
 
 use crate::auth::check_auth;
+use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::ChannelKey;
 use concorddata::concord::DSContext;
 use concorddata::concord::ServerInfo;
+use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER};
 use concorderror::Error as ConcordError;
 use librustlet::*;
+use nioruntime_log::*;
 
 use std::fs::File;
 use std::io::Read;
+
+const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
+const MAIN_LOG: &str = "mainlog";
 
 nioruntime_log::debug!(); // set log level to debug
 
 #[derive(Serialize, Deserialize)]
 struct ServerInfoMin {
 	name: String,
-	address: String,
+	server_pubkey: String,
 	id: String,
 }
 
-pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+pub fn init_server(config: &ConcordConfig) -> Result<(), ConcordError> {
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// create a server on this concord instance
 	rustlet!("create_server", {
 		// make sure we're authenticated
-		if !check_auth(&ds_context) {
-			return Ok(());
+		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
+			}
 		}
 
 		let server_pubkey = pubkey!();
@@ -76,8 +88,9 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 					let size = filepart.size.unwrap_or(0);
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
+					let pubkey = pubkey!().unwrap_or([0u8; 32]);
 					let server_info = ServerInfo {
-						address: "address".to_string(),
+						pubkey,
 						name: name.clone(),
 						icon: buf,
 					};
@@ -120,13 +133,19 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 	rustlet_mapping!("/create_server", "create_server");
 
 	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// get all servers associated with this instance of concord
 	rustlet!("get_servers", {
 		// make sure we're authenticated
-		if !check_auth(&ds_context) {
-			return Ok(());
+		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
+			}
 		}
 
 		let servers = ds_context.get_servers().map_err(|e| {
@@ -138,10 +157,14 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 
 		let mut server_json = vec![];
 		for server in servers {
+			let server_id = base64::encode(server.server_id);
+			let server_id = urlencoding::encode(&server_id).to_string();
+			let server_pubkey = base64::encode(server.pubkey);
+			let server_pubkey = urlencoding::encode(&server_pubkey).to_string();
 			server_json.push(ServerInfoMin {
-				name: server.0.name.clone(),
-				address: server.0.address.clone(),
-				id: server.1,
+				name: server.name.clone(),
+				server_pubkey,
+				id: server_id,
 			});
 		}
 		let json = serde_json::to_string(&server_json).map_err(|e| {
@@ -154,25 +177,73 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 	rustlet_mapping!("/get_servers", "get_servers");
 
 	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(config.root_dir.clone())?;
+
+	rustlet!("get_server_info", {
+		// make sure we're authenticated
+		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
+			}
+		}
+
+		let server_id = query!("server_id");
+
+		let sinfo = ds_context.get_server_info(server_id.clone()).map_err(|e| {
+			let error: Error = ErrorKind::ApplicationError(format!(
+				"error getting server info: {}",
+				e.to_string()
+			))
+			.into();
+			error
+		})?;
+		match sinfo {
+			Some(sinfo) => {
+				let mut server_json = vec![];
+				let server_pubkey = base64::encode(sinfo.pubkey);
+				let server_pubkey = urlencoding::encode(&server_pubkey).to_string();
+				server_json.push(ServerInfoMin {
+					name: sinfo.name.clone(),
+					server_pubkey,
+					id: server_id,
+				});
+
+				let json = serde_json::to_string(&server_json).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string()))
+							.into();
+					error
+				})?;
+				response!("{}", json);
+			}
+			None => {}
+		}
+	});
+	rustlet_mapping!("/get_server_info", "get_server_info");
+
+	// create a new context for each rustlet, synchronization handled by batches
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// get the icon for the specified server
 	rustlet!("get_server_icon", {
 		// make sure we're authenticated
-		if !check_auth(&ds_context) {
-			return Ok(());
-		}
-		let query = request!("query");
-		let query_vec = querystring::querify(&query);
-		let mut id = "".to_string();
-		for query_param in query_vec {
-			if query_param.0 == "id" {
-				id = query_param.1.to_string();
-				break;
+		let res = check_auth(&ds_context, AUTH_FLAG_MEMBER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
 			}
 		}
 
-		let sinfo = ds_context.get_server_info(id).map_err(|e| {
+		let server_id = query!("server_id");
+
+		let sinfo = ds_context.get_server_info(server_id).map_err(|e| {
 			let error: Error = ErrorKind::ApplicationError(format!(
 				"error getting server info: {}",
 				e.to_string()
@@ -192,27 +263,33 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 	rustlet_mapping!("/get_server_icon", "get_server_icon");
 
 	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// delete the specified server
 	rustlet!("delete_server", {
 		// make sure we're authenticated
-		if !check_auth(&ds_context) {
-			return Ok(());
+		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
+			}
 		}
 
 		// parse query
 		let query = request!("query");
 		let query_vec = querystring::querify(&query);
-		let mut id = "".to_string();
+		let mut server_id = "".to_string();
 		for query_param in query_vec {
-			if query_param.0 == "id" {
-				id = query_param.1.to_string();
+			if query_param.0 == "server_id" {
+				server_id = query_param.1.to_string();
 				break;
 			}
 		}
 
-		ds_context.delete_server(id).map_err(|e| {
+		ds_context.delete_server(server_id).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("error deleting server: {}", e.to_string()))
 					.into();
@@ -222,20 +299,27 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 	rustlet_mapping!("/delete_server", "delete_server");
 
 	// create a new context for each rustlet, synchronization handled by batches
-	let ds_context = DSContext::new(root_dir.clone())?;
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// modify the specified server
 	rustlet!("modify_server", {
-		if !check_auth(&ds_context) {
-			return Ok(());
+		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+				response!("{}", NOT_AUTHORIZED);
+				return Ok(());
+			}
 		}
+
 		let query = request!("query");
 		let query_vec = querystring::querify(&query);
-		let mut id = "".to_string();
+		let mut server_id_str = "".to_string();
 		let mut name = "".to_string();
 		for query_param in query_vec {
-			if query_param.0 == "id" {
-				id = query_param.1.to_string();
+			if query_param.0 == "server_id" {
+				server_id_str = query_param.1.to_string();
 			} else if query_param.0 == "name" {
 				name = query_param.1.to_string();
 			}
@@ -255,14 +339,15 @@ pub fn init_server(root_dir: String) -> Result<(), ConcordError> {
 					let size = filepart.size.unwrap_or(0);
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
+					let pubkey = pubkey!().unwrap_or([0u8; 32]);
 					let server_info = ServerInfo {
-						address: "address".to_string(),
+						pubkey,
 						name: name.clone(),
 						icon: buf,
 					};
 
 					ds_context
-						.modify_server(id.clone(), server_info)
+						.modify_server(server_id_str.clone(), server_info)
 						.map_err(|e| {
 							let error: Error = ErrorKind::ApplicationError(format!(
 								"error modifying server: {}",

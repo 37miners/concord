@@ -1,4 +1,4 @@
-// Copyright 2022 37 Miners, LLC
+// Copyright 2021 The BMW Developers
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate serde_derive;
+/// Main configuration for concord
+pub struct ConcordConfig {
+	pub tor_port: u16,
+	pub port: u16,
+	pub host: String,
+	pub root_dir: String,
+}
 
-mod auth;
-mod channel;
-mod concord;
-mod invite;
-mod members;
-mod message;
-mod persistence;
-mod server;
-
-pub use crate::concord::concord_init;
+impl Default for ConcordConfig {
+	fn default() -> Self {
+		ConcordConfig {
+			tor_port: 19901,
+			port: 9919,
+			host: "127.0.0.1".to_string(),
+			root_dir: "~/.concord".to_string(),
+		}
+	}
+}

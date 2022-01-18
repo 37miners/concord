@@ -2,6 +2,7 @@
 
 var cur_server = '';
 var cur_channel = '';
+var cur_pubkey = '';
 
 var stopEnabled = false;
 var iconId = '';
@@ -26,7 +27,7 @@ var menu = [{
                 req.addEventListener("load", function() {
                         load_server_bar();
                 });
-                req.open("GET", '/delete_server?id='+iconId);
+                req.open("GET", '/delete_server?server_id='+iconId);
                 req.send();
             }
 }];
@@ -124,7 +125,7 @@ function join_server() {
 
 function modify_server(iconId, curName) {
 	var rand = makeid(8);
-	document.getElementById('curImage').src = '/get_server_icon?id=' + iconId + '&r=' + rand;
+	document.getElementById('curImage').src = '/get_server_icon?server_id=' + iconId + '&r=' + rand;
 	document.forms['modify']['id'].value = iconId;
 	document.forms['modify']['name'].value = curName;
 	document.getElementById('interstitial').style.visibility = 'visible';
@@ -189,7 +190,7 @@ function modify_server_submit() {
                         load_server_bar();
                         close_interstitial();
                 });
-                req.open("POST", '/modify_server?id=' + iconId + '&name='+encodeURIComponent(name));
+                req.open("POST", '/modify_server?server_id=' + iconId + '&name='+encodeURIComponent(name));
                 req.send(formData);
         } else {
                 alert("ERROR: file must be specified.");
@@ -239,10 +240,11 @@ function load_server_bar() {
 			show_auth_error();
 		} else {
 			servers.forEach(function(server) {
+				var server_pubkey = server.server_pubkey;
 				var serverbar = document.getElementById('serverbartext');
 				var img = document.createElement('img');
 				var rand = makeid(8);
-				img.src = '/get_server_icon?id=' + server.id + '&r=' + rand;
+				img.src = '/get_server_icon?server_id=' + server.id + '&server_pubkey='+server_pubkey + '&r=' + rand;
 				img.className = 'server_icon';
 				var sname = decodeURIComponent(server.name);
 				img.title = sname;
@@ -277,13 +279,18 @@ function load_server_bar() {
 							channel_link.onclick = function() {
 								cur_channel = channel.id;
 								cur_server = server.id;
+								cur_pubkey = server.server_pubkey;
 								var req = new XMLHttpRequest();
 								req.addEventListener("load", function() {
 									var chat_area = document.getElementById('chat_area');
 									chat_area.innerHTML = '';
 									var messages = JSON.parse(this.responseText);
 									messages.forEach(function(message) {
-										var m = document.createTextNode('> '+message.text);
+										var m = document.createTextNode(
+											message.user_pubkey.substring(0, 10) +
+											'> ' +
+											message.text
+										);
 										chat_area.appendChild(m);
 										chat_area.appendChild(document.createElement('br'));
 									});
@@ -291,7 +298,8 @@ function load_server_bar() {
 								req.open(
 									"GET",
 									'/query_messages?server_id='+server.id+
-									'&channel_id='+channel.id
+									'&channel_id='+channel.id+
+									'&server_pubkey='+server_pubkey
 								);
 								req.send();
 							}
@@ -317,7 +325,7 @@ function load_server_bar() {
 							channel_div.appendChild(delete_button);
 						});
 					});
-					req.open("GET", '/get_channels?server_id='+server.id);
+					req.open("GET", '/get_channels?server_id='+server.id+'&server_pubkey='+server_pubkey);
 					req.send();
 				}
 
@@ -414,6 +422,7 @@ function init_concord() {
 			req.open(
 				"POST",
 				'/send_message?server_id='+cur_server+
+				'&server_pubkey='+cur_pubkey+
 				'&channel_id='+cur_channel+
 				'&timestamp='+ms
 			);

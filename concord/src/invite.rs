@@ -12,16 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use concordconfig::ConcordConfig;
+use concorddata::concord::Channel;
 use concorddata::concord::DSContext;
+use concorddata::concord::MemberList;
+use concorddata::concord::ServerInfo;
+use concorddata::concord::ServerInfoReply;
 use concorderror::Error as ConcordError;
 use concordutil::torclient;
 use librustlet::*;
 use nioruntime_tor::ov3::OnionV3Address;
+use serde_json::Value;
 use std::convert::TryInto;
 use url::Host::Domain;
 use url::Url;
 
-const ACCEPT_INVITE_SUCCESS: &str = "{\"success\": true}";
 const ACCEPT_INVITE_FAIL: &str = "{\"success\": false}";
 
 nioruntime_log::debug!(); // set log level to debug
@@ -42,6 +47,39 @@ pub struct InviteSerde {
 	id: String,
 }
 
+#[derive(Serialize)]
+pub struct ServerInfoSerde {
+	pubkey: String,
+	server_id: String,
+	name: String,
+	icon: String,
+}
+
+#[derive(Serialize)]
+pub struct ServerStateSerde {
+	sinfo: ServerInfoSerde,
+	channels: Vec<Channel>,
+	members: String,
+}
+
+impl From<ServerInfoReply> for ServerInfoSerde {
+	fn from(si: ServerInfoReply) -> ServerInfoSerde {
+		let pubkey = base64::encode(si.pubkey);
+		let pubkey = urlencoding::encode(&pubkey).to_string();
+		let server_id = base64::encode(si.server_id);
+		let server_id = urlencoding::encode(&server_id).to_string();
+		let name = si.name;
+		let icon = base64::encode(&si.icon[..]);
+		let icon = urlencoding::encode(&icon).to_string();
+		ServerInfoSerde {
+			pubkey,
+			server_id,
+			name,
+			icon,
+		}
+	}
+}
+
 // build a signable message from a message/key.
 fn build_signable_message(pubkey: String, timestamp: u128, link: String) -> Result<Vec<u8>, Error> {
 	let mut ret = vec![];
@@ -51,9 +89,9 @@ fn build_signable_message(pubkey: String, timestamp: u128, link: String) -> Resu
 	Ok(ret)
 }
 
-pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+pub fn init_invite(config: &ConcordConfig) -> Result<(), ConcordError> {
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// send a message
 	rustlet!("create_invite", {
@@ -116,8 +154,8 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 	});
 	rustlet_mapping!("/create_invite", "create_invite");
 
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	// accept an invite
 	rustlet!("accept_invite", {
@@ -133,9 +171,10 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
 		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
+		let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
 
-		let success = ds_context
-			.accept_invite(invite_id, user_pubkey)
+		let sinfo = ds_context
+			.accept_invite(invite_id, user_pubkey, server_pubkey)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error accepting invite: {}",
@@ -145,19 +184,73 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 				error
 			})?;
 
-		match success {
-			true => {
-				response!("{}", ACCEPT_INVITE_SUCCESS);
+		match sinfo {
+			Some(sinfo) => {
+				// get channel info and member info
+				let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
+				let channels = ds_context
+					.get_channels(server_pubkey, sinfo.server_id)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error accepting invite - channels: {}",
+							e.to_string()
+						))
+						.into();
+						error
+					})?;
+
+				let members = ds_context.get_members(sinfo.server_id).map_err(|e| {
+					let error: Error = ErrorKind::ApplicationError(format!(
+						"error accepting invite - members: {}",
+						e.to_string()
+					))
+					.into();
+					error
+				})?;
+
+				let members = MemberList::new(members, server_pubkey, sinfo.server_id)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error accepting invite - b58 members: {}",
+							e.to_string()
+						))
+						.into();
+						error
+					})?
+					.to_b58()
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error accepting invite - b58 members: {}",
+							e.to_string()
+						))
+						.into();
+						error
+					})?;
+
+				let sinfo: ServerInfoSerde = sinfo.into();
+				let server_state = ServerStateSerde {
+					sinfo,
+					members,
+					channels,
+				};
+
+				let json = serde_json::to_string(&server_state).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string()))
+							.into();
+					error
+				})?;
+				response!("{}", json);
 			}
-			false => {
+			None => {
 				response!("{}", ACCEPT_INVITE_FAIL);
 			}
 		}
 	});
 	rustlet_mapping!("/i", "accept_invite");
 
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("revoke_invite", {
 		let invite_id = query!("invite_id").parse()?;
@@ -170,8 +263,8 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 	});
 	rustlet_mapping!("/revoke_invite", "revoke_invite");
 
-	// create a ds context. Each rustlet needs it's own
-	let ds_context = DSContext::new(root_dir.clone())?;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("list_invites", {
 		let server_id = query!("server_id");
@@ -226,6 +319,10 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 	});
 	rustlet_mapping!("/list_invites", "list_invites");
 
+	let tor_port = config.tor_port;
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
+
 	rustlet!("join_server", {
 		let link = query!("link");
 		let link = urlencoding::decode(&link)?.to_string();
@@ -239,8 +336,8 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 			})?
 			.as_millis();
 
-		let pubkey = pubkey!().unwrap_or([0u8; 32]);
-		let onion = base64::encode(pubkey);
+		let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let onion = base64::encode(user_pubkey);
 		let onion = urlencoding::encode(&onion).to_string();
 
 		let signature = sign!(&build_signable_message(
@@ -256,7 +353,6 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 			"{}&timestamp={}&user_pubkey={}&signature={}",
 			link, timestamp, onion, signature,
 		);
-
 		let url = Url::parse(&join_link).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("url parse error: {}", e.to_string())).into();
@@ -264,12 +360,105 @@ pub fn init_invite(root_dir: String) -> Result<(), ConcordError> {
 		})?;
 		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
 		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-		let res = torclient::do_get(host.clone(), path.clone(), 9050).map_err(|e| {
+		let res = torclient::do_get(host.clone(), path.clone(), tor_port).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
 			error
 		})?;
-		println!("join server: host: {} path: {}, res={:?}", host, path, res);
+
+		let start = res.find("\r\n\r\n");
+
+		match start {
+			Some(start) => {
+				let json_text = &res[(start + 4)..];
+				let value: Value = serde_json::from_str(json_text).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("json parse error: {}", e.to_string()))
+							.into();
+					error
+				})?;
+
+				let value_sinfo: Option<&Value> = value.get("sinfo");
+
+				let empty = vec![];
+				let empty = Value::Array(empty);
+				let empty2 = vec![];
+				let channels = value
+					.get("channels")
+					.unwrap_or(&empty)
+					.as_array()
+					.unwrap_or(&empty2);
+
+				let mut channels_vec = vec![];
+				for channel in channels {
+					let channel = Channel {
+						name: channel.get("name").unwrap().as_str().unwrap().to_string(),
+						description: channel
+							.get("description")
+							.unwrap()
+							.as_str()
+							.unwrap()
+							.to_string(),
+						channel_id: channel.get("channel_id").unwrap().as_u64().unwrap(),
+					};
+					channels_vec.push(channel);
+				}
+				let channels = channels_vec;
+
+				let members = value.get("members").unwrap().as_str().unwrap().to_string();
+				let members = MemberList::from_b58(members)
+					.unwrap()
+					.read_member_list()
+					.unwrap();
+
+				match value_sinfo {
+					Some(value) => {
+						let server_id = match value.get("server_id") {
+							Some(server_id) => server_id.as_str().unwrap_or(""),
+							None => "",
+						}
+						.to_string();
+
+						let pubkey = match value.get("pubkey") {
+							Some(pubkey) => pubkey.as_str().unwrap_or(""),
+							None => "",
+						};
+						let pubkey = urlencoding::decode(pubkey)?.to_string();
+						let pubkey = base64::decode(pubkey)?.as_slice().try_into()?;
+
+						let name = match value.get("name") {
+							Some(name) => name.as_str().unwrap_or(""),
+							None => "",
+						}
+						.to_string();
+						let icon = match value.get("icon") {
+							Some(icon) => icon.as_str().unwrap_or(""),
+							None => "",
+						};
+						let icon = urlencoding::decode(icon)?.to_string();
+						let icon = base64::decode(icon)?;
+
+						let server_info = ServerInfo {
+							pubkey: pubkey,
+							name,
+							icon,
+						};
+						ds_context
+							.add_remote_server(server_id, server_info, channels, members)
+							.map_err(|e| {
+								let error: Error = ErrorKind::ApplicationError(format!(
+									"add remote server error: {}",
+									e
+								))
+								.into();
+								error
+							})?;
+					}
+					None => {}
+				}
+			}
+			None => {}
+		}
 	});
 	rustlet_mapping!("/join_server", "join_server");
 

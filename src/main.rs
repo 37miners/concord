@@ -14,12 +14,14 @@
 
 use clap::load_yaml;
 use clap::App;
+use concordconfig::ConcordConfig;
 use concorderror::Error;
 use concordlib::*; // import our rustlets
 use librustlet::nioruntime_log;
 use librustlet::rustlet_init;
 use librustlet::HttpConfig;
 use librustlet::RustletConfig;
+use std::path::PathBuf;
 
 nioruntime_log::debug!(); // set log level to debug
 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
@@ -65,16 +67,30 @@ fn real_main() -> Result<(), Error> {
 		false => "~/.concord".to_string(),
 	};
 
-	let host = "127.0.0.1".to_string();
-	let uri = format!("{}:{}", host, port);
+	// get homedir updated root_dir
+	let home_dir = match dirs::home_dir() {
+		Some(p) => p,
+		None => PathBuf::new(),
+	}
+	.as_path()
+	.display()
+	.to_string();
+	let root_dir = root_dir.replace("~", &home_dir);
+
+	let config = ConcordConfig {
+		tor_port,
+		port,
+		root_dir,
+		..Default::default()
+	};
 
 	// init our rustlet container
 	rustlet_init!(RustletConfig {
 		http_config: HttpConfig {
-			host,
-			port,
-			tor_port,
-			root_dir: root_dir.clone(),
+			host: config.host.clone(),
+			port: config.port.clone(),
+			tor_port: config.tor_port,
+			root_dir: config.root_dir.clone(),
 			server_name: format!("Concord {}", VERSION),
 			..HttpConfig::default()
 		},
@@ -82,6 +98,6 @@ fn real_main() -> Result<(), Error> {
 	});
 
 	// init concord
-	concord_init(root_dir, uri)?; // init concord
+	concord_init(&config)?; // init concord
 	Ok(())
 }

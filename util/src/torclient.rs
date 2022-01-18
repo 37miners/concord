@@ -25,12 +25,45 @@ pub fn do_get(onion_address: String, path: String, tor_port: u16) -> Result<Stri
 	stream
 		.write_all(
 			format!(
-				"GET {} HTTP/1.1\r\nConnection: Close\r\nHost: www.example.com\r\n\r\n",
+				"GET {} HTTP/1.1\r\nConnection: Close\r\nHost: localhost\r\n\r\n",
 				path
 			)
 			.as_bytes(),
 		)
 		.expect("Failed to send request");
+
+	let mut stream = stream.into_inner();
+
+	let mut buf = String::new();
+	stream
+		.read_to_string(&mut buf)
+		.expect("Failed to read response");
+
+	Ok(buf)
+}
+
+pub fn do_post(
+	onion_address: String,
+	path: String,
+	tor_port: u16,
+	data: Vec<u8>,
+) -> Result<String, Error> {
+	let proxy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tor_port);
+	let target: socks::TargetAddr = socks::TargetAddr::Domain(onion_address, 80);
+	let mut stream = TorStream::connect_with_address(proxy_addr, target)?;
+	let headers = format!(
+		"POST {} HTTP/1.1\r\nConnection: Close\r\nHost: localhost\r\nContent-Length: {}\r\n\r\n",
+		path,
+		data.len(),
+	);
+
+	let mut bytes = vec![];
+	bytes.append(&mut headers.as_bytes().to_vec());
+	bytes.append(&mut data.clone());
+
+	stream.write_all(&bytes).expect("Failed to send request");
+
+	//stream.write_all(&data).expect("failed to send request");
 
 	let mut stream = stream.into_inner();
 
