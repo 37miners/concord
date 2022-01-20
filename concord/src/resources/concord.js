@@ -3,6 +3,7 @@
 var cur_server = '';
 var cur_channel = '';
 var cur_pubkey = '';
+var servers = '';
 
 var stopEnabled = false;
 var iconId = '';
@@ -227,6 +228,13 @@ function do_add_channel(server_id) {
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 }
 
+function subscribe(server, listener_id) {
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {});
+	req.open("GET", '/subscribe?server_id='+server.id+'&server_pubkey='+server_pubkey+'&listener_id='+listener_id);
+	req.send();
+}
+
 function load_server_bar() {
 	// first clear server bar
 	document.getElementById('serverbartext').innerHTML = '';
@@ -234,7 +242,16 @@ function load_server_bar() {
 	// then load all servers
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
-		var servers = JSON.parse(this.responseText);
+		var load_listener;
+		if (servers == '') {
+			load_listener = true;
+		} else {
+			load_listener = false;
+		}
+		servers = JSON.parse(this.responseText);
+
+		if (load_listener) listener();
+
 		if (servers.error !== undefined) {
 			// authentication error
 			show_auth_error();
@@ -284,6 +301,7 @@ function load_server_bar() {
 								req.addEventListener("load", function() {
 									var chat_area = document.getElementById('chat_area');
 									chat_area.innerHTML = '';
+try {
 									var messages = JSON.parse(this.responseText);
 									messages.forEach(function(message) {
 										var m = document.createTextNode(
@@ -294,6 +312,10 @@ function load_server_bar() {
 										chat_area.appendChild(m);
 										chat_area.appendChild(document.createElement('br'));
 									});
+									chat_area.scrollTop = chat_area.scrollHeight;
+} catch(ex) {
+	console.error('error='+ex+'response='+this.responseText);
+}
 								});
 								req.open(
 									"GET",
@@ -451,6 +473,76 @@ function init_concord() {
 	load_server_bar();
 }
 
+function process_response(response) {
+	var event = JSON.parse(response);
+	if (event.etype == 0) {
+		listener_id = event.ebody;
+		servers.forEach(function(server) {
+			var req = new XMLHttpRequest();
+        		req.addEventListener("load", function() {
+        		});
+        		req.open(
+				"GET",
+				'/subscribe?server_id='+server.id+
+				'&server_pubkey='+server.server_pubkey+
+				'&listener_id='+listener_id
+			);
+        		req.send()
+		});
+		ping(listener_id, 0);
+	} else if (event.etype == 1) {
+		var chat_area = document.getElementById('chat_area');
+		var m = document.createTextNode(
+			event.user_pubkey.substring(0, 10) +
+			'> ' +
+			event.ebody
+		);
+		chat_area.appendChild(m);
+		chat_area.appendChild(document.createElement('br'));
+		chat_area.scrollTop = chat_area.scrollHeight;
+	} else if (event.etype == 3) { // pong complete
+		listener();
+	}
+ 
+}
+
+function listener() {
+	var req = new XMLHttpRequest();
+	var start = 0;
+	req.addEventListener("progress", function() {
+		var resp = this.responseText.substring(start);
+		var end = resp.indexOf("-----BREAK\r\n");
+		var response = resp.substring(0, end);
+		console.info('response='+response);
+		try {
+			process_response(response);
+		} catch(ex) {
+			console.error('exception: ' + ex + ',response='+response);
+		}
+		start += end + 12;
+	});
+	var rand = makeid(8);
+	req.open("GET", '/listen?r='+rand);
+	req.send();
+}
+
+function ping(listener_id, i) {
+	setTimeout(
+		function() {
+			var req = new XMLHttpRequest();
+			if (i >= 2) {
+				req.open("GET", '/ping?listener_id='+listener_id+'&disconnect=true');
+				req.send();
+			} else {
+				req.open("GET", '/ping?listener_id='+listener_id);
+				req.send();
+				ping(listener_id, i + 1);
+			}
+		},
+		30000
+	);
+}
+
 function load_members(sname) {
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
@@ -476,6 +568,12 @@ function load_members(sname) {
 		});
 	});
 	req.open("GET", '/get_members?server_id='+sname);
+	req.send();
+}
+
+window.onunload = function(event) { 
+	var req = new XMLHttpRequest();
+	req.open("GET", '/disconnect?listener_id='+listener_id);
 	req.send();
 }
 

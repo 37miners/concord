@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::DSContext;
@@ -89,7 +90,7 @@ fn build_signable_message(pubkey: String, timestamp: u128, link: String) -> Resu
 	Ok(ret)
 }
 
-pub fn init_invite(config: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 

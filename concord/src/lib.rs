@@ -18,6 +18,7 @@ extern crate serde_derive;
 mod auth;
 mod channel;
 mod concord;
+mod context;
 mod invite;
 mod members;
 mod message;

@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER, TOKEN_EXPIRATION};
@@ -90,7 +91,7 @@ pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordE
 }
 
 // initialize this module. Create rustlets, log info, open browser.
-pub fn init_auth(cconfig: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	let uri = format!("{}:{}", cconfig.host, cconfig.port);
 
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;

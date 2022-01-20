@@ -22,9 +22,9 @@ use std::io::Cursor;
 use std::path::PathBuf;
 
 const DB_NAME: &str = "concord";
+const BATCH_SIZE: u64 = 100;
 
 pub const TOKEN_EXPIRATION: u128 = 1000 * 60 * 60;
-//pub const TOKEN_EXPIRATION: u128 = 1000 * 60;
 
 // the context to use for accessing concord data. Multiple instances
 // may exist and LMDB handles concurrency.
@@ -358,16 +358,19 @@ impl Readable for Member {
 	}
 }
 
-// Message types
-#[derive(Clone)]
+// type of message
+#[derive(Debug)]
 pub enum MessageType {
 	Text,
 	Binary,
 }
 
-// The key to a message entry
-#[derive(Clone)]
-pub struct MessageKey {
+// information associated with a message
+#[derive(Debug)]
+pub struct Message {
+	pub payload: Vec<u8>,
+	pub signature: [u8; 64],
+	pub message_type: MessageType,
 	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
 	pub channel_id: u64,
@@ -376,8 +379,38 @@ pub struct MessageKey {
 	pub nonce: u16,
 }
 
+#[derive(Debug)]
+struct MessageKeyImpl {
+	server_pubkey: [u8; 32],
+	server_id: [u8; 8],
+	channel_id: u64,
+	batch_num: u64,
+	timestamp: u64,
+	user_pubkey: [u8; 32],
+	nonce: u16,
+}
+
+#[derive(Debug)]
+struct MessageValueImpl {
+	payload: Vec<u8>,
+	signature: [u8; 64],
+	message_type: MessageType,
+}
+
+#[derive(Debug)]
+struct MessageMetaDataKey {
+	server_pubkey: [u8; 32],
+	server_id: [u8; 8],
+	channel_id: u64,
+}
+
+#[derive(Debug)]
+struct MessageMetaDataValue {
+	message_count: u64,
+}
+
 // the Writeable implmenetation for serializing MessageKey
-impl Writeable for MessageKey {
+impl Writeable for MessageKeyImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MESSAGE_PREFIX)?;
 		for i in 0..32 {
@@ -387,6 +420,7 @@ impl Writeable for MessageKey {
 			writer.write_u8(self.server_id[i])?;
 		}
 		writer.write_u64(self.channel_id)?;
+		writer.write_u64(self.batch_num)?;
 		writer.write_u64(self.timestamp)?;
 		for i in 0..32 {
 			writer.write_u8(self.user_pubkey[i])?;
@@ -397,7 +431,7 @@ impl Writeable for MessageKey {
 }
 
 // the Readable implmentation for deserializing MessageKey
-impl Readable for MessageKey {
+impl Readable for MessageKeyImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let _ = reader.read_u8()?;
 		let mut server_pubkey = vec![];
@@ -409,6 +443,7 @@ impl Readable for MessageKey {
 			server_id.push(reader.read_u8()?);
 		}
 		let channel_id = reader.read_u64()?;
+		let batch_num = reader.read_u64()?;
 		let timestamp = reader.read_u64()?;
 		let mut user_pubkey = vec![];
 		for _ in 0..32 {
@@ -420,10 +455,11 @@ impl Readable for MessageKey {
 		let server_id = server_id.as_slice().try_into()?;
 		let user_pubkey = user_pubkey.as_slice().try_into()?;
 
-		Ok(MessageKey {
+		Ok(MessageKeyImpl {
 			server_pubkey,
 			server_id,
 			channel_id,
+			batch_num,
 			timestamp,
 			user_pubkey,
 			nonce,
@@ -431,16 +467,8 @@ impl Readable for MessageKey {
 	}
 }
 
-// information associated with a message
-#[derive(Clone)]
-pub struct Message {
-	pub payload: Vec<u8>,
-	pub signature: [u8; 64],
-	pub message_type: MessageType,
-}
-
-// the Writeable implmenetation for serializing Message
-impl Writeable for Message {
+// the Writeable implmenetation for serializing MessageValueImpl
+impl Writeable for MessageValueImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let payload_len = self.payload.len();
 		writer.write_u32(payload_len.try_into().unwrap_or(0))?;
@@ -459,8 +487,8 @@ impl Writeable for Message {
 	}
 }
 
-// the Readable implmentation for deserializing Message
-impl Readable for Message {
+// the Readable implmentation for deserializing MessageValueImpl
+impl Readable for MessageValueImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let payload_len = reader.read_u32()?;
 		let mut payload = vec![];
@@ -478,11 +506,67 @@ impl Readable for Message {
 
 		let signature = signature.as_slice().try_into()?;
 
-		Ok(Message {
+		Ok(MessageValueImpl {
 			payload,
 			signature,
 			message_type,
 		})
+	}
+}
+
+impl Writeable for MessageMetaDataKey {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(MESSAGE_METADATA_PREFIX)?;
+		for i in 0..32 {
+			writer.write_u8(self.server_pubkey[i])?;
+		}
+		for i in 0..8 {
+			writer.write_u8(self.server_id[i])?;
+		}
+		writer.write_u64(self.channel_id)?;
+		Ok(())
+	}
+}
+
+// the Readable implmentation for deserializing MessageKey
+impl Readable for MessageMetaDataKey {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let _ = reader.read_u8()?;
+		let mut server_pubkey = vec![];
+		for _ in 0..32 {
+			server_pubkey.push(reader.read_u8()?);
+		}
+		let mut server_id = vec![];
+		for _ in 0..8 {
+			server_id.push(reader.read_u8()?);
+		}
+		let channel_id = reader.read_u64()?;
+
+		let server_pubkey = server_pubkey.as_slice().try_into()?;
+		let server_id = server_id.as_slice().try_into()?;
+
+		Ok(MessageMetaDataKey {
+			server_pubkey,
+			server_id,
+			channel_id,
+		})
+	}
+}
+
+// the Writeable implmenetation for serializing MessageMetaDataValue
+impl Writeable for MessageMetaDataValue {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u64(self.message_count)?;
+		Ok(())
+	}
+}
+
+// the Readable implmentation for deserializing MessageKey
+impl Readable for MessageMetaDataValue {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let message_count = reader.read_u64()?;
+
+		Ok(MessageMetaDataValue { message_count })
 	}
 }
 
@@ -693,6 +777,7 @@ const INVITE_PREFIX: u8 = 5;
 const INVITE_ID_PREFIX: u8 = 6;
 const CHALLENGE_PREFIX: u8 = 7;
 const STORED_AUTH_TOKEN_PREFIX: u8 = 8;
+const MESSAGE_METADATA_PREFIX: u8 = 9;
 
 // auth levels
 pub const AUTH_FLAG_OWNER: u64 = 1;
@@ -845,67 +930,133 @@ impl DSContext {
 		self.delete_server(id)
 	}
 
-	// post a message to the db
-	pub fn post_message(&self, key: MessageKey, message: Message) -> Result<(), Error> {
+	// post the specified message to our local DB.
+	pub fn post_message(&self, message: Message) -> Result<(), Error> {
 		let batch = self.store.batch()?;
+
+		let message_metadata_key = MessageMetaDataKey {
+			server_pubkey: message.server_pubkey,
+			server_id: message.server_id,
+			channel_id: message.channel_id,
+		};
+
 		let mut buffer = vec![];
-		serialize_default(&mut buffer, &key)?;
-		batch.put_ser(&buffer, &message)?;
+		serialize_default(&mut buffer, &message_metadata_key)?;
+		let res: Option<MessageMetaDataValue> = batch.get_ser(&buffer)?;
+
+		let message_count = match res {
+			Some(mmdv) => mmdv.message_count,
+			None => 0,
+		};
+
+		batch.put_ser(
+			&buffer,
+			&MessageMetaDataValue {
+				message_count: message_count + 1,
+			},
+		)?;
+
+		let message_value_impl = MessageValueImpl {
+			payload: message.payload,
+			signature: message.signature,
+			message_type: message.message_type,
+		};
+		let message_key_impl = MessageKeyImpl {
+			server_pubkey: message.server_pubkey,
+			server_id: message.server_id,
+			channel_id: message.channel_id,
+			batch_num: message_count / BATCH_SIZE,
+			timestamp: message.timestamp,
+			user_pubkey: message.user_pubkey,
+			nonce: message.nonce,
+		};
+		let mut buffer = vec![];
+		serialize_default(&mut buffer, &message_key_impl)?;
+		batch.put_ser(&buffer, &message_value_impl)?;
+
 		batch.commit()?;
+
 		Ok(())
 	}
 
-	// for now we just create a new iterator each time we paginate.
-	// TODO: store iterators so that faster access can be acheived.
+	// get the messages from the message db. Messages are batched in groups of 100.
+	// if the batch_num is greater than the highest batch num, the last batch (most recent)
+	// messages are returned. The u64 returned is the number of batches that currently exist.
 	pub fn get_messages(
 		&self,
 		server_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		channel_id: u64,
-		offset: u64,
-		len: usize,
-	) -> Result<Vec<(MessageKey, Message)>, Error> {
+		batch_num: u64,
+	) -> Result<(u64, Vec<Message>), Error> {
 		let batch = self.store.batch()?;
-		// get the iterator for each message
-		let mut key_vec = vec![MESSAGE_PREFIX];
-		key_vec.append(&mut server_pubkey.to_vec());
-		key_vec.append(&mut server_id.to_vec());
-		key_vec.append(&mut channel_id.to_be_bytes().to_vec());
 
-		let mut itt = batch.iter(&(key_vec[..]), |k, v| {
-			let mut cursor = Cursor::new(k.to_vec());
-			cursor.set_position(0);
-			let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
-			let mkey = MessageKey::read(&mut reader)?;
+		let message_metadata_key = MessageMetaDataKey {
+			server_pubkey,
+			server_id,
+			channel_id,
+		};
 
-			let mut cursor = Cursor::new(v.to_vec());
-			cursor.set_position(0);
-			let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
-			let mval = Message::read(&mut reader)?;
-			Ok((mkey, mval))
-		})?;
+		let mut buffer = vec![];
+		serialize_default(&mut buffer, &message_metadata_key)?;
+		let res: Option<MessageMetaDataValue> = batch.get_ser(&buffer)?;
+		match res {
+			Some(mmdv) => {
+				let message_count = mmdv.message_count;
+				let batches = message_count / BATCH_SIZE;
+				let batch_num = if batches < batch_num {
+					batches
+				} else {
+					batch_num
+				};
 
-		let mut ret = vec![];
-		let mut itt_count = 0;
-		loop {
-			let next = itt.next();
-			match next {
-				Some((mkey, mval)) => {
-					if itt_count >= offset {
-						ret.push((mkey, mval));
+				let mut prefix = vec![MESSAGE_PREFIX];
+				prefix.append(&mut server_pubkey.to_vec());
+				prefix.append(&mut server_id.to_vec());
+				prefix.append(&mut channel_id.to_be_bytes().to_vec());
+				prefix.append(&mut batch_num.to_be_bytes().to_vec());
+
+				let mut itt = batch.iter(&(prefix[..]), |k, v| {
+					let mut cursor = Cursor::new(k.to_vec());
+					cursor.set_position(0);
+					let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+					let mkey = MessageKeyImpl::read(&mut reader)?;
+
+					let mut cursor = Cursor::new(v.to_vec());
+					cursor.set_position(0);
+					let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
+					let mval = MessageValueImpl::read(&mut reader)?;
+
+					Ok(Message {
+						payload: mval.payload,
+						signature: mval.signature,
+						message_type: mval.message_type,
+						server_pubkey: mkey.server_pubkey,
+						server_id: mkey.server_id,
+						channel_id: mkey.channel_id,
+						timestamp: mkey.timestamp,
+						user_pubkey: mkey.user_pubkey,
+						nonce: mkey.nonce,
+					})
+				})?;
+
+				let mut ret = vec![];
+				loop {
+					let next = itt.next();
+					match next {
+						Some(m) => {
+							ret.push(m);
+						}
+						None => {
+							break;
+						}
 					}
-					if ret.len() >= len {
-						break;
-					}
-					itt_count += 1;
 				}
-				None => {
-					break;
-				}
+
+				Ok((batches, ret))
 			}
+			None => Ok((0, vec![])),
 		}
-
-		Ok(ret)
 	}
 
 	pub fn get_channels(
@@ -967,26 +1118,6 @@ impl DSContext {
 		batch.commit()?;
 		Ok(())
 	}
-
-	/*
-		pub fn join(&self, user_pubkey: [u8; 32], server_id: [u8; 8]) -> Result<(), Error> {
-			let batch = self.store.batch()?;
-
-			let member = Member {
-				user_pubkey,
-				server_id,
-			};
-
-			let mut buffer = vec![];
-			serialize_default(&mut buffer, &member)?;
-			let mut buffer2 = vec![MEMBER_PREFIX];
-			buffer2.append(&mut buffer);
-			batch.put_ser(&buffer2, &AUTH_FLAG_MEMBER)?;
-
-			batch.commit()?;
-			Ok(())
-		}
-	*/
 
 	pub fn revoke(&self, user_pubkey: [u8; 32], server_id: [u8; 8]) -> Result<(), Error> {
 		let batch = self.store.batch()?;

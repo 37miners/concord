@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
@@ -45,7 +46,7 @@ impl From<Member> for MemberJson {
 	}
 }
 
-pub fn init_members(config: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn init_members(config: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 

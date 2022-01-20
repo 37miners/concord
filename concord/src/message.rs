@@ -13,10 +13,13 @@
 // limitations under the License.
 
 use crate::auth::check_auth;
+use crate::context::ConcordContext;
+use crate::context::ServerConnectionInfo;
+use crate::persistence::Event;
+use crate::persistence::EVENT_TYPE_MESSAGE;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Message;
-use concorddata::concord::MessageKey;
 use concorddata::concord::MessageType;
 use concorddata::concord::AUTH_FLAG_MEMBER;
 use concorderror::Error as ConcordError;
@@ -35,6 +38,7 @@ nioruntime_log::debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
 
 const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
+const SUCCESS: &str = "{\"success\": true}";
 
 #[derive(Serialize, Deserialize)]
 struct MessageInfo {
@@ -96,7 +100,7 @@ fn get_auth_token(
 
 			let value: Value = serde_json::from_str(json_text).map_err(|e| {
 				let error: Error =
-					ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
+					ErrorKind::ApplicationError(format!("json parse error3: {}", e)).into();
 				error
 			})?;
 
@@ -152,7 +156,7 @@ fn get_auth_token(
 
 			let value: Value = serde_json::from_str(json_text).map_err(|e| {
 				let error: Error =
-					ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
+					ErrorKind::ApplicationError(format!("json parse error4: {}", e)).into();
 				error
 			})?;
 
@@ -185,14 +189,14 @@ fn get_auth_token(
 }
 
 // build a signable message from a message/key.
-fn build_signable_message(key: MessageKey, message: Message) -> Result<Vec<u8>, Error> {
+fn build_signable_message(message: &Message) -> Result<Vec<u8>, Error> {
 	let mut ret = vec![];
-	ret.append(&mut key.server_pubkey.to_vec());
-	ret.append(&mut key.server_id.to_vec());
-	ret.append(&mut key.channel_id.to_be_bytes().to_vec());
-	ret.append(&mut key.timestamp.to_be_bytes().to_vec());
-	ret.append(&mut key.user_pubkey.to_vec());
-	ret.append(&mut key.nonce.to_be_bytes().to_vec());
+	ret.append(&mut message.server_pubkey.to_vec());
+	ret.append(&mut message.server_id.to_vec());
+	ret.append(&mut message.channel_id.to_be_bytes().to_vec());
+	ret.append(&mut message.timestamp.to_be_bytes().to_vec());
+	ret.append(&mut message.user_pubkey.to_vec());
+	ret.append(&mut message.nonce.to_be_bytes().to_vec());
 	ret.append(&mut message.payload.to_vec());
 	match message.message_type {
 		MessageType::Text => ret.push(0),
@@ -247,7 +251,7 @@ fn process_remote_messages(
 
 				let value: Value = serde_json::from_str(json_text).map_err(|e| {
 					let error: Error =
-						ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
+						ErrorKind::ApplicationError(format!("json parse error5: {}", e)).into();
 					error
 				})?;
 
@@ -276,26 +280,10 @@ fn process_local_messages(
 	server_id: [u8; 8],
 	channel_id: u64,
 ) -> Result<(), Error> {
-	// local
-	// get query parameters
-	let query = request!("query");
-	let query_vec = querystring::querify(&query);
-
-	let mut len = 100;
-	let mut offset = 0;
 	let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
 
-	for query_param in query_vec {
-		let param_as_str = query_param.1.to_string();
-		if query_param.0 == "len" {
-			len = param_as_str.parse()?;
-		} else if query_param.0 == "offset" {
-			offset = param_as_str.parse()?;
-		}
-	}
-
-	let messages = ds_context
-		.get_messages(server_pubkey, server_id, channel_id, offset, len)
+	let mut messages = ds_context
+		.get_messages(server_pubkey, server_id, channel_id, u64::MAX)
 		.map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("error querying messages: {}", e.to_string()))
@@ -303,19 +291,37 @@ fn process_local_messages(
 			error
 		})?;
 
+	let messages = if messages.0 > 0 {
+		let mut messages2 = ds_context
+			.get_messages(server_pubkey, server_id, channel_id, messages.0 - 1)
+			.map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"error querying messages: {}",
+					e.to_string()
+				))
+				.into();
+				error
+			})?;
+
+		messages2.1.append(&mut messages.1);
+		messages2.1
+	} else {
+		messages.1
+	};
+
 	let mut message_json = vec![];
 	for message in &messages {
-		let message_to_sign = build_signable_message(message.0.clone(), message.1.clone())?;
+		let message_to_sign = build_signable_message(message)?;
 		message_json.push(MessageInfo {
-			text: std::str::from_utf8(&message.1.payload.clone())?.to_string(),
+			text: std::str::from_utf8(&message.payload.clone())?.to_string(),
 			verified: verify!(
 				&message_to_sign,
-				Some(message.0.user_pubkey),
-				message.1.signature
+				Some(message.user_pubkey),
+				message.signature
 			)
 			.unwrap_or(false),
-			timestamp: format!("{}", message.0.timestamp),
-			user_pubkey: OnionV3Address::from_bytes(message.0.user_pubkey).to_string(),
+			timestamp: format!("{}", message.timestamp),
+			user_pubkey: OnionV3Address::from_bytes(message.user_pubkey).to_string(),
 		});
 	}
 	let json = serde_json::to_string(&message_json).map_err(|e| {
@@ -327,7 +333,7 @@ fn process_local_messages(
 	Ok(())
 }
 
-pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(), ConcordError> {
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 	let tor_port = config.tor_port;
@@ -485,9 +491,6 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 				0 => MessageType::Text,
 				_ => MessageType::Binary,
 			},
-		};
-
-		let message_key = MessageKey {
 			server_pubkey,
 			server_id,
 			channel_id,
@@ -499,10 +502,7 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 		if signature.is_some() {
 			message.signature = signature.unwrap();
 		} else {
-			let signature = sign!(&build_signable_message(
-				message_key.clone(),
-				message.clone()
-			)?);
+			let signature = sign!(&build_signable_message(&message)?);
 
 			if signature.is_none() {
 				response!("Tor must be configured!");
@@ -511,8 +511,9 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 			let signature = signature.unwrap();
 			message.signature = signature;
 		}
+
 		if pubkey == server_pubkey {
-			ds_context.post_message(message_key, message).map_err(|e| {
+			ds_context.post_message(message).map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error posting message: {}",
 					e.to_string()
@@ -520,8 +521,9 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 				.into();
 				error
 			})?;
+			response!("{}", SUCCESS);
+			flush!();
 		} else {
-			let query = request!("query");
 			let signature = base64::encode(message.signature);
 			let signature = urlencoding::encode(&signature);
 			let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
@@ -532,7 +534,6 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 			let mut bypass_db = false;
 			loop {
 				let token = get_auth_token(&ds_context, server_pubkey, tor_port, bypass_db)?;
-
 				let query = format!(
 					"{}&signature={}&user_pubkey={}&token={}",
 					query, signature, user_pubkey, token
@@ -565,7 +566,7 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 
 						let value: Value = serde_json::from_str(json_text).map_err(|e| {
 							let error: Error =
-								ErrorKind::ApplicationError(format!("json parse error: {}", e))
+								ErrorKind::ApplicationError(format!("json parse error2: {}", e))
 									.into();
 							error
 						})?;
@@ -585,7 +586,42 @@ pub fn init_message(config: &ConcordConfig) -> Result<(), ConcordError> {
 
 				break;
 			}
+			response!("{}", SUCCESS);
+			flush!();
 		}
+
+		// send event
+		let user_pubkey_str = OnionV3Address::from_bytes(user_pubkey).to_string();
+		let event = Event {
+			etype: EVENT_TYPE_MESSAGE,
+			ebody: std::str::from_utf8(&payload)?.to_string(),
+			timestamp: timestamp.to_string(),
+			user_pubkey: user_pubkey_str,
+		};
+		let json = serde_json::to_string(&event)
+			.map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("json parse error1: {}", e)).into();
+				error
+			})
+			.unwrap();
+
+		let acs = context
+			.get_listeners(&ServerConnectionInfo {
+				server_pubkey,
+				server_id,
+			})
+			.unwrap_or(vec![]);
+
+		std::thread::spawn(move || {
+			// using async_context must be done in another thread.
+
+			for ac in acs {
+				async_context!(ac);
+				response!("{}-----BREAK\r\n", json);
+				flush!();
+			}
+		});
 	});
 	rustlet_mapping!("/send_message", "send_message");
 

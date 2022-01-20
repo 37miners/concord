@@ -14,6 +14,7 @@
 
 //! Entry point for concord module initilization logic
 
+use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorderror::Error as ConcordError;
 use librustlet::*;
@@ -245,14 +246,16 @@ fn init_webroot(config: &ConcordConfig) {
 
 // We initialize concord here.
 pub fn concord_init(config: &ConcordConfig) -> Result<(), ConcordError> {
+	let context = ConcordContext::new();
+
 	init_webroot(config); // setup webroot
-	crate::auth::init_auth(config)?; // auth module
-	crate::server::init_server(config)?; // server module
-	crate::message::init_message(config)?; // message module
-	crate::channel::init_channels(config)?; // channel module
-	crate::invite::init_invite(config)?; // invite module
-	crate::members::init_members(config)?; // members module
-	crate::persistence::init_persistence(config)?; // persistence module
+	crate::auth::init_auth(config, context.clone())?; // auth module
+	crate::server::init_server(config, context.clone())?; // server module
+	crate::message::init_message(config, context.clone())?; // message module
+	crate::channel::init_channels(config, context.clone())?; // channel module
+	crate::invite::init_invite(config, context.clone())?; // invite module
+	crate::members::init_members(config, context.clone())?; // members module
+	crate::persistence::init_persistence(config, context.clone())?; // persistence module
 
 	Ok(())
 }

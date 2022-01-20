@@ -100,6 +100,12 @@ pub enum ErrorKind {
 	/// Base58DecodeError
 	#[fail(display = "Base58DecodeError: {}", _0)]
 	Base58DecodeError(String),
+	/// Lock error
+	#[fail(display = "LockError: {}", _0)]
+	LockError(String),
+	/// ListenerNotFound
+	#[fail(display = "ListenerNotFound: {}", _0)]
+	ListenerNotFound(String),
 }
 
 impl Display for Error {

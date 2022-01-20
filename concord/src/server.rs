@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::auth::check_auth;
+use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::ChannelKey;
@@ -38,7 +39,7 @@ struct ServerInfoMin {
 	id: String,
 }
 
-pub fn init_server(config: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
