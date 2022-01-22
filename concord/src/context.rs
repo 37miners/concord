@@ -12,33 +12,55 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::persistence::Event;
 use concorderror::Error;
 use concorderror::ErrorKind;
+use concordutil::torclient;
 use librustlet::RustletAsyncContext;
+use librustlet::*;
+use nioruntime_log::*;
+use nioruntime_tor::ov3::OnionV3Address;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::hash::Hash;
 use std::sync::Arc;
 use std::sync::RwLock;
 
+const MAIN_LOG: &str = "mainlog";
+
+debug!();
+
+const PING_TIMEOUT: u128 = 1000 * 30; // 30 seconds
+const PURGE_TIMEOUT: u128 = 1000 * 60 * 1; // 1 minutes
+
 #[derive(Eq, Hash, PartialEq, Clone)]
-pub struct ServerConnectionInfo {
+pub struct Interest {
 	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
+	pub channel_id: Option<u64>,
 }
 
+#[derive(Clone)]
 pub struct ConnectionInfo {
-	ac: RustletAsyncContext,
-	subscriptions: HashSet<ServerConnectionInfo>,
+	ac: Option<RustletAsyncContext>,
+	subscriptions: HashSet<Interest>,
+	pending: Vec<Event>,
 	ping_time: u128,
+}
+
+#[derive(Clone)]
+struct RemoteConnection {
+	interest_list: HashSet<Interest>,
 }
 
 #[derive(Clone)]
 pub struct ConcordContext {
 	// listener_id => ConnectionInfo
 	listener_map: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
-	// ServerConnectionInfo => Set(listener_ids)
-	subscription_map: Arc<RwLock<HashMap<ServerConnectionInfo, HashSet<u128>>>>,
+	// Interest => Set(listener_ids)
+	subscription_map: Arc<RwLock<HashMap<Interest, HashSet<u128>>>>,
+	// server_pubkey => RemoteConnection info
+	remote_interest: Arc<RwLock<HashMap<[u8; 32], RemoteConnection>>>,
 }
 
 impl ConcordContext {
@@ -46,167 +68,224 @@ impl ConcordContext {
 		ConcordContext {
 			listener_map: Arc::new(RwLock::new(HashMap::new())),
 			subscription_map: Arc::new(RwLock::new(HashMap::new())),
+			remote_interest: Arc::new(RwLock::new(HashMap::new())),
 		}
 	}
 
-	pub fn ping(&self, listener_id: u128) -> Result<Option<RustletAsyncContext>, Error> {
-		let ping_time = std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)?
-			.as_millis();
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
-			error
-		})?;
-
-		match listener_map.get_mut(&listener_id) {
-			Some(connection_info) => {
-				connection_info.ping_time = ping_time;
-				Ok(Some(connection_info.ac.clone()))
-			}
-			None => Ok(None),
-		}
-	}
-
-	pub fn get_ping_time(&self, listener_id: u128) -> Result<Option<u128>, Error> {
-		let listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
-			error
-		})?;
-
-		match listener_map.get(&listener_id) {
-			Some(connection_info) => Ok(Some(connection_info.ping_time)),
-			None => Ok(None),
-		}
-	}
-
-	pub fn add_listener(&self, listener_id: u128, ac: RustletAsyncContext) -> Result<(), Error> {
-		let ping_time = std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)?
-			.as_millis();
-
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
-			error
-		})?;
-
-		let connection_info = ConnectionInfo {
-			ac,
-			subscriptions: HashSet::new(),
-			ping_time,
-		};
-		listener_map.insert(listener_id, connection_info);
-
-		Ok(())
-	}
-
-	pub fn add_connection_info(
-		&self,
-		listener_id: u128,
-		server_connection_info: ServerConnectionInfo,
+	fn process_event(
+		context: ConcordContext,
+		event: String,
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+		_tor_port: u16,
 	) -> Result<(), Error> {
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error = ErrorKind::LockError(format!("Error obtaining lock: {}", e)).into();
-			error
-		})?;
+		// send event
+		let event: Vec<Event> = serde_json::from_str(&event)?;
+		let json = serde_json::to_string(&event)?;
 
-		let mut subscription_map = self.subscription_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
-					.into();
-			error
-		})?;
+		let interest = Interest {
+			server_pubkey,
+			server_id,
+			channel_id: None,
+		};
 
-		let mut connection_info = listener_map.get_mut(&listener_id);
+		let acs = context.add_event(event.clone(), interest)?;
 
-		match connection_info.as_mut() {
-			Some(connection_info) => {
-				connection_info
-					.subscriptions
-					.insert(server_connection_info.clone());
+		std::thread::spawn(move || {
+			for ac in acs {
+				async_context!(ac);
+				response!("{}", json);
+				async_complete!();
 			}
-			None => {
-				return Err(ErrorKind::ListenerNotFound(format!(
-					"listener_id {} was not found",
-					listener_id
-				))
-				.into())
-			}
-		}
-
-		let listener_set: Option<&mut HashSet<u128>> =
-			subscription_map.get_mut(&server_connection_info);
-
-		match listener_set {
-			Some(listener_set) => {
-				listener_set.insert(listener_id);
-			}
-			None => {
-				let mut hash_set = HashSet::new();
-				hash_set.insert(listener_id);
-				subscription_map.insert(server_connection_info, hash_set);
-			}
-		}
+		});
 
 		Ok(())
 	}
 
-	pub fn remove_listener(&self, listener_id: u128) -> Result<Option<RustletAsyncContext>, Error> {
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error = ErrorKind::LockError(format!("Error obtaining lock: {}", e)).into();
-			error
-		})?;
+	fn start_remote(&self, interest: Vec<Interest>, tor_port: u16) -> Result<(), Error> {
+		let listener_id: u128 = rand::random();
+		let context = self.clone();
 
-		let mut subscription_map = self.subscription_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
-					.into();
-			error
-		})?;
+		std::thread::spawn(move || loop {
+			let interest = interest.clone();
+			let onion = OnionV3Address::from_bytes(interest[0].server_pubkey);
+			let listen_url = format!("http://{}.onion/listen?listener_id={}", onion, listener_id);
+			let mut post_data = "".to_string();
+			for ri in &interest {
+				let server_pubkey = ri.server_pubkey;
+				let server_pubkey = base64::encode(server_pubkey);
+				let server_pubkey = urlencoding::encode(&server_pubkey).to_string();
 
-		let connection_info = listener_map.remove(&listener_id);
+				let server_id = ri.server_id;
+				let server_id = base64::encode(server_id);
+				let server_id = urlencoding::encode(&server_id).to_string();
 
-		match connection_info {
-			Some(connection_info) => {
-				for server_connection_info in connection_info.subscriptions {
-					let listener_hash_set = subscription_map.get_mut(&server_connection_info);
-
-					match listener_hash_set {
-						Some(listener_hash_set) => {
-							listener_hash_set.remove(&listener_id);
-						}
-						None => {}
+				if post_data.len() > 0 {
+					post_data = format!(
+						"{}\r\nserver_pubkey={}&server_id={}&channel_id={}&seqno={}",
+						post_data,
+						server_pubkey,
+						server_id,
+						ri.channel_id.unwrap_or(0),
+						0
+					);
+				} else {
+					post_data = format!(
+						"server_pubkey={}&server_id={}&channel_id={}&seqno={}",
+						server_pubkey,
+						server_id,
+						ri.channel_id.unwrap_or(0),
+						0
+					);
+				}
+			}
+			let context = context.clone();
+			match torclient::listen(listen_url, post_data, tor_port, &move |event| {
+				match Self::process_event(
+					context.clone(),
+					event,
+					interest[0].server_pubkey,
+					interest[0].server_id,
+					tor_port,
+				) {
+					Ok(_) => {}
+					Err(e) => {
+						log_multi!(ERROR, MAIN_LOG, "process event generated error: {}", e);
 					}
 				}
-
-				Ok(Some(connection_info.ac))
+			}) {
+				Ok(_) => {}
+				Err(e) => {
+					log_multi!(ERROR, MAIN_LOG, "torclient::listen generated error: {}", e);
+				}
 			}
-			None => Ok(None),
-		}
+		});
+
+		Ok(())
 	}
 
-	pub fn get_all_listeners(&self) -> Result<Vec<(u128, RustletAsyncContext)>, Error> {
-		let listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error = ErrorKind::LockError(format!("Error obtaining lock: {}", e)).into();
+	// check if there is already a remote connection for this server, if so, check if we're already paying
+	// attention to this interest. If so, do nothing. If there is no remote connection, create one. If
+	// we're not paying attention to that interest, use the subscribe url to update our interests.
+	fn check_add_remote(&self, interest: Interest, tor_port: u16) -> Result<(), Error> {
+		let mut remote_interest = self.remote_interest.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining remote_interest lock: {}", e)).into();
+			error
+		})?;
+		let current_interest = remote_interest.get_mut(&interest.server_pubkey);
+		match current_interest {
+			Some(current_interest) => {
+				match current_interest.interest_list.get(&interest) {
+					Some(_) => {} // already interested in it
+					None => {
+						// use /subscribe to notify of a new interest
+					}
+				}
+			}
+			None => {
+				self.start_remote(vec![interest.clone()], tor_port)?;
+				let mut interest_list = HashSet::new();
+				interest_list.insert(interest.clone());
+				remote_interest.insert(interest.server_pubkey, RemoteConnection { interest_list });
+			}
+		}
+
+		Ok(())
+	}
+
+	// set the interest list. Also optionally sets the ac for replies.
+	// also pending vec is returned. If there are entries in it, ac is not set because
+	// it's expected that the thread calling will use the ac to respond.
+	pub fn set_listener_interest(
+		&self,
+		user_pubkey: [u8; 32],
+		listener_id: u128,
+		ac: Option<RustletAsyncContext>,
+		interest_list: Vec<Interest>,
+		tor_port: u16,
+	) -> Result<(Option<RustletAsyncContext>, Vec<Event>), Error> {
+		let mut listener_map = self.listener_map.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
 			error
 		})?;
 
-		let mut ret = vec![];
-		for (listener_id, connection_info) in &*listener_map {
-			ret.push((*listener_id, connection_info.ac.clone()));
+		let mut subscription_map = self.subscription_map.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
+					.into();
+			error
+		})?;
+
+		let conn_info = listener_map.get_mut(&listener_id);
+		let ping_time = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)?
+			.as_millis();
+		let mut interest_hash_set = HashSet::new();
+		for interest in interest_list.clone() {
+			interest_hash_set.insert(interest.clone());
+			if interest.server_pubkey != user_pubkey {
+				self.check_add_remote(interest, tor_port)?;
+			}
 		}
 
-		Ok(ret)
+		for interest in interest_list {
+			let hash_set = subscription_map.get_mut(&interest);
+			match hash_set {
+				Some(hash_set) => {
+					hash_set.insert(listener_id);
+				}
+				None => {
+					let mut hash_set = HashSet::new();
+					hash_set.insert(listener_id);
+					subscription_map.insert(interest, hash_set);
+				}
+			}
+		}
+
+		match conn_info {
+			Some(mut conn_info) => {
+				conn_info.ping_time = ping_time;
+				conn_info.subscriptions = interest_hash_set;
+				let ret_ac;
+				if conn_info.pending.len() > 0 {
+					ret_ac = conn_info.ac.clone();
+					conn_info.ac = None;
+				} else {
+					ret_ac = None;
+					conn_info.ac = ac;
+				}
+				let ret_pending = conn_info.pending.clone();
+				conn_info.pending.clear();
+				Ok((ret_ac, ret_pending))
+			}
+			None => {
+				let conn_info = ConnectionInfo {
+					ac,
+					subscriptions: interest_hash_set,
+					pending: vec![],
+					ping_time,
+				};
+				listener_map.insert(listener_id, conn_info);
+
+				Ok((None, vec![]))
+			}
+		}
 	}
 
-	pub fn get_listeners(
+	// adds an event to any queues of listeners that are not connected and returns a list
+	// to RustletAsyncContext that are connected to reply to. The acs are also removed so that
+	// any new events will go to pending until next time set_listener_interest is called
+	// with a new RustletAsyncContext.
+	pub fn add_event(
 		&self,
-		connection_info: &ServerConnectionInfo,
+		events: Vec<Event>,
+		interest: Interest,
 	) -> Result<Vec<RustletAsyncContext>, Error> {
-		let listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error = ErrorKind::LockError(format!("Error obtaining lock: {}", e)).into();
+		let mut listener_map = self.listener_map.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
 			error
 		})?;
 
@@ -217,18 +296,23 @@ impl ConcordContext {
 			error
 		})?;
 
-		let hash_set = subscription_map.get(connection_info);
+		let listeners = subscription_map.get(&interest);
 
 		let mut ret = vec![];
-
-		match hash_set {
-			Some(hash_set) => {
-				for listener_id in hash_set {
-					let connection_info = listener_map.get(listener_id);
-					match connection_info {
-						Some(connection_info) => {
-							ret.push(connection_info.ac.clone());
-						}
+		match listeners {
+			Some(listeners) => {
+				for listener in listeners {
+					let conn_info = listener_map.get_mut(&listener);
+					match conn_info {
+						Some(conn_info) => match &conn_info.ac {
+							Some(ac) => {
+								ret.push(ac.clone());
+								conn_info.ac = None;
+							}
+							None => {
+								conn_info.pending.append(&mut events.clone());
+							}
+						},
 						None => {}
 					}
 				}
@@ -237,5 +321,56 @@ impl ConcordContext {
 		}
 
 		Ok(ret)
+	}
+
+	// gets any timed out listeners and also purges any listeners that haven't been seen for
+	// a specified time
+	pub fn get_timed_out_listeners_and_purge(&self) -> Result<Vec<RustletAsyncContext>, Error> {
+		let time_now = std::time::SystemTime::now()
+			.duration_since(std::time::UNIX_EPOCH)?
+			.as_millis();
+
+		let mut listener_map = self.listener_map.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
+			error
+		})?;
+
+		let mut subscription_map = self.subscription_map.write().map_err(|e| {
+			let error: Error =
+				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
+					.into();
+			error
+		})?;
+
+		let mut purge_list = vec![];
+		let mut time_out_list = vec![];
+
+		for (listener_id, conn_info) in &mut *listener_map {
+			if time_now - conn_info.ping_time > PURGE_TIMEOUT {
+				purge_list.push((listener_id.to_owned(), conn_info.clone()));
+			} else if time_now - conn_info.ping_time > PING_TIMEOUT {
+				match &conn_info.ac {
+					Some(ac) => time_out_list.push(ac.clone()),
+					None => {}
+				}
+				conn_info.ac = None;
+			}
+		}
+
+		for (listener_id, conn_info) in purge_list {
+			for interest in &conn_info.subscriptions {
+				let listener_hash_set = subscription_map.get_mut(&interest);
+				match listener_hash_set {
+					Some(listener_hash_set) => {
+						listener_hash_set.remove(&listener_id);
+					}
+					None => {}
+				}
+			}
+			listener_map.remove(&listener_id);
+		}
+
+		Ok(time_out_list)
 	}
 }

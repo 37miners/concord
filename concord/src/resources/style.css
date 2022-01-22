@@ -245,3 +245,8 @@ a.button4:hover{
     left: -2px;
     overflow: scroll;
 }
+
+.loading {
+	width: 100%;
+	height: 100%;
+}

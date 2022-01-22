@@ -8,6 +8,9 @@ var servers = '';
 var stopEnabled = false;
 var iconId = '';
 var curName = '';
+var listener_id_global =
+	String(Math.floor(Math.random() * 9007199254740991)) +
+	String(Math.floor(Math.random() * 9007199254740991));
 var menu = [{
             name: 'Invite',
             img: 'images/create.png',
@@ -250,12 +253,11 @@ function load_server_bar() {
 		}
 		servers = JSON.parse(this.responseText);
 
-		if (load_listener) listener();
-
 		if (servers.error !== undefined) {
 			// authentication error
 			show_auth_error();
 		} else {
+			if (load_listener) listener();
 			servers.forEach(function(server) {
 				var server_pubkey = server.server_pubkey;
 				var serverbar = document.getElementById('serverbartext');
@@ -298,6 +300,13 @@ function load_server_bar() {
 								cur_server = server.id;
 								cur_pubkey = server.server_pubkey;
 								var req = new XMLHttpRequest();
+								var chat_area = document.getElementById('chat_area');
+								var loading = document.createElement('img');
+								loading.src = '/images/Loading_icon.gif';
+								loading.className = 'loading';
+								chat_area.innerHTML = '';
+								chat_area.appendChild(loading);
+
 								req.addEventListener("load", function() {
 									var chat_area = document.getElementById('chat_area');
 									chat_area.innerHTML = '';
@@ -474,56 +483,82 @@ function init_concord() {
 }
 
 function process_response(response) {
-	var event = JSON.parse(response);
-	if (event.etype == 0) {
-		listener_id = event.ebody;
-		servers.forEach(function(server) {
-			var req = new XMLHttpRequest();
-        		req.addEventListener("load", function() {
-        		});
-        		req.open(
-				"GET",
-				'/subscribe?server_id='+server.id+
-				'&server_pubkey='+server.server_pubkey+
-				'&listener_id='+listener_id
-			);
-        		req.send()
-		});
-		ping(listener_id, 0);
-	} else if (event.etype == 1) {
-		var chat_area = document.getElementById('chat_area');
-		var m = document.createTextNode(
-			event.user_pubkey.substring(0, 10) +
-			'> ' +
-			event.ebody
-		);
-		chat_area.appendChild(m);
-		chat_area.appendChild(document.createElement('br'));
-		chat_area.scrollTop = chat_area.scrollHeight;
-	} else if (event.etype == 3) { // pong complete
-		listener();
-	}
- 
+	if (response == '') return;
+        var end = response.indexOf("//-----ENDJSON-----");
+	if(end>=0)
+		response = response.substring(0, end);
+console.info("parsedresp='"+response+"'");
+	var events = JSON.parse(response);
+	events.forEach(function(event) {
+		if (event.etype == 0) {
+			listener_id = event.ebody;
+			servers.forEach(function(server) {
+				var req = new XMLHttpRequest();
+        			req.addEventListener("load", function() {
+        			});
+        			req.open(
+					"GET",
+					'/subscribe?server_id='+server.id+
+					'&server_pubkey='+server.server_pubkey+
+					'&listener_id='+listener_id
+				);
+        			req.send()
+			});
+			ping(listener_id, 0);
+		} else if (event.etype == 1) {
+			if (event.channel_id == cur_channel &&
+			event.server_id == cur_server &&
+			event.server_pubkey == cur_pubkey) {
+				var chat_area = document.getElementById('chat_area');
+				var m = document.createTextNode(
+					event.user_pubkey.substring(0, 10) +
+					'> ' +
+					event.ebody
+				);
+				chat_area.appendChild(m);
+				chat_area.appendChild(document.createElement('br'));
+				chat_area.scrollTop = chat_area.scrollHeight;
+			}
+		} else if (event.etype == 3) { // pong complete
+		}
+	});
+	listener();
 }
 
 function listener() {
+	var listener_id = listener_id_global;
 	var req = new XMLHttpRequest();
 	var start = 0;
-	req.addEventListener("progress", function() {
-		var resp = this.responseText.substring(start);
-		var end = resp.indexOf("-----BREAK\r\n");
-		var response = resp.substring(0, end);
+
+	req.addEventListener("load", function() {
+		var response = this.responseText;
 		console.info('response='+response);
 		try {
 			process_response(response);
 		} catch(ex) {
 			console.error('exception: ' + ex + ',response='+response);
 		}
-		start += end + 12;
 	});
 	var rand = makeid(8);
-	req.open("GET", '/listen?r='+rand);
-	req.send();
+	req.open("POST", '/listen?r='+rand+'&listener_id='+listener_id);
+	
+	var post_data = '';
+	var i = 0;
+
+	servers.forEach(function(server) {
+		post_data +=
+			'server_pubkey=' +
+			server.server_pubkey +
+			'&server_id=' + server.id +
+			'&channel_id=0&seqno=0';
+		if (i < servers.length - 1) {
+			post_data += '\r\n';
+		}
+
+		i++;
+	});
+console.info('post_data='+post_data);
+	req.send(post_data);
 }
 
 function ping(listener_id, i) {

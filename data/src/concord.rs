@@ -377,6 +377,7 @@ pub struct Message {
 	pub timestamp: u64,
 	pub user_pubkey: [u8; 32],
 	pub nonce: u16,
+	pub seqno: u64,
 }
 
 #[derive(Debug)]
@@ -1016,7 +1017,9 @@ impl DSContext {
 				prefix.append(&mut channel_id.to_be_bytes().to_vec());
 				prefix.append(&mut batch_num.to_be_bytes().to_vec());
 
-				let mut itt = batch.iter(&(prefix[..]), |k, v| {
+				let mut message_num = batch_num * 100;
+
+				let mut itt = batch.iter(&(prefix[..]), move |k, v| {
 					let mut cursor = Cursor::new(k.to_vec());
 					cursor.set_position(0);
 					let mut reader = BinReader::new(&mut cursor, ProtocolVersion(1));
@@ -1037,6 +1040,7 @@ impl DSContext {
 						timestamp: mkey.timestamp,
 						user_pubkey: mkey.user_pubkey,
 						nonce: mkey.nonce,
+						seqno: 0,
 					})
 				})?;
 
@@ -1044,7 +1048,9 @@ impl DSContext {
 				loop {
 					let next = itt.next();
 					match next {
-						Some(m) => {
+						Some(mut m) => {
+							m.seqno = message_num;
+							message_num += 1;
 							ret.push(m);
 						}
 						None => {

@@ -100,6 +100,7 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
 	let mut config = get_config_multi!(MAIN_LOG)?;
 
 	// print auth token to stdout as well as log
+	let prev_show_stdout = config.show_stdout;
 	config.show_stdout = true;
 	log_config_multi!(MAIN_LOG, config.clone())?;
 
@@ -125,7 +126,7 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
                 "-------------------------------------------------------------------------------------------------------------------------------"
         );
 
-	config.show_stdout = false;
+	config.show_stdout = prev_show_stdout;
 	log_config_multi!(MAIN_LOG, config)?;
 
 	// auth on this concord instance

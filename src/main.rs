@@ -50,10 +50,6 @@ fn real_main() -> Result<(), Error> {
 		.get_matches();
 
 	let debug = args.is_present("debug");
-	if debug {
-		run_test()?;
-		return Ok(());
-	}
 
 	let tor_port = args.is_present("tor_port");
 	let tor_port = match tor_port {
@@ -98,6 +94,7 @@ fn real_main() -> Result<(), Error> {
 			tor_port: config.tor_port,
 			root_dir: config.root_dir.clone(),
 			server_name: format!("Concord {}", VERSION),
+			debug,
 			..HttpConfig::default()
 		},
 		..RustletConfig::default()
@@ -105,32 +102,5 @@ fn real_main() -> Result<(), Error> {
 
 	// init concord
 	concord_init(&config)?; // init concord
-	Ok(())
-}
-
-fn run_test() -> Result<(), Error> {
-	use std::io::Read;
-	use std::io::Write;
-	use std::net::TcpStream;
-
-	for i in 0..4000 {
-		std::thread::sleep(std::time::Duration::from_millis(3));
-		let i = i.clone();
-		std::thread::spawn(move || {
-			println!("test: {}", i);
-			let mut stream = TcpStream::connect("127.0.0.1:9919").unwrap();
-			stream
-				.write("GET /subscribe HTTP/1.0\r\n\r\n".as_bytes())
-				.unwrap();
-			loop {
-				let mut buffer = [0u8; 1];
-				let amt = stream.read(&mut buffer).unwrap();
-				if amt == 0 {
-					break;
-				}
-			}
-			println!("end test: {}", i);
-		});
-	}
 	Ok(())
 }

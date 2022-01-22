@@ -14,7 +14,7 @@
 
 use crate::auth::check_auth;
 use crate::context::ConcordContext;
-use crate::context::ServerConnectionInfo;
+use crate::context::Interest;
 use crate::persistence::Event;
 use crate::persistence::EVENT_TYPE_MESSAGE;
 use concordconfig::ConcordConfig;
@@ -46,6 +46,7 @@ struct MessageInfo {
 	verified: bool,
 	timestamp: String,
 	user_pubkey: String,
+	seqno: u64,
 }
 
 fn get_auth_token(
@@ -175,7 +176,6 @@ fn get_auth_token(
 			.into());
 		}
 	};
-
 	ds_context
 		.save_auth_token(server_pubkey, token.parse()?)
 		.map_err(|e| {
@@ -322,6 +322,7 @@ fn process_local_messages(
 			.unwrap_or(false),
 			timestamp: format!("{}", message.timestamp),
 			user_pubkey: OnionV3Address::from_bytes(message.user_pubkey).to_string(),
+			seqno: message.seqno,
 		});
 	}
 	let json = serde_json::to_string(&message_json).map_err(|e| {
@@ -497,6 +498,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			timestamp,
 			user_pubkey,
 			nonce,
+			seqno: 0,
 		};
 
 		if signature.is_some() {
@@ -590,38 +592,54 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			flush!();
 		}
 
-		// send event
-		let user_pubkey_str = OnionV3Address::from_bytes(user_pubkey).to_string();
-		let event = Event {
-			etype: EVENT_TYPE_MESSAGE,
-			ebody: std::str::from_utf8(&payload)?.to_string(),
-			timestamp: timestamp.to_string(),
-			user_pubkey: user_pubkey_str,
-		};
-		let json = serde_json::to_string(&event)
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("json parse error1: {}", e)).into();
-				error
-			})
-			.unwrap();
+		if pubkey == server_pubkey {
+			// send event
+			let user_pubkey_str = OnionV3Address::from_bytes(user_pubkey).to_string();
 
-		let acs = context
-			.get_listeners(&ServerConnectionInfo {
+			let server_pubkey_str = base64::encode(server_pubkey);
+			let server_pubkey_str = urlencoding::encode(&server_pubkey_str).to_string();
+
+			let server_id_str = base64::encode(server_id);
+			let server_id_str = urlencoding::encode(&server_id_str).to_string();
+
+			let event = Event {
+				etype: EVENT_TYPE_MESSAGE,
+				ebody: std::str::from_utf8(&payload)?.to_string(),
+				timestamp: timestamp.to_string(),
+				user_pubkey: user_pubkey_str,
+				server_pubkey: server_pubkey_str,
+				server_id: server_id_str,
+				channel_id: channel_id.to_string(),
+			};
+			let json = serde_json::to_string(&vec![event.clone()])
+				.map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("json parse error1: {}", e)).into();
+					error
+				})
+				.unwrap();
+			let interest = Interest {
 				server_pubkey,
 				server_id,
-			})
-			.unwrap_or(vec![]);
+				channel_id: None,
+			};
 
-		std::thread::spawn(move || {
-			// using async_context must be done in another thread.
-
-			for ac in acs {
-				async_context!(ac);
-				response!("{}-----BREAK\r\n", json);
-				flush!();
-			}
-		});
+			let acs = context
+				.add_event(vec![event.clone()], interest)
+				.map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("context.add_event error: {}", e))
+							.into();
+					error
+				})?;
+			std::thread::spawn(move || {
+				for ac in acs {
+					async_context!(ac);
+					response!("{}//-----ENDJSON-----", json);
+					async_complete!();
+				}
+			});
+		}
 	});
 	rustlet_mapping!("/send_message", "send_message");
 

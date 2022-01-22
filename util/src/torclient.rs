@@ -12,10 +12,83 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use concorderror::Error;
+use concorderror::{Error, ErrorKind};
+use nioruntime_log::*;
 use std::io::prelude::*;
 use std::net::*;
 use tor_stream::TorStream;
+use url::Host::Domain;
+use url::Url;
+
+debug!();
+
+pub fn listen(
+	url: String,
+	post_data: String,
+	tor_port: u16,
+	callback: &dyn Fn(String) -> (),
+) -> Result<(), Error> {
+	let url = Url::parse(&url).map_err(|e| {
+		let error: Error =
+			ErrorKind::TorError(format!("url parse error: {}", e.to_string())).into();
+		error
+	})?;
+	let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
+	let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
+	let proxy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tor_port);
+	let target: socks::TargetAddr = socks::TargetAddr::Domain(host.clone(), 80);
+	let mut stream = TorStream::connect_with_address(proxy_addr, target)?;
+	let content_len = post_data.len();
+	stream
+                .write_all(
+                        format!(
+                                "POST {} HTTP/1.1\r\nConnection: Close\r\nContent-Length: {}\r\nHost: localhost\r\n\r\n{}",
+                                path,
+				content_len,
+				post_data,
+                        )
+                        .as_bytes(),
+                )
+                .expect("Failed to send request");
+
+	let mut stream = stream.into_inner();
+	let mut passed_headers = false;
+	let mut data = vec![];
+
+	loop {
+		let mut buffer = [0u8; 1024];
+		let len = stream.read(&mut buffer)?;
+		if len <= 0 {
+			break;
+		}
+		data.append(&mut buffer[0..len].to_vec());
+
+		let str = std::str::from_utf8(&data)?;
+		if !passed_headers {
+			match str.find("\r\n\r\n") {
+				Some(end_headers) => {
+					passed_headers = true;
+					data = data[(end_headers + 4)..].to_vec();
+				}
+				None => {}
+			}
+		}
+
+		let str = std::str::from_utf8(&data)?;
+
+		match str.find("//-----ENDJSON-----") {
+			Some(index) => {
+				let json_text = str[0..index].to_string();
+				(callback)(json_text);
+				data = data[(index + 17)..].to_vec();
+			}
+			None => { // we don't have the complete json
+			}
+		}
+	}
+
+	Ok(())
+}
 
 pub fn do_get(onion_address: String, path: String, tor_port: u16) -> Result<String, Error> {
 	let proxy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tor_port);

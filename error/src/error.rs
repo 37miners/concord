@@ -106,6 +106,12 @@ pub enum ErrorKind {
 	/// ListenerNotFound
 	#[fail(display = "ListenerNotFound: {}", _0)]
 	ListenerNotFound(String),
+	/// TorError
+	#[fail(display = "TorError: {}", _0)]
+	TorError(String),
+	/// SerdeJsonError
+	#[fail(display = "SerdeJsonError: {}", _0)]
+	SerdeJsonError(String),
 }
 
 impl Display for Error {
@@ -241,6 +247,14 @@ impl From<bs58::decode::Error> for Error {
 	fn from(e: bs58::decode::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::Base58DecodeError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<serde_json::Error> for Error {
+	fn from(e: serde_json::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::SerdeJsonError(format!("{}", e))),
 		}
 	}
 }

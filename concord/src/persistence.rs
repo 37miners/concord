@@ -13,196 +13,222 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
-use crate::context::ServerConnectionInfo;
+use crate::context::Interest;
 use concordconfig::ConcordConfig;
 use concorderror::Error as ConcordError;
 use librustlet::*;
 use nioruntime_log::*;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 nioruntime_log::debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
-const PING_TIMEOUT: u128 = 1000 * 60;
 
-#[derive(Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Event {
 	pub etype: u16,
 	pub ebody: String,
 	pub timestamp: String,
 	pub user_pubkey: String,
+	pub server_pubkey: String,
+	pub server_id: String,
+	pub channel_id: String,
 }
 
-pub const EVENT_TYPE_LISTENER_ID: u16 = 0;
 pub const EVENT_TYPE_MESSAGE: u16 = 1;
-pub const EVENT_TYPE_PONG: u16 = 2;
-pub const EVENT_TYPE_PONG_COMPLETE: u16 = 3;
+pub const EVENT_TYPE_TIMEOUT: u16 = 4;
 
+fn parse_interest_list(content: &str) -> Result<Vec<Interest>, Error> {
+	let subscriptions = content.split("\r\n");
+
+	let mut interest_list = vec![];
+
+	for subscription in subscriptions {
+		if subscription.len() == 0 {
+			continue;
+		}
+
+		let qs = querystring::querify(subscription);
+		let mut qmap = HashMap::new();
+		for param in qs {
+			qmap.insert(param.0, param.1);
+		}
+
+		let server_pubkey = qmap.get("server_pubkey");
+		let server_id = qmap.get("server_id");
+		let channel_id = qmap.get("channel_id");
+		let seqno = qmap.get("seqno");
+
+		let server_pubkey = match server_pubkey {
+			Some(server_pubkey) => server_pubkey,
+			None => {
+				return Err(
+					ErrorKind::ApplicationError(format!("server_pubkey must be specified")).into(),
+				)
+			}
+		};
+
+		let server_id = match server_id {
+			Some(server_id) => server_id,
+			None => {
+				return Err(
+					ErrorKind::ApplicationError(format!("server_id must be specified")).into(),
+				)
+			}
+		};
+
+		let _channel_id: u64 = match channel_id {
+			Some(channel_id) => channel_id.parse()?,
+			None => u64::MAX,
+		};
+
+		let _seqno: u64 = match seqno {
+			Some(seqno) => seqno.parse()?,
+			None => u64::MAX,
+		};
+
+		let server_pubkey = urlencoding::decode(&server_pubkey)?;
+		let server_pubkey = base64::decode(&*server_pubkey)?;
+		let server_pubkey: [u8; 32] = server_pubkey.as_slice().try_into()?;
+
+		let server_id = urlencoding::decode(&server_id)?;
+		let server_id = base64::decode(&*server_id)?;
+		let server_id: [u8; 8] = server_id.as_slice().try_into()?;
+
+		interest_list.push(Interest {
+			server_pubkey,
+			server_id,
+			channel_id: None,
+		});
+	}
+	Ok(interest_list)
+}
+
+fn process_subscriptions(
+	content: &str,
+	listener_id: u128,
+	context: &ConcordContext,
+	tor_port: u16,
+	mut ac: RustletAsyncContext,
+) -> Result<(), Error> {
+	let interest_list = parse_interest_list(content)?;
+
+	let (_, events) = context
+		.set_listener_interest(
+			pubkey!().unwrap_or([0u8; 32]),
+			listener_id,
+			Some(ac.clone()),
+			interest_list,
+			tor_port,
+		)
+		.map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("set_listener_interest error: {}", e)).into();
+			error
+		})?;
+
+	if events.len() > 0 {
+		let json = serde_json::to_string(&events)
+			.map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("json parse error listen events: {}", e))
+						.into();
+				error
+			})
+			.unwrap();
+		response!("{}//-----ENDJSON-----", json);
+		ac.complete()?;
+	}
+
+	Ok(())
+}
+
+// Persistence model:
+// 1.) Call listen with parameters client randomly selects listener_id
+// in js use String(Math.floor(Math.random() * 9007199254740991)) +
+// String(Math.floor(Math.random() * 9007199254740991))
+// this creates a string that is less than u128::MAX so rust will accept it.
+// (random u128, collisions as not likely)
+// listen takes as post parameters a set of server_pubkey/server_id/channel_id/lastmsgseqno.
+// 2.) Call subscribe with parameters listener_id, list of server_pubkey, server_id,
+//     channel_id, lastmsgseqno as needed to change the set of subscriptions
+// 3.) Also subscribe to server_id/server_pubkey pairs for non-chat related messages
+// 4.) Listen will long poll for a certain amount of time. If no message comes through
+//     an empty message will be sent which tells the listener to reconnect.
 pub fn init_persistence(
-	_config: &ConcordConfig,
+	config: &ConcordConfig,
 	context: ConcordContext,
 ) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs its own
 	let context1 = context.clone();
 	let context2 = context.clone();
-	let context3 = context.clone();
-	let context4 = context.clone();
-	let context5 = context.clone();
-	let context6 = context.clone();
+	let tor_port = config.tor_port;
 
-	rustlet!("ping", {
-		let listener_id: u128 = query!("listener_id").parse()?;
-		let disconnect = query!("disconnect").len() > 0;
-		let ac = context4.ping(listener_id).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("ping generated error: {}", e)).into();
-			error
-		})?;
-
-		let time_now = std::time::SystemTime::now()
-			.duration_since(std::time::UNIX_EPOCH)?
-			.as_millis();
-		let event = Event {
-			etype: if disconnect {
-				EVENT_TYPE_PONG_COMPLETE
-			} else {
-				EVENT_TYPE_PONG
-			},
-			ebody: "".to_string(),
-			timestamp: time_now.to_string(),
-			user_pubkey: "".to_string(),
-		};
-		let json = serde_json::to_string(&event).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("json parse error1: {}", e)).into();
-			error
-		})?;
-
-		match ac {
-			Some(mut ac) => {
-				let context6 = context6.clone();
-				std::thread::spawn(move || {
-					// using async_context must be done in another thread.
-					async_context!(ac.clone());
-					response!("{}-----BREAK\r\n", json);
-					flush!();
-
-					if disconnect {
-						match context6.clone().remove_listener(listener_id).map_err(|e| {
-							let error: Error = ErrorKind::ApplicationError(format!(
-								"remove listener generated error: {}",
-								e
-							))
-							.into();
-							error
-						}) {
-							Ok(_) => {}
-							Err(e) => {
-								log_multi!(
-									ERROR,
-									MAIN_LOG,
-									"remove listener generated error: {}",
-									e
-								);
-							}
-						}
-						match ac.complete() {
-							Ok(_) => {}
-							Err(e) => {
-								log_multi!(ERROR, MAIN_LOG, "complete generated error: {}", e);
-							}
-						}
-					}
-				});
-			}
-			None => {}
-		}
-	});
+	rustlet!("ping", {});
 	rustlet_mapping!("/ping", "ping");
 
-	rustlet!("disconnect", {
-		let listener_id: u128 = query!("listener_id").parse()?;
-		let ac = context5.remove_listener(listener_id).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("remove listener generated error: {}", e))
-					.into();
-			error
-		})?;
-		match ac {
-			Some(mut ac) => {
-				std::thread::spawn(move || {
-					let _ = ac.complete();
-				});
-			}
-			None => {}
-		}
-	});
+	rustlet!("disconnect", {});
 	rustlet_mapping!("/disconnect", "disconnect");
 
 	// listen to this server for events
 	rustlet!("listen", {
 		set_content_type!("application/octet-stream");
-		let listener_id: u128 = rand::random();
+		let listener_id: u128 = query!("listener_id").parse()?;
 		let ac = async_context!();
-		context1.add_listener(listener_id, ac).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("add listener generated error: {}", e)).into();
-			error
-		})?;
-
-		let event = Event {
-			etype: EVENT_TYPE_LISTENER_ID,
-			ebody: format!("{}", listener_id),
-			timestamp: std::time::SystemTime::now()
-				.duration_since(std::time::UNIX_EPOCH)
-				.unwrap_or(std::time::Duration::from_millis(0))
-				.as_millis()
-				.to_string(),
-			user_pubkey: "".to_string(),
-		};
-		let json = serde_json::to_string(&event).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
-			error
-		})?;
-		response!("{}-----BREAK\r\n", json);
-		flush!();
+		let content = request_content!();
+		let content = std::str::from_utf8(&content)?;
+		process_subscriptions(content, listener_id, &context, tor_port, ac)?;
 	});
 	rustlet_mapping!("/listen", "listen");
 
-	// subscribe to a remote server to get events
+	let tor_port = config.tor_port;
+
+	// subscribe to change the interest list
 	rustlet!("subscribe", {
-		let server_id = query!("server_id");
-		let server_id = urlencoding::decode(&server_id)?;
-		let server_id = base64::decode(&*server_id)?;
-		let server_id: [u8; 8] = server_id.as_slice().try_into()?;
-
-		let server_pubkey = query!("server_pubkey");
-		let server_pubkey = urlencoding::decode(&server_pubkey)?;
-		let server_pubkey = base64::decode(&*server_pubkey)?;
-		let server_pubkey: [u8; 32] = server_pubkey.as_slice().try_into()?;
-
 		let listener_id: u128 = query!("listener_id").parse()?;
+		let content = request_content!();
+		let content = std::str::from_utf8(&content)?;
+		let interest_list = parse_interest_list(content)?;
 
-		context2
-			.add_connection_info(
+		let (ac, events) = context1
+			.set_listener_interest(
+				pubkey!().unwrap_or([0u8; 32]),
 				listener_id,
-				ServerConnectionInfo {
-					server_pubkey,
-					server_id,
-				},
+				None,
+				interest_list,
+				tor_port,
 			)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
-					"add_connection_info generated error: {}",
+					"set_listener_interest subscribe error: {}",
 					e
 				))
 				.into();
 				error
 			})?;
+		let events = serde_json::to_string(&events).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("serde_json parse on events error: {}", e))
+					.into();
+			error
+		})?;
+
+		match ac {
+			Some(ac) => {
+				// we have an ac to write back with if there's events
+				if events.len() > 0 {
+					std::thread::spawn(move || {
+						async_context!(ac);
+						response!("{}", events);
+						async_complete!();
+					});
+				}
+			}
+			None => {}
+		}
 	});
 	rustlet_mapping!("/subscribe", "subscribe");
 
-	std::thread::spawn(move || match listener_cleanup_thread(&context3) {
+	std::thread::spawn(move || match listener_cleanup_thread(&context2) {
 		Ok(_) => {}
 		Err(e) => {
 			log_multi!(
@@ -219,25 +245,27 @@ pub fn init_persistence(
 
 fn listener_cleanup_thread(context: &ConcordContext) -> Result<(), ConcordError> {
 	loop {
-		let listeners = context.get_all_listeners()?;
+		std::thread::sleep(std::time::Duration::from_millis(10000));
 		let time_now = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)?
 			.as_millis();
-		for (listener_id, mut ac) in listeners {
-			match context.get_ping_time(listener_id)? {
-				Some(time) => {
-					if time_now - time > PING_TIMEOUT {
-						context.remove_listener(listener_id)?;
-						ac.complete()?;
-					}
-				}
-				None => {
-					context.remove_listener(listener_id)?;
-					ac.complete()?;
-				}
-			}
-		}
+		let timeout_event = Event {
+			etype: EVENT_TYPE_TIMEOUT,
+			ebody: "".to_string(),
+			timestamp: time_now.to_string(),
+			user_pubkey: "".to_string(),
+			server_pubkey: "".to_string(),
+			server_id: "".to_string(),
+			channel_id: "".to_string(),
+		};
+		let json = serde_json::to_string(&vec![timeout_event]).unwrap_or("".to_string());
 
-		std::thread::sleep(std::time::Duration::from_millis(10000));
+		let time_out_list = context.get_timed_out_listeners_and_purge()?;
+
+		for ac in time_out_list {
+			async_context!(ac);
+			response!("{}//-----ENDJSON-----", json);
+			async_complete!();
+		}
 	}
 }
