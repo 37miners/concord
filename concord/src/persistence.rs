@@ -21,7 +21,7 @@ use nioruntime_log::*;
 use std::collections::HashMap;
 use std::convert::TryInto;
 
-nioruntime_log::debug!(); // set log level to debug
+debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

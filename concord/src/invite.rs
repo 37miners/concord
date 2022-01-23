@@ -16,6 +16,7 @@ use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::DSContext;
+use concorddata::concord::JoinInfoReply;
 use concorddata::concord::MemberList;
 use concorddata::concord::ServerInfo;
 use concorddata::concord::ServerInfoReply;
@@ -29,6 +30,7 @@ use url::Host::Domain;
 use url::Url;
 
 const ACCEPT_INVITE_FAIL: &str = "{\"success\": false}";
+const SUCCESS: &str = "{\"success\": true}";
 
 nioruntime_log::debug!(); // set log level to debug
 
@@ -61,6 +63,14 @@ pub struct ServerStateSerde {
 	sinfo: ServerInfoSerde,
 	channels: Vec<Channel>,
 	members: String,
+}
+
+#[derive(Serialize)]
+pub struct InviteResponseDisplay {
+	server_pubkey: String,
+	server_id: String,
+	name: String,
+	inviter_pubkey: String,
 }
 
 impl From<ServerInfoReply> for ServerInfoSerde {
@@ -158,16 +168,75 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
-	// accept an invite
-	rustlet!("accept_invite", {
+	rustlet!("check_invite", {
 		let invite_id = query!("id");
-		let user_pubkey = query!("user_pubkey");
-		let _timestamp: u64 = query!("timestamp").parse()?;
-		let _signature = query!("signature");
 		let invite_id = urlencoding::decode(&invite_id)?;
 		let invite_id = base64::decode(&*invite_id)?;
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
 		let invite_id = u128::from_be_bytes(invite_id);
+
+		let join_info_reply = ds_context.check_invite(invite_id).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("error checking invite: {}", e)).into();
+			error
+		})?;
+
+		match join_info_reply {
+			Some(join_info) => {
+				let json = serde_json::to_string(&join_info).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string()))
+							.into();
+					error
+				})?;
+				response!("{}", json);
+			}
+			None => {
+				response!("{}", ACCEPT_INVITE_FAIL);
+			}
+		}
+	});
+	rustlet_mapping!("/check_invite", "check_invite");
+
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
+
+	// accept an invite
+	rustlet!("accept_invite", {
+		let view_only = query!("view_only").len() > 0;
+		let invite_id = query!("id");
+		let invite_id = urlencoding::decode(&invite_id)?;
+		let invite_id = base64::decode(&*invite_id)?;
+		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
+		let invite_id = u128::from_be_bytes(invite_id);
+
+		if view_only {
+			let join_info_reply = ds_context.check_invite(invite_id).map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("error checking invite: {}", e)).into();
+				error
+			})?;
+
+			match join_info_reply {
+				Some(join_info) => {
+					let json = serde_json::to_string(&join_info).map_err(|e| {
+						let error: Error =
+							ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string()))
+								.into();
+						error
+					})?;
+					response!("{}", json);
+				}
+				None => {
+					response!("{}", ACCEPT_INVITE_FAIL);
+				}
+			}
+			return Ok(());
+		}
+
+		let user_pubkey = query!("user_pubkey");
+		let _timestamp: u64 = query!("timestamp").parse()?;
+		let _signature = query!("signature");
 
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
@@ -320,7 +389,93 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	});
 	rustlet_mapping!("/list_invites", "list_invites");
 
+	// create a ds context. Each rustlet needs its own
+	let ds_context = DSContext::new(config.root_dir.clone())?;
+
 	let tor_port = config.tor_port;
+	rustlet!("view_invite", {
+		let link = query!("link");
+		let link = urlencoding::decode(&link)?.to_string();
+		let join_link = format!("{}&view_only=true", link,);
+		let url = Url::parse(&join_link).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("url parse error: {}", e.to_string())).into();
+			error
+		})?;
+		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
+		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
+		let res = torclient::do_get(host.clone(), path.clone(), tor_port).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
+			error
+		})?;
+
+		let start = res.find("\r\n\r\n");
+
+		match start {
+			Some(start) => {
+				let json_text = &res[(start + 4)..];
+				let join_reply_info: Option<JoinInfoReply> = serde_json::from_str(json_text)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"serde json parse error join_reply_info: {}",
+							e
+						))
+						.into();
+						error
+					})?;
+
+				match join_reply_info {
+					Some(jri) => {
+						let server_info = ServerInfo {
+							pubkey: jri.server_pubkey,
+							name: jri.name.clone(),
+							icon: jri.icon,
+							joined: false,
+						};
+						ds_context
+							.add_server(server_info, Some(jri.server_id), pubkey!())
+							.map_err(|e| {
+								let error: Error = ErrorKind::ApplicationError(format!(
+									"add server generated error: {}",
+									e
+								))
+								.into();
+								error
+							})?;
+						let server_pubkey = base64::encode(jri.server_pubkey);
+						let server_pubkey = urlencoding::encode(&server_pubkey).to_string();
+						let server_id = base64::encode(jri.server_id);
+						let server_id = urlencoding::encode(&server_id).to_string();
+						let inviter_pubkey = base64::encode(jri.inviter_pubkey);
+						let inviter_pubkey = urlencoding::encode(&inviter_pubkey).to_string();
+
+						let invite_response = InviteResponseDisplay {
+							server_pubkey,
+							server_id,
+							inviter_pubkey,
+							name: jri.name,
+						};
+
+						let json = serde_json::to_string(&invite_response).map_err(|e| {
+							let error: Error = ErrorKind::ApplicationError(format!(
+								"json parse error on invite response: {}",
+								e
+							))
+							.into();
+							error
+						})?;
+
+						response!("{}", json);
+					}
+					None => {}
+				}
+			}
+			None => {}
+		}
+	});
+	rustlet_mapping!("/view_invite", "view_invite");
+
 	// create a ds context. Each rustlet needs its own
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
@@ -443,6 +598,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							pubkey: pubkey,
 							name,
 							icon,
+							joined: true,
 						};
 						ds_context
 							.add_remote_server(server_id, server_info, channels, members)
@@ -454,12 +610,15 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 								.into();
 								error
 							})?;
+						response!("{}", SUCCESS);
+						return Ok(());
 					}
 					None => {}
 				}
 			}
 			None => {}
 		}
+		response!("{}", ACCEPT_INVITE_FAIL);
 	});
 	rustlet_mapping!("/join_server", "join_server");
 

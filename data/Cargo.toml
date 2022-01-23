@@ -12,6 +12,8 @@ edition = "2018"
 [dependencies]
 
 concorderror = { path = "../error" }
+nioruntime_log = { git = "http://github.com/37miners/nioruntime", branch = "master" }
+
 
 zeroize = { version = "1.1", features =["zeroize_derive"] }
 grin_secp256k1zkp = { git = "https://github.com/bitcoinmw/rust-secp256k1-zkp", features = ["bullet-proof-sizing"] }
@@ -31,7 +33,6 @@ failure_derive = "0.1"
 lmdb-zero = "0.4.4"
 memmap = "0.7"
 tempfile = "3.1"
-log = "0.4"
 parking_lot = "0.10"
 serde = "1"
 serde_derive = "1"

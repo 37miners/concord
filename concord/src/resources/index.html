@@ -140,6 +140,18 @@
                                                Create Invite
                                         </a>
 				<div>
+				<div id="interstitialtextpadding8" class="interstitialtextpadding8">
+					<form name="viewinvite" id="viewinvite">
+						<input type="hidden" name="link" value=""/>
+					</form>
+					<div id=inviteserveruser class=inviteserveruser>&nbsp;</div>
+					has invited to server:
+					<div id=inviteservername class=inviteservername>&nbsp;</div>
+					<img id=inviteservericon class=inviteservericon>
+					<br/>
+					<button type="button" onclick="Javascript:accept_invitation();">Accept Invitation</button>
+					<button type="button" onclick="Javascript:close_interstitial();">Reject Invitation</button>
+				<div>
 			</div>
 		</div>
 	</body>

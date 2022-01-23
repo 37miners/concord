@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[macro_use]
-extern crate log;
 extern crate failure_derive;
 pub use parking_lot::{Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 pub use secp256k1zkp as secp;

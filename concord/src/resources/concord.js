@@ -82,6 +82,7 @@ function close_interstitial() {
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 }
 
 function show_auth_error() {
@@ -93,6 +94,7 @@ function show_auth_error() {
 	document.getElementById("interstitialtextpadding5").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 }
 
 function show_create_invite() {
@@ -104,6 +106,7 @@ function show_create_invite() {
         document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding7").style.visibility = 'visible';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 	load_invite_list();
 }
 
@@ -115,6 +118,7 @@ function create_server() {
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 }
 
 function join_server() {
@@ -125,6 +129,7 @@ function join_server() {
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 }
 
 function modify_server(iconId, curName) {
@@ -140,15 +145,47 @@ function modify_server(iconId, curName) {
 	document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+}
+
+function show_invite_info() {
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'visible';
 }
 
 function join_server_link() {
 	var link = document.forms['join']['link'].value;
+
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
+		var invite_info = JSON.parse(this.responseText);
+console.info('invite='+this.responseText);
+		document.getElementById('inviteserveruser').innerHTML = invite_info.inviter_pubkey;
+		document.getElementById('inviteservername').innerHTML = invite_info.name;
+		var rand = makeid(8);
+		document.getElementById('inviteservericon').src =
+			'/get_server_icon?server_id=' + invite_info.server_id +
+			'&server_pubkey='+invite_info.server_pubkey +
+			'&r=' + rand;
+		document.forms['viewinvite']['link'].value = link;
+		show_invite_info();
+/*
+        	var req = new XMLHttpRequest();
+        	req.addEventListener("load", function() {
+        	});
+        	req.open("GET", '/join_server?link=' + encodeURIComponent(link));
+        	req.send();
+*/
+
 	});
-        req.open("GET", '/join_server?link=' + encodeURIComponent(link));
-        req.send();
+	req.open("GET", '/view_invite?link=' + encodeURIComponent(link));
+	req.send();
 }
 
 function load_invite_list() {
@@ -229,6 +266,7 @@ function do_add_channel(server_id) {
         document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding6").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 }
 
 function subscribe(server, listener_id) {
@@ -407,6 +445,7 @@ function init_concord() {
                 document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	}
 
@@ -603,6 +642,22 @@ function load_members(sname) {
 		});
 	});
 	req.open("GET", '/get_members?server_id='+sname);
+	req.send();
+}
+
+function accept_invitation() {
+	var link = encodeURIComponent(document.forms['viewinvite']['link'].value);
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		let resp = JSON.parse(this.responseText);
+		if (resp.success) {
+			close_interstitial();
+			load_server_bar();
+		} else {
+			alert("invite failed!");
+		}
+	});
+	req.open("GET", "/join_server?link=" + link);
 	req.send();
 }
 

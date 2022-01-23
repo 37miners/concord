@@ -16,6 +16,7 @@ use crate::lmdb::Store;
 use crate::ser::serialize_default;
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use concorderror::{Error, ErrorKind};
+use nioruntime_log::*;
 
 use std::convert::TryInto;
 use std::io::Cursor;
@@ -25,6 +26,8 @@ const DB_NAME: &str = "concord";
 const BATCH_SIZE: u64 = 100;
 
 pub const TOKEN_EXPIRATION: u128 = 1000 * 60 * 60;
+
+nioruntime_log::debug!();
 
 // the context to use for accessing concord data. Multiple instances
 // may exist and LMDB handles concurrency.
@@ -103,7 +106,7 @@ impl Readable for Challenge {
 	}
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct Invite {
 	pub inviter: [u8; 32],
 	pub server_id: [u8; 8],
@@ -571,12 +574,22 @@ impl Readable for MessageMetaDataValue {
 	}
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct JoinInfoReply {
+	pub server_pubkey: [u8; 32],
+	pub server_id: [u8; 8],
+	pub name: String,
+	pub icon: Vec<u8>,
+	pub inviter_pubkey: [u8; 32],
+}
+
 // information about the server
 #[derive(Debug)]
 pub struct ServerInfo {
 	pub pubkey: [u8; 32],
 	pub name: String,
 	pub icon: Vec<u8>,
+	pub joined: bool,
 }
 
 #[derive(Debug)]
@@ -605,6 +618,12 @@ impl Writeable for ServerInfo {
 		for b in &self.icon {
 			writer.write_u8(*b)?;
 		}
+
+		match self.joined {
+			false => writer.write_u8(0)?,
+			true => writer.write_u8(1)?,
+		}
+
 		Ok(())
 	}
 }
@@ -633,7 +652,14 @@ impl Readable for ServerInfo {
 		let name = std::str::from_utf8(&name)?;
 		let name = name.to_string();
 
-		Ok(ServerInfo { pubkey, name, icon })
+		let joined = reader.read_u8()? != 0;
+
+		Ok(ServerInfo {
+			pubkey,
+			name,
+			icon,
+			joined,
+		})
 	}
 }
 
@@ -802,12 +828,14 @@ impl DSContext {
 			match itt.next() {
 				Some((server, server_id)) => {
 					let server_id = base64::decode(server_id)?.as_slice().try_into()?;
-					ret.push(ServerInfoReply {
-						server_id,
-						name: server.name,
-						pubkey: server.pubkey,
-						icon: server.icon,
-					});
+					if server.joined {
+						ret.push(ServerInfoReply {
+							server_id,
+							name: server.name,
+							pubkey: server.pubkey,
+							icon: server.icon,
+						});
+					}
 				}
 				None => break,
 			}
@@ -837,16 +865,28 @@ impl DSContext {
 	}
 
 	// add a server
-	pub fn add_server(&self, server_info: ServerInfo) -> Result<[u8; 8], Error> {
+	pub fn add_server(
+		&self,
+		server_info: ServerInfo,
+		server_id: Option<[u8; 8]>,
+		user_pubkey: Option<[u8; 32]>,
+	) -> Result<[u8; 8], Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
-		let server_id: [u8; 8] = rand::random();
+		let server_id: [u8; 8] = match server_id {
+			Some(server_id) => server_id,
+			None => rand::random(),
+		};
 		key.append(&mut server_id.to_vec());
 		batch.put_ser(&key, &server_info)?;
 
 		// add ourselves as the server owner
+		let user_pubkey = match user_pubkey {
+			Some(user_pubkey) => user_pubkey,
+			None => server_info.pubkey,
+		};
 		let member = Member {
-			user_pubkey: server_info.pubkey,
+			user_pubkey,
 			server_pubkey: server_info.pubkey,
 			server_id,
 		};
@@ -1274,6 +1314,37 @@ impl DSContext {
 		Ok(())
 	}
 
+	pub fn check_invite(&self, invite_id: u128) -> Result<Option<JoinInfoReply>, Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![INVITE_ID_PREFIX];
+		key.append(&mut invite_id.to_be_bytes().to_vec());
+		let invite: Option<Invite> = batch.get_ser(&key)?;
+		match invite {
+			Some(invite) => {
+				match invite.cur >= invite.max {
+					true => Ok(None), // accepted too many times
+					false => {
+						let mut key = vec![SERVER_PREFIX];
+						key.append(&mut invite.server_id.to_vec());
+						let ret: Option<ServerInfo> = batch.get_ser(&key)?;
+
+						match ret {
+							Some(ret) => Ok(Some(JoinInfoReply {
+								server_pubkey: ret.pubkey,
+								icon: ret.icon,
+								name: ret.name,
+								server_id: invite.server_id,
+								inviter_pubkey: invite.inviter,
+							})),
+							None => Ok(None),
+						}
+					}
+				}
+			}
+			None => Ok(None),
+		}
+	}
+
 	pub fn accept_invite(
 		&self,
 		invite_id: u128,
@@ -1286,6 +1357,7 @@ impl DSContext {
 		let invite: Option<Invite> = batch.get_ser(&key)?;
 		match invite {
 			Some(mut invite) => {
+				error!("accept invite: {:?}", invite);
 				if invite.cur >= invite.max {
 					// this invite has been accepted too many times
 					Ok(None)
@@ -1454,7 +1526,7 @@ impl DSContext {
 					.duration_since(std::time::UNIX_EPOCH)?
 					.as_millis();
 				if time_now - auth_info.last_access_time > auth_info.expiration_millis {
-					Err(ErrorKind::NotAuthorized("invalid token".to_string()).into())
+					Err(ErrorKind::NotAuthorized("invalid token - expired".to_string()).into())
 				} else {
 					let member = Member {
 						user_pubkey,
@@ -1471,20 +1543,12 @@ impl DSContext {
 					match auth_level {
 						Some(auth_level) => {
 							if (auth_level & requested_auth_flag) != 0 {
-								if !(auth_info.expiration_millis
-									> time_now - auth_info.last_access_time)
-								{
-									Err(ErrorKind::NotAuthorized(
-										"not authorized for this resource".to_string(),
-									)
-									.into())
-								} else {
-									Ok(())
-								}
+								Ok(())
 							} else {
-								Err(ErrorKind::NotAuthorized(
-									"not authorized for this resource".to_string(),
-								)
+								Err(ErrorKind::NotAuthorized(format!(
+									"not authorized. requested = {}, level = {}",
+									requested_auth_flag, auth_level
+								))
 								.into())
 							}
 						}
@@ -1495,7 +1559,7 @@ impl DSContext {
 					}
 				}
 			}
-			None => Err(ErrorKind::NotAuthorized("invalid token".to_string()).into()),
+			None => Err(ErrorKind::NotAuthorized("invalid token - not found".to_string()).into()),
 		}
 	}
 

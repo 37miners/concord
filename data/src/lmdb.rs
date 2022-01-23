@@ -21,11 +21,14 @@ use std::sync::Arc;
 use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;
+use nioruntime_log::*;
 
 use concorderror::{Error, ErrorKind};
 
 use crate::ser::{self, ProtocolVersion};
 use crate::RwLock;
+
+info!();
 
 /// number of bytes to grow the database by when needed
 pub const ALLOC_CHUNK_SIZE_DEFAULT: usize = 134_217_728; //128 MB
