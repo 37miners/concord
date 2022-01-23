@@ -258,6 +258,53 @@ fn init_webroot(config: &ConcordConfig) {
 				);
 			}
 		}
+
+		let bytes = include_bytes!("resources/images/creative-commons.png");
+		match create_file_from_bytes("favicon.ico".to_string(), config.root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
+		let bytes = include_bytes!("resources/images/creative-commons.png");
+		match create_file_from_bytes(
+			"favicon-32x32.ico".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
+		let bytes = include_bytes!("resources/images/creative-commons.png");
+		match create_file_from_bytes(
+			"favicon-16x16.ico".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
 	}
 }
 
