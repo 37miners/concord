@@ -13,11 +13,13 @@
 // limitations under the License.
 
 use failure::{Backtrace, Context, Fail};
+use nioruntime_tor::ov3::OnionV3Error;
 use std::array::TryFromSliceError;
 use std::convert::Infallible;
 use std::fmt;
 use std::fmt::Display;
 use std::num::ParseIntError;
+use std::num::TryFromIntError;
 use std::str::Utf8Error;
 use std::string::FromUtf8Error;
 use std::time::SystemTimeError;
@@ -112,6 +114,15 @@ pub enum ErrorKind {
 	/// SerdeJsonError
 	#[fail(display = "SerdeJsonError: {}", _0)]
 	SerdeJsonError(String),
+	/// TryFromIntError
+	#[fail(display = "TryFromIntError: {}", _0)]
+	TryFromIntError(String),
+	/// ProfileNotFoundErr
+	#[fail(display = "ProfileNotFoundErr: {}", _0)]
+	ProfileNotFoundErr(String),
+	/// OnionV3Error
+	#[fail(display = "OnionV3Error: {}", _0)]
+	OnionV3Error(String),
 }
 
 impl Display for Error {
@@ -255,6 +266,22 @@ impl From<serde_json::Error> for Error {
 	fn from(e: serde_json::Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::SerdeJsonError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<TryFromIntError> for Error {
+	fn from(e: TryFromIntError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::TryFromIntError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<OnionV3Error> for Error {
+	fn from(e: OnionV3Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::OnionV3Error(format!("{}", e))),
 		}
 	}
 }

@@ -57,11 +57,6 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		}
 
 		let server_pubkey = pubkey!();
-		if server_pubkey.is_none() {
-			response!("tor not configured!");
-			return Ok(());
-		}
-		let server_pubkey = server_pubkey.unwrap();
 
 		// get query parameters
 		let query = request!("query");
@@ -89,7 +84,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 					let size = filepart.size.unwrap_or(0);
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
-					let pubkey = pubkey!().unwrap_or([0u8; 32]);
+					let pubkey = pubkey!();
 					let server_info = ServerInfo {
 						pubkey,
 						name: name.clone(),
@@ -196,7 +191,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 			}
 		}
 
-		let server_id = query!("server_id");
+		let server_id = query!("server_id").unwrap_or("".to_string());
 
 		let sinfo = ds_context.get_server_info(server_id.clone()).map_err(|e| {
 			let error: Error = ErrorKind::ApplicationError(format!(
@@ -246,7 +241,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 			}
 		}
 
-		let server_id = query!("server_id");
+		let server_id = query!("server_id").unwrap_or("".to_string());
 
 		let sinfo = ds_context.get_server_info(server_id).map_err(|e| {
 			let error: Error = ErrorKind::ApplicationError(format!(
@@ -344,7 +339,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 					let size = filepart.size.unwrap_or(0);
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
-					let pubkey = pubkey!().unwrap_or([0u8; 32]);
+					let pubkey = pubkey!();
 					let server_info = ServerInfo {
 						pubkey,
 						name: name.clone(),

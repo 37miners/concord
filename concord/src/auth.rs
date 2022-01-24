@@ -42,12 +42,10 @@ struct ChallengeResponse {
 pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordError> {
 	let token = match cookie!("auth") {
 		Some(auth) => auth,
-		None => {
-			query!("token")
-		}
+		None => query!("token").unwrap_or("".to_string()),
 	};
 
-	let user_pubkey = query!("user_pubkey");
+	let user_pubkey = query!("user_pubkey").unwrap_or("".to_string());
 	let user_pubkey = if user_pubkey != "".to_string() {
 		let user_pubkey = urlencoding::decode(&user_pubkey)
 			.unwrap_or(Borrowed(""))
@@ -56,10 +54,10 @@ pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordE
 			.try_into()
 			.unwrap_or([0u8; 32])
 	} else {
-		pubkey!().unwrap_or([0u8; 32])
+		pubkey!()
 	};
 
-	let server_pubkey = query!("server_pubkey");
+	let server_pubkey = query!("server_pubkey").unwrap_or("".to_string());
 	let server_pubkey = if server_pubkey != "".to_string() {
 		let server_pubkey = urlencoding::decode(&server_pubkey)
 			.unwrap_or(Borrowed(""))
@@ -68,10 +66,10 @@ pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordE
 			.try_into()
 			.unwrap_or([0u8; 32])
 	} else {
-		pubkey!().unwrap_or([0u8; 32])
+		pubkey!()
 	};
 
-	let server_id = query!("server_id");
+	let server_id = query!("server_id").unwrap_or("".to_string());
 	let server_id = urlencoding::decode(&server_id)
 		.unwrap_or(Borrowed(""))
 		.to_string();
@@ -131,10 +129,10 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
 
 	// auth on this concord instance
 	rustlet!("auth", {
-		let token = query!("token");
+		let token = query!("token").unwrap_or("".to_string());
 
 		if token.parse().unwrap_or(0) == auth_token.clone() {
-			let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+			let user_pubkey = pubkey!();
 			let challenge = ds_context.create_auth_challenge(user_pubkey).map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"Error with auth challenge generation: {}",
@@ -173,7 +171,7 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 
 	rustlet!("get_challenge", {
-		let user_pubkey = query!("user_pubkey");
+		let user_pubkey = query!("user_pubkey").unwrap_or("".to_string());
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
 		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
@@ -202,23 +200,23 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 
 	rustlet!("challenge_auth", {
-		let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
-		let user_pubkey = query!("user_pubkey");
+		let server_pubkey = pubkey!();
+		let user_pubkey = query!("user_pubkey").unwrap_or("".to_string());
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
 		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
 
-		let challenge = query!("challenge");
+		let challenge = query!("challenge").unwrap_or("".to_string());
 		let challenge = urlencoding::decode(&challenge)?;
 		let challenge = base64::decode(&*challenge)?;
 		let challenge: [u8; 8] = challenge.as_slice().try_into()?;
 
-		let signature = query!("signature");
+		let signature = query!("signature").unwrap_or("".to_string());
 		let signature = urlencoding::decode(&signature)?;
 		let signature = base64::decode(&*signature)?;
 		let signature: [u8; 64] = signature.as_slice().try_into()?;
 
-		let verification = verify!(&challenge, Some(user_pubkey), signature);
+		let verification = verify!(&challenge, user_pubkey, signature);
 		let verification = verification.unwrap_or(false);
 
 		if verification {

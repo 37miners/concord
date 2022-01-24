@@ -106,11 +106,11 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 
 	// send a message
 	rustlet!("create_invite", {
-		let pubkey = pubkey!().unwrap_or([0u8; 32]);
-		let server_id = query!("server_id");
-		let inviter = query!("inviter");
-		let count = query!("count").parse()?;
-		let expiry = query!("expiry").parse();
+		let pubkey = pubkey!();
+		let server_id = query!("server_id").unwrap_or("".to_string());
+		let inviter = query!("inviter").unwrap_or("".to_string());
+		let count = query!("count").unwrap_or("".to_string()).parse()?;
+		let expiry = query!("expiry").unwrap_or("".to_string()).parse();
 
 		// if not specified, use indefinite.
 		let expiry = match expiry {
@@ -169,7 +169,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("check_invite", {
-		let invite_id = query!("id");
+		let invite_id = query!("id").unwrap_or("".to_string());
 		let invite_id = urlencoding::decode(&invite_id)?;
 		let invite_id = base64::decode(&*invite_id)?;
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
@@ -203,8 +203,8 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 
 	// accept an invite
 	rustlet!("accept_invite", {
-		let view_only = query!("view_only").len() > 0;
-		let invite_id = query!("id");
+		let view_only = query!("view_only").is_some();
+		let invite_id = query!("id").unwrap_or("".to_string());
 		let invite_id = urlencoding::decode(&invite_id)?;
 		let invite_id = base64::decode(&*invite_id)?;
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
@@ -234,14 +234,14 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 			return Ok(());
 		}
 
-		let user_pubkey = query!("user_pubkey");
-		let _timestamp: u64 = query!("timestamp").parse()?;
-		let _signature = query!("signature");
+		let user_pubkey = query!("user_pubkey").unwrap_or("".to_string());
+		let _timestamp: u64 = query!("timestamp").unwrap_or("".to_string()).parse()?;
+		let _signature = query!("signature").unwrap_or("".to_string());
 
 		let user_pubkey = urlencoding::decode(&user_pubkey)?;
 		let user_pubkey = base64::decode(&*user_pubkey)?;
 		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
-		let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let server_pubkey = pubkey!();
 
 		let sinfo = ds_context
 			.accept_invite(invite_id, user_pubkey, server_pubkey)
@@ -257,7 +257,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		match sinfo {
 			Some(sinfo) => {
 				// get channel info and member info
-				let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
+				let server_pubkey = pubkey!();
 				let channels = ds_context
 					.get_channels(server_pubkey, sinfo.server_id)
 					.map_err(|e| {
@@ -323,7 +323,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("revoke_invite", {
-		let invite_id = query!("invite_id").parse()?;
+		let invite_id = query!("invite_id").unwrap_or("".to_string()).parse()?;
 		ds_context.delete_invite(invite_id).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("error deleting invite: {}", e.to_string()))
@@ -337,8 +337,8 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("list_invites", {
-		let server_id = query!("server_id");
-		let inviter = query!("inviter");
+		let server_id = query!("server_id").unwrap_or("".to_string());
+		let inviter = query!("inviter").unwrap_or("".to_string());
 
 		let server_id = urlencoding::decode(&server_id)?;
 		let server_id = base64::decode(&*server_id)?;
@@ -361,7 +361,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		})?;
 
 		let mut invites_serde = vec![];
-		let pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let pubkey = pubkey!();
 		let onion = OnionV3Address::from_bytes(pubkey);
 		for invite in invites {
 			let id = base64::encode(invite.id.to_be_bytes());
@@ -394,7 +394,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 
 	let tor_port = config.tor_port;
 	rustlet!("view_invite", {
-		let link = query!("link");
+		let link = query!("link").unwrap_or("".to_string());
 		let link = urlencoding::decode(&link)?.to_string();
 		let join_link = format!("{}&view_only=true", link,);
 		let url = Url::parse(&join_link).map_err(|e| {
@@ -434,7 +434,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							joined: false,
 						};
 						ds_context
-							.add_server(server_info, Some(jri.server_id), pubkey!())
+							.add_server(server_info, Some(jri.server_id), Some(pubkey!()))
 							.map_err(|e| {
 								let error: Error = ErrorKind::ApplicationError(format!(
 									"add server generated error: {}",
@@ -480,7 +480,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("join_server", {
-		let link = query!("link");
+		let link = query!("link").unwrap_or("".to_string());
 		let link = urlencoding::decode(&link)?.to_string();
 
 		let timestamp = std::time::SystemTime::now()
@@ -492,7 +492,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 			})?
 			.as_millis();
 
-		let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let user_pubkey = pubkey!();
 		let onion = base64::encode(user_pubkey);
 		let onion = urlencoding::encode(&onion).to_string();
 

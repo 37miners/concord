@@ -94,14 +94,7 @@ pub fn init_channels(config: &ConcordConfig, _context: ConcordContext) -> Result
 		let server_pubkey = match server_pubkey {
 			Some(server_pubkey) => server_pubkey,
 			None => {
-				let server_pubkey = pubkey!();
-				match server_pubkey {
-					Some(server_pubkey) => server_pubkey,
-					None => {
-						response!("tor pubkey not configured!");
-						return Ok(());
-					}
-				}
+				pubkey!()
 			}
 		};
 
@@ -164,14 +157,7 @@ pub fn init_channels(config: &ConcordConfig, _context: ConcordContext) -> Result
 		let server_pubkey = match server_pubkey {
 			Some(server_pubkey) => server_pubkey,
 			None => {
-				let server_pubkey = pubkey!();
-				match server_pubkey {
-					Some(server_pubkey) => server_pubkey,
-					None => {
-						response!("tor pubkey not configured!");
-						return Ok(());
-					}
-				}
+				pubkey!()
 			}
 		};
 
@@ -222,13 +208,7 @@ pub fn init_channels(config: &ConcordConfig, _context: ConcordContext) -> Result
 		}
 
 		let server_pubkey = if server_pubkey.is_none() {
-			let pubkey = pubkey!();
-			if pubkey.is_none() {
-				response!("tor not configured!");
-				return Ok(());
-			}
-
-			pubkey.unwrap()
+			pubkey!()
 		} else {
 			server_pubkey.unwrap()
 		};

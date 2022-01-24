@@ -115,7 +115,7 @@ fn process_subscriptions(
 
 	let (_, events) = context
 		.set_listener_interest(
-			pubkey!().unwrap_or([0u8; 32]),
+			pubkey!(),
 			listener_id,
 			Some(ac.clone()),
 			interest_list,
@@ -172,7 +172,7 @@ pub fn init_persistence(
 	// listen to this server for events
 	rustlet!("listen", {
 		set_content_type!("application/octet-stream");
-		let listener_id: u128 = query!("listener_id").parse()?;
+		let listener_id: u128 = query!("listener_id").unwrap_or("".to_string()).parse()?;
 		let ac = async_context!();
 		let content = request_content!();
 		let content = std::str::from_utf8(&content)?;
@@ -184,19 +184,13 @@ pub fn init_persistence(
 
 	// subscribe to change the interest list
 	rustlet!("subscribe", {
-		let listener_id: u128 = query!("listener_id").parse()?;
+		let listener_id: u128 = query!("listener_id").unwrap_or("".to_string()).parse()?;
 		let content = request_content!();
 		let content = std::str::from_utf8(&content)?;
 		let interest_list = parse_interest_list(content)?;
 
 		let (ac, events) = context1
-			.set_listener_interest(
-				pubkey!().unwrap_or([0u8; 32]),
-				listener_id,
-				None,
-				interest_list,
-				tor_port,
-			)
+			.set_listener_interest(pubkey!(), listener_id, None, interest_list, tor_port)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"set_listener_interest subscribe error: {}",

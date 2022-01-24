@@ -140,6 +140,40 @@ fn init_webroot(config: &ConcordConfig) {
 			}
 		}
 
+		let bytes = include_bytes!("resources/images/gear.png");
+		match create_file_from_bytes(
+			"images/gear.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
+		let bytes = include_bytes!("resources/images/user1.png");
+		match create_file_from_bytes(
+			"images/user1.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
 		let bytes = include_bytes!("resources/images/Loading_icon.gif");
 		match create_file_from_bytes(
 			"images/Loading_icon.gif".to_string(),
@@ -320,6 +354,7 @@ pub fn concord_init(config: &ConcordConfig) -> Result<(), ConcordError> {
 	crate::invite::init_invite(config, context.clone())?; // invite module
 	crate::members::init_members(config, context.clone())?; // members module
 	crate::persistence::init_persistence(config, context.clone())?; // persistence module
+	crate::profile::init_profile(config, context.clone())?; // profile module
 
 	Ok(())
 }

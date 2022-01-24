@@ -23,6 +23,8 @@ mod invite;
 mod members;
 mod message;
 mod persistence;
+mod profile;
 mod server;
+mod utils;
 
 pub use crate::concord::concord_init;

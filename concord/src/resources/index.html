@@ -139,7 +139,7 @@
                                         >
                                                Create Invite
                                         </a>
-				<div>
+				</div>
 				<div id="interstitialtextpadding8" class="interstitialtextpadding8">
 					<form name="viewinvite" id="viewinvite">
 						<input type="hidden" name="link" value=""/>
@@ -151,7 +151,25 @@
 					<br/>
 					<button type="button" onclick="Javascript:accept_invitation();">Accept Invitation</button>
 					<button type="button" onclick="Javascript:close_interstitial();">Reject Invitation</button>
-				<div>
+				</div>
+				<div id="interstitialtextpadding9" class="interstitialtextpadding9">
+					Profile Settings:<br/><br/>
+					<form name="profile" id="profile">
+						User Name: <input type="text" name="user_name" size=30 /><br/>
+						User Bio: <input type="text" name="user_bio" size=30 /><br/>
+					</form>
+                                        <a
+                                                href="JavaScript:update_profile();"
+                                                class="button4 padding4"
+                                                style="background-color:#303179"
+                                                title="Update Profile"
+                                        >Update Profile</a>
+
+					<form name="avatar" id="avatar">
+						<input type="file" id="avatar_input" name="avatar_input"/><br/>
+						<input type="hidden" id="pubkey" name="pubkey" value=""/>
+					</form>
+				</div>
 			</div>
 		</div>
 	</body>

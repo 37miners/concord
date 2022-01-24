@@ -83,6 +83,7 @@ function close_interstitial() {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function show_auth_error() {
@@ -95,6 +96,7 @@ function show_auth_error() {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function show_create_invite() {
@@ -107,6 +109,7 @@ function show_create_invite() {
         document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding7").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 	load_invite_list();
 }
 
@@ -119,6 +122,7 @@ function create_server() {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function join_server() {
@@ -130,6 +134,7 @@ function join_server() {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function modify_server(iconId, curName) {
@@ -146,6 +151,7 @@ function modify_server(iconId, curName) {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function show_invite_info() {
@@ -157,6 +163,21 @@ function show_invite_info() {
         document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'visible';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
+}
+
+function show_profile_settings(pubkey) {
+	document.forms['avatar']['pubkey'].value = pubkey;
+	document.getElementById('interstitial').style.visibility = 'visible';
+        document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding4").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+        document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'visible';
 }
 
 function join_server_link() {
@@ -165,7 +186,6 @@ function join_server_link() {
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
 		var invite_info = JSON.parse(this.responseText);
-console.info('invite='+this.responseText);
 		document.getElementById('inviteserveruser').innerHTML = invite_info.inviter_pubkey;
 		document.getElementById('inviteservername').innerHTML = invite_info.name;
 		var rand = makeid(8);
@@ -175,14 +195,6 @@ console.info('invite='+this.responseText);
 			'&r=' + rand;
 		document.forms['viewinvite']['link'].value = link;
 		show_invite_info();
-/*
-        	var req = new XMLHttpRequest();
-        	req.addEventListener("load", function() {
-        	});
-        	req.open("GET", '/join_server?link=' + encodeURIComponent(link));
-        	req.send();
-*/
-
 	});
 	req.open("GET", '/view_invite?link=' + encodeURIComponent(link));
 	req.send();
@@ -267,6 +279,7 @@ function do_add_channel(server_id) {
 	document.getElementById("interstitialtextpadding6").style.visibility = 'visible';
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 }
 
 function subscribe(server, listener_id) {
@@ -446,7 +459,8 @@ function init_concord() {
 		document.getElementById("interstitialtextpadding5").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding6").style.visibility = 'hidden';
 		document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
-		document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
+		document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
 	}
 
 	plusdiv.appendChild(plus);
@@ -464,6 +478,21 @@ function init_concord() {
 	server_name.innerHTML = '';
 	div2.appendChild(server_name);
         div2.className = 'channelbar';
+
+	var mini_profile = document.createElement('div');
+	var mini_profile_loading_text = document.createElement('div');
+	mini_profile_loading_text.className = 'mini_profile_loading_text';
+	mini_profile_loading_text.appendChild(document.createTextNode('Mini Profile Loading...'));
+	mini_profile.appendChild(mini_profile_loading_text);
+	mini_profile.id = 'mini_profile';
+	mini_profile.className = 'mini_profile';
+	var mini_profile_loading = document.createElement('div');
+	mini_profile_loading.className = 'loader';
+	mini_profile.appendChild(mini_profile_loading);
+	div2.appendChild(mini_profile);
+
+	load_mini_profile();
+
 	var channel_list = document.createElement('div');
 	channel_list.id = 'channel_list';
 	channel_list.className = 'channel_list';
@@ -521,12 +550,50 @@ function init_concord() {
 	load_server_bar();
 }
 
+function load_mini_profile() {
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		var mini_profile_resp = JSON.parse(this.responseText);
+		var pubkey = mini_profile_resp[1];
+		var user_name = mini_profile_resp[0].user_name;
+		var user_bio = mini_profile_resp[0].user_bio;
+		var img = document.createElement('img');
+		var rand = makeid(8);
+		img.src =
+			'/get_profile_image?server_id=AAAAAAAAAAA%3D&user_pubkey=' + pubkey +
+			'&server_pubkey=' + pubkey +
+			'&rand=' + rand;
+		img.className = 'mini_profile_avatar';
+		var text_div = document.createElement('div');
+		text_div.innerHTML = user_name;
+		text_div.className = 'mini_profile_text_div';
+		var gear = document.createElement('img');
+		gear.src = '/images/gear.png';
+		gear.className = 'gearimg';
+
+		var mini_profile =  document.getElementById('mini_profile');
+		mini_profile.onclick = function(evt) {
+			show_profile_settings(pubkey);
+		};
+		mini_profile.innerHTML = '';
+		mini_profile.appendChild(img);
+		mini_profile.appendChild(text_div);
+		mini_profile.appendChild(gear);
+		mini_profile.title = user_bio;
+
+	});
+	req.open(
+		"POST",
+		"/get_mini_profile"
+	);
+	req.send();
+}
+
 function process_response(response) {
 	if (response == '') return;
         var end = response.indexOf("//-----ENDJSON-----");
 	if(end>=0)
 		response = response.substring(0, end);
-console.info("parsedresp='"+response+"'");
 	var events = JSON.parse(response);
 	events.forEach(function(event) {
 		if (event.etype == 0) {
@@ -571,7 +638,6 @@ function listener() {
 
 	req.addEventListener("load", function() {
 		var response = this.responseText;
-		console.info('response='+response);
 		try {
 			process_response(response);
 		} catch(ex) {
@@ -596,7 +662,6 @@ function listener() {
 
 		i++;
 	});
-console.info('post_data='+post_data);
 	req.send(post_data);
 }
 
@@ -661,9 +726,41 @@ function accept_invitation() {
 	req.send();
 }
 
+function update_profile() {
+	alert('do update');
+}
+
 window.onunload = function(event) { 
 	var req = new XMLHttpRequest();
 	req.open("GET", '/disconnect?listener_id='+listener_id);
 	req.send();
+}
+
+window.onload = function(event) {
+        var fileInput = document.getElementById('avatar_input');
+        fileInput.onchange = () => {
+		var form = document.getElementById('avatar');
+		var avatar = form.avatar_input.files[0];
+		var pubkey = document.forms['avatar']['pubkey'].value;
+		if (avatar) {
+                	var req = new XMLHttpRequest();
+                	var formData = new FormData();
+                	formData.append("avatar", avatar);
+                	req.addEventListener("load", function() {
+                        	close_interstitial();
+				load_mini_profile();
+                	});
+			var rand = makeid(8);
+                	req.open(
+				"POST",
+				'/set_profile_image?server_id=AAAAAAAAAAA%3D&server_pubkey=' + pubkey +
+				'&user_pubkey=' + pubkey +
+				'&rand=' + rand
+			);
+                	req.send(formData);
+        	} else {
+                	alert("ERROR: file must be specified.");
+        	}
+	}
 }
 

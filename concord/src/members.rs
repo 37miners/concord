@@ -51,7 +51,7 @@ pub fn init_members(config: &ConcordConfig, _context: ConcordContext) -> Result<
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("get_members", {
-		let server_id = query!("server_id");
+		let server_id = query!("server_id").unwrap_or("".to_string());
 		let server_id = urlencoding::decode(&server_id)?;
 		let server_id = base64::decode(&*server_id)?;
 		let server_id: [u8; 8] = server_id.as_slice().try_into()?;

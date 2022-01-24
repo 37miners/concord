@@ -12,7 +12,9 @@ edition = "2018"
 [dependencies]
 
 librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
+nioruntime_tor = { git = "http://github.com/37miners/nioruntime", branch = "master" }
 #librustlet = { path = "../../rustlet/rustlet" }
+#nioruntime_tor = { path = "../../nioruntime/tor" }
 failure = "0.1"
 failure_derive = "0.1"
 futures = "0.3.0"

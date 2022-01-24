@@ -70,7 +70,7 @@ fn get_auth_token(
 		}
 	}
 
-	let pubkey = pubkey!().unwrap_or([0u8; 32]);
+	let pubkey = pubkey!();
 	let pubkey = base64::encode(pubkey);
 	let pubkey = urlencoding::encode(&pubkey).to_string();
 
@@ -214,7 +214,7 @@ fn process_remote_messages(
 ) -> Result<(), Error> {
 	let server_id = base64::encode(server_id);
 	let server_id = urlencoding::encode(&server_id).to_string();
-	let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+	let user_pubkey = pubkey!();
 	let user_pubkey = base64::encode(user_pubkey);
 	let user_pubkey = urlencoding::encode(&user_pubkey);
 
@@ -280,7 +280,7 @@ fn process_local_messages(
 	server_id: [u8; 8],
 	channel_id: u64,
 ) -> Result<(), Error> {
-	let server_pubkey = pubkey!().unwrap_or([0u8; 32]);
+	let server_pubkey = pubkey!();
 
 	let mut messages = ds_context
 		.get_messages(server_pubkey, server_id, channel_id, u64::MAX)
@@ -314,12 +314,8 @@ fn process_local_messages(
 		let message_to_sign = build_signable_message(message)?;
 		message_json.push(MessageInfo {
 			text: std::str::from_utf8(&message.payload.clone())?.to_string(),
-			verified: verify!(
-				&message_to_sign,
-				Some(message.user_pubkey),
-				message.signature
-			)
-			.unwrap_or(false),
+			verified: verify!(&message_to_sign, message.user_pubkey, message.signature)
+				.unwrap_or(false),
 			timestamp: format!("{}", message.timestamp),
 			user_pubkey: OnionV3Address::from_bytes(message.user_pubkey).to_string(),
 			seqno: message.seqno,
@@ -356,7 +352,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 		let query = request!("query");
 		let query_vec = querystring::querify(&query);
 
-		let pubkey = pubkey!().unwrap_or([0u8; 32]);
+		let pubkey = pubkey!();
 
 		let mut server_pubkey: Option<[u8; 32]> = None;
 		let mut user_pubkey: Option<[u8; 32]> = None;
@@ -448,16 +444,10 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			None => 0,
 		};
 
-		if user_pubkey.is_none() {
-			user_pubkey = pubkey!();
-		}
-
-		if user_pubkey.is_none() {
-			response!("Configuration error! Tor must be configured!");
-			return Ok(());
-		}
-
-		let user_pubkey = user_pubkey.unwrap();
+		let user_pubkey = match user_pubkey {
+			Some(user_pubkey) => user_pubkey,
+			None => pubkey!(),
+		};
 
 		let server_pubkey = match server_pubkey {
 			Some(server_pubkey) => server_pubkey,
@@ -528,7 +518,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 		} else {
 			let signature = base64::encode(message.signature);
 			let signature = urlencoding::encode(&signature);
-			let user_pubkey = pubkey!().unwrap_or([0u8; 32]);
+			let user_pubkey = pubkey!();
 			let user_pubkey = base64::encode(user_pubkey);
 			let user_pubkey = urlencoding::encode(&user_pubkey);
 			let onion = OnionV3Address::from_bytes(server_pubkey);
@@ -660,8 +650,8 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			}
 		}
 
-		let local_pubkey = pubkey!().unwrap_or([0u8; 32]);
-		let server_pubkey = query!("server_pubkey");
+		let local_pubkey = pubkey!();
+		let server_pubkey = query!("server_pubkey").unwrap_or("".to_string());
 		let server_pubkey = if server_pubkey != "" {
 			let server_pubkey = urlencoding::decode(&server_pubkey)?;
 			let server_pubkey = base64::decode(&*server_pubkey)?;
@@ -670,9 +660,9 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			local_pubkey
 		};
 
-		let channel_id = query!("channel_id").parse()?;
+		let channel_id = query!("channel_id").unwrap_or("".to_string()).parse()?;
 
-		let server_id = query!("server_id");
+		let server_id = query!("server_id").unwrap_or("".to_string());
 		let server_id = urlencoding::decode(&server_id)?;
 		let server_id = base64::decode(&*server_id)?;
 		let server_id = server_id.as_slice().try_into()?;

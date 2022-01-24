@@ -29,10 +29,176 @@ pub const TOKEN_EXPIRATION: u128 = 1000 * 60 * 60;
 
 nioruntime_log::debug!();
 
+pub fn get_default_profile() -> Profile {
+	Profile {
+		avatar: vec![],
+		profile_data: ProfileData {
+			user_name: "User Default".to_string(),
+			user_bio: "Tell us about you..".to_string(),
+		},
+		server_id: [0u8; 8],
+		server_pubkey: [0u8; 32],
+		user_pubkey: [0u8; 32],
+	}
+}
+
 // the context to use for accessing concord data. Multiple instances
 // may exist and LMDB handles concurrency.
 pub struct DSContext {
 	store: Store,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ProfileData {
+	pub user_name: String,
+	pub user_bio: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Profile {
+	pub user_pubkey: [u8; 32],
+	pub server_pubkey: [u8; 32],
+	pub server_id: [u8; 8],
+	pub avatar: Vec<u8>,
+	pub profile_data: ProfileData,
+}
+
+struct ProfileKey {
+	user_pubkey: [u8; 32],
+	server_pubkey: [u8; 32],
+	server_id: [u8; 8],
+}
+
+struct ProfileValue {
+	avatar: Vec<u8>,
+	profile_data: ProfileData,
+}
+
+impl From<Profile> for ProfileKey {
+	fn from(profile: Profile) -> ProfileKey {
+		ProfileKey {
+			user_pubkey: profile.user_pubkey,
+			server_pubkey: profile.server_pubkey,
+			server_id: profile.server_id,
+		}
+	}
+}
+
+impl Writeable for ProfileKey {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(PROFILE_PREFIX)?;
+		for i in 0..32 {
+			writer.write_u8(self.user_pubkey[i])?;
+		}
+		for i in 0..32 {
+			writer.write_u8(self.server_pubkey[i])?;
+		}
+		for i in 0..8 {
+			writer.write_u8(self.server_id[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ProfileKey {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut user_pubkey = [0u8; 32];
+		let mut server_pubkey = [0u8; 32];
+		let mut server_id = [0u8; 8];
+		let _ = reader.read_u8()?;
+		for i in 0..32 {
+			user_pubkey[i] = reader.read_u8()?;
+		}
+		for i in 0..32 {
+			server_pubkey[i] = reader.read_u8()?;
+		}
+		for i in 0..8 {
+			server_id[i] = reader.read_u8()?;
+		}
+		Ok(ProfileKey {
+			user_pubkey,
+			server_pubkey,
+			server_id,
+		})
+	}
+}
+
+impl From<Profile> for ProfileValue {
+	fn from(profile: Profile) -> ProfileValue {
+		ProfileValue {
+			profile_data: profile.profile_data,
+			avatar: profile.avatar.clone(),
+		}
+	}
+}
+
+impl Writeable for ProfileValue {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let avatar_len = self.avatar.len();
+		writer.write_u64(avatar_len.try_into()?)?;
+		for i in 0..avatar_len {
+			writer.write_u8(self.avatar[i])?;
+		}
+
+		Writeable::write(&self.profile_data, writer)?;
+
+		Ok(())
+	}
+}
+
+impl Readable for ProfileValue {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut avatar = vec![];
+		let avatar_len = reader.read_u64()?;
+		for _ in 0..avatar_len {
+			avatar.push(reader.read_u8()?);
+		}
+		let profile_data = ProfileData::read(reader)?;
+
+		Ok(ProfileValue {
+			avatar,
+			profile_data,
+		})
+	}
+}
+
+impl Writeable for ProfileData {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let name_len = self.user_name.len();
+		writer.write_u64(name_len.try_into()?)?;
+		let name_bytes = self.user_name.as_bytes();
+		for i in 0..name_len {
+			writer.write_u8(name_bytes[i])?;
+		}
+		let bio_len = self.user_bio.len();
+		writer.write_u64(bio_len.try_into()?)?;
+		let bio_bytes = self.user_bio.as_bytes();
+		for i in 0..bio_len {
+			writer.write_u8(bio_bytes[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ProfileData {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let name_len = reader.read_u64()?;
+		let mut user_name = vec![];
+		for _ in 0..name_len {
+			user_name.push(reader.read_u8()?);
+		}
+		let user_name = std::str::from_utf8(&user_name)?.to_string();
+		let bio_len = reader.read_u64()?;
+		let mut user_bio = vec![];
+		for _ in 0..bio_len {
+			user_bio.push(reader.read_u8()?);
+		}
+		let user_bio = std::str::from_utf8(&user_bio)?.to_string();
+		Ok(ProfileData {
+			user_name,
+			user_bio,
+		})
+	}
 }
 
 struct AuthToken {
@@ -805,6 +971,7 @@ const INVITE_ID_PREFIX: u8 = 6;
 const CHALLENGE_PREFIX: u8 = 7;
 const STORED_AUTH_TOKEN_PREFIX: u8 = 8;
 const MESSAGE_METADATA_PREFIX: u8 = 9;
+const PROFILE_PREFIX: u8 = 10;
 
 // auth levels
 pub const AUTH_FLAG_OWNER: u64 = 1;
@@ -1615,6 +1782,190 @@ impl DSContext {
 			Some(auth_token) => auth_token.auth_token,
 			None => 0,
 		})
+	}
+
+	pub fn get_profile(
+		&self,
+		user_pubkey: [u8; 32],
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+	) -> Result<Option<Profile>, Error> {
+		let batch = self.store.batch()?;
+		let mut profile_key_buffer = vec![];
+		serialize_default(
+			&mut profile_key_buffer,
+			&ProfileKey {
+				user_pubkey,
+				server_pubkey,
+				server_id,
+			},
+		)?;
+		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+
+		match profile_value {
+			Some(profile_value) => Ok(Some(Profile {
+				user_pubkey,
+				server_pubkey,
+				server_id,
+				avatar: profile_value.avatar,
+				profile_data: profile_value.profile_data,
+			})),
+			None => Ok(None),
+		}
+	}
+
+	pub fn save_profile(&self, profile: Profile) -> Result<(), Error> {
+		let profile_key: ProfileKey = profile.clone().into();
+		let profile_value: ProfileValue = profile.into();
+
+		let batch = self.store.batch()?;
+		let mut profile_key_buffer = vec![];
+		serialize_default(&mut profile_key_buffer, &profile_key)?;
+		batch.put_ser(&profile_key_buffer, &profile_value)?;
+		batch.commit()?;
+
+		Ok(())
+	}
+
+	pub fn set_profile_image(
+		&self,
+		user_pubkey: [u8; 32],
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+		avatar: Vec<u8>,
+	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut profile_key_buffer = vec![];
+
+		serialize_default(
+			&mut profile_key_buffer,
+			&ProfileKey {
+				user_pubkey,
+				server_pubkey,
+				server_id,
+			},
+		)?;
+		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+		match profile_value {
+			Some(mut profile_value) => {
+				profile_value.avatar = avatar;
+				batch.put_ser(&profile_key_buffer, &profile_value)?;
+				batch.commit()?;
+			}
+			None => {
+				let mut profile = get_default_profile();
+				profile.user_pubkey = user_pubkey;
+				profile.server_pubkey = server_pubkey;
+				profile.server_id = server_id;
+				profile.avatar = avatar;
+				let profile_value: ProfileValue = profile.into();
+
+				batch.put_ser(&profile_key_buffer, &profile_value)?;
+				batch.commit()?;
+			}
+		}
+
+		Ok(())
+	}
+
+	pub fn get_profile_images(
+		&self,
+		user_pubkeys: Vec<[u8; 32]>,
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+	) -> Result<Vec<Option<Vec<u8>>>, Error> {
+		let batch = self.store.batch()?;
+		let mut ret = vec![];
+
+		for user_pubkey in user_pubkeys {
+			let mut profile_key_buffer = vec![];
+			serialize_default(
+				&mut profile_key_buffer,
+				&ProfileKey {
+					user_pubkey,
+					server_pubkey,
+					server_id,
+				},
+			)?;
+			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			match profile_value {
+				Some(profile_value) => {
+					ret.push(Some(profile_value.avatar));
+				}
+				None => {
+					ret.push(None);
+				}
+			}
+		}
+
+		Ok(ret)
+	}
+
+	pub fn get_profile_data(
+		&self,
+		user_pubkeys: Vec<[u8; 32]>,
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+	) -> Result<Vec<Option<ProfileData>>, Error> {
+		let batch = self.store.batch()?;
+		let mut ret = vec![];
+
+		for user_pubkey in user_pubkeys {
+			let mut profile_key_buffer = vec![];
+			serialize_default(
+				&mut profile_key_buffer,
+				&ProfileKey {
+					user_pubkey,
+					server_pubkey,
+					server_id,
+				},
+			)?;
+
+			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			match profile_value {
+				Some(profile_value) => {
+					ret.push(Some(ProfileData {
+						user_name: profile_value.profile_data.user_name,
+						user_bio: profile_value.profile_data.user_bio,
+					}));
+				}
+				None => {
+					ret.push(None);
+				}
+			}
+		}
+
+		Ok(ret)
+	}
+
+	pub fn set_profile_data(
+		&self,
+		user_pubkey: [u8; 32],
+		server_pubkey: [u8; 32],
+		server_id: [u8; 8],
+		profile_data: ProfileData,
+	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut profile_key_buffer = vec![];
+
+		serialize_default(
+			&mut profile_key_buffer,
+			&ProfileKey {
+				user_pubkey,
+				server_pubkey,
+				server_id,
+			},
+		)?;
+		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+		match profile_value {
+			Some(mut profile_value) => {
+				profile_value.profile_data = profile_data;
+				batch.put_ser(&profile_key_buffer, &profile_value)?;
+				batch.commit()?;
+				Ok(())
+			}
+			None => Err(ErrorKind::ProfileNotFoundErr("profile not found".to_string()).into()),
+		}
 	}
 
 	// create a dscontext instance
