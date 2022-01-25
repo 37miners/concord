@@ -103,7 +103,7 @@ impl Pubkey {
 		Ok(data)
 	}
 
-	pub fn from_onion(onion_address: &str) -> Result<Self, Error> {
+	pub fn _from_onion(onion_address: &str) -> Result<Self, Error> {
 		let onion_address: OnionV3Address = onion_address.try_into()?;
 		Ok(Self {
 			data: *onion_address.as_bytes(),
@@ -120,7 +120,7 @@ pub struct ServerId {
 }
 
 impl ServerId {
-	pub fn from_bytes(data: [u8; 8]) -> Self {
+	pub fn _from_bytes(data: [u8; 8]) -> Self {
 		Self { data }
 	}
 
@@ -140,4 +140,15 @@ impl ServerId {
 		let data = urlencoding::encode(&data).to_string();
 		Ok(data)
 	}
+}
+
+#[macro_export]
+macro_rules! try2 {
+	($a:expr,$b:expr) => {{
+		$a.map_err(|e| {
+			let error: librustlet::Error =
+				librustlet::ErrorKind::ApplicationError(format!("{}: {}", $b, e)).into();
+			error
+		})?
+	}};
 }

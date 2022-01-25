@@ -25,6 +25,7 @@ mod message;
 mod persistence;
 mod profile;
 mod server;
+#[macro_use]
 mod utils;
 
 pub use crate::concord::concord_init;

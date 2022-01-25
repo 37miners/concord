@@ -17,6 +17,11 @@ use crate::context::ConcordContext;
 use crate::context::Interest;
 use crate::persistence::Event;
 use crate::persistence::EVENT_TYPE_MESSAGE;
+use crate::try2;
+use crate::utils::extract_server_id_from_query;
+use crate::utils::extract_server_pubkey_from_query;
+use crate::utils::extract_user_pubkey_from_query;
+use crate::utils::Pubkey;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Message;
@@ -348,15 +353,18 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			}
 		}
 
+		let pubkey = pubkey!();
+		let server_id = extract_server_id_from_query()?;
+		let server_pubkey = extract_server_pubkey_from_query()?;
+		let user_pubkey = match extract_user_pubkey_from_query() {
+			Ok(user_pubkey) => user_pubkey,
+			Err(_) => Pubkey::from_bytes(pubkey!()),
+		};
+
 		// get query parameters
 		let query = request!("query");
 		let query_vec = querystring::querify(&query);
 
-		let pubkey = pubkey!();
-
-		let mut server_pubkey: Option<[u8; 32]> = None;
-		let mut user_pubkey: Option<[u8; 32]> = None;
-		let mut server_id: Option<[u8; 8]> = None;
 		let mut channel_id: Option<u64> = None;
 		let mut timestamp: Option<u64> = None;
 		let mut nonce: Option<u16> = None;
@@ -366,19 +374,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 
 		for query_param in query_vec {
 			let param_as_str = query_param.1.to_string();
-			if query_param.0 == "server_pubkey" {
-				let local_server_pubkey = urlencoding::decode(&param_as_str)?;
-				let local_server_pubkey = base64::decode(&*local_server_pubkey)?;
-				server_pubkey = Some(local_server_pubkey.as_slice().try_into()?);
-			} else if query_param.0 == "user_pubkey" {
-				let local_user_pubkey = urlencoding::decode(&param_as_str)?;
-				let local_user_pubkey = base64::decode(&*local_user_pubkey)?;
-				user_pubkey = Some(local_user_pubkey.as_slice().try_into()?);
-			} else if query_param.0 == "server_id" {
-				let local_server_id = urlencoding::decode(&param_as_str)?;
-				let local_server_id = base64::decode(&*local_server_id)?;
-				server_id = Some(local_server_id.as_slice().try_into()?);
-			} else if query_param.0 == "signature" {
+			if query_param.0 == "signature" {
 				let local_signature = urlencoding::decode(&param_as_str)?;
 				let local_signature = base64::decode(&*local_signature)?;
 				signature = Some(local_signature.as_slice().try_into()?);
@@ -444,23 +440,6 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			None => 0,
 		};
 
-		let user_pubkey = match user_pubkey {
-			Some(user_pubkey) => user_pubkey,
-			None => pubkey!(),
-		};
-
-		let server_pubkey = match server_pubkey {
-			Some(server_pubkey) => server_pubkey,
-			None => user_pubkey,
-		};
-
-		if server_id.is_none() {
-			response!("server id must be specified!");
-			return Ok(());
-		}
-
-		let server_id = server_id.unwrap();
-
 		if channel_id.is_none() {
 			response!("channel id must be specified!");
 			return Ok(());
@@ -482,11 +461,11 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 				0 => MessageType::Text,
 				_ => MessageType::Binary,
 			},
-			server_pubkey,
-			server_id,
+			server_pubkey: server_pubkey.to_bytes(),
+			server_id: server_id.to_bytes(),
 			channel_id,
 			timestamp,
-			user_pubkey,
+			user_pubkey: user_pubkey.to_bytes(),
 			nonce,
 			seqno: 0,
 		};
@@ -504,7 +483,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			message.signature = signature;
 		}
 
-		if pubkey == server_pubkey {
+		if pubkey == server_pubkey.to_bytes() {
 			ds_context.post_message(message).map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error posting message: {}",
@@ -518,17 +497,18 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 		} else {
 			let signature = base64::encode(message.signature);
 			let signature = urlencoding::encode(&signature);
-			let user_pubkey = pubkey!();
-			let user_pubkey = base64::encode(user_pubkey);
-			let user_pubkey = urlencoding::encode(&user_pubkey);
-			let onion = OnionV3Address::from_bytes(server_pubkey);
+			let onion = try2!(server_pubkey.to_onion(), "error converting to onion");
 
 			let mut bypass_db = false;
 			loop {
-				let token = get_auth_token(&ds_context, server_pubkey, tor_port, bypass_db)?;
+				let token =
+					get_auth_token(&ds_context, server_pubkey.to_bytes(), tor_port, bypass_db)?;
 				let query = format!(
 					"{}&signature={}&user_pubkey={}&token={}",
-					query, signature, user_pubkey, token
+					query,
+					signature,
+					try2!(user_pubkey.to_urlencoding(), "url encoding error"),
+					token
 				);
 				let url = format!("http://{}.onion/send_message?{}", onion, query);
 
@@ -582,15 +562,11 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			flush!();
 		}
 
-		if pubkey == server_pubkey {
+		if pubkey == server_pubkey.to_bytes() {
 			// send event
-			let user_pubkey_str = OnionV3Address::from_bytes(user_pubkey).to_string();
-
-			let server_pubkey_str = base64::encode(server_pubkey);
-			let server_pubkey_str = urlencoding::encode(&server_pubkey_str).to_string();
-
-			let server_id_str = base64::encode(server_id);
-			let server_id_str = urlencoding::encode(&server_id_str).to_string();
+			let user_pubkey_str = try2!(user_pubkey.to_onion(), "onion conversion error");
+			let server_pubkey_str = try2!(server_pubkey.to_urlencoding(), "url encoding error");
+			let server_id_str = try2!(server_id.to_urlencoding(), "url encoding error");
 
 			let event = Event {
 				etype: EVENT_TYPE_MESSAGE,
@@ -609,8 +585,8 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 				})
 				.unwrap();
 			let interest = Interest {
-				server_pubkey,
-				server_id,
+				server_pubkey: server_pubkey.to_bytes(),
+				server_id: server_id.to_bytes(),
 				channel_id: None,
 			};
 

@@ -485,6 +485,14 @@ pub struct Member {
 	pub server_pubkey: [u8; 32],
 }
 
+pub struct MemberWithProfileInfo {
+	pub server_id: [u8; 8],
+	pub user_pubkey: [u8; 32],
+	pub server_pubkey: [u8; 32],
+	pub user_name: String,
+	pub user_bio: String,
+}
+
 impl Writeable for Member {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		for i in 0..8 {
@@ -1572,6 +1580,7 @@ impl DSContext {
 		}
 	}
 
+	//pub fn get_members(&self, server_id: [u8; 8]) -> Result<Vec<(MemberWithProfileInfo, u64)>, Error> {
 	pub fn get_members(&self, server_id: [u8; 8]) -> Result<Vec<(Member, u64)>, Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![MEMBER_PREFIX];
@@ -1590,6 +1599,16 @@ impl DSContext {
 			let next = itt.next();
 			match next {
 				Some(member) => {
+					/*
+										let member_with_profile_info = MemberWithProfileInfo {
+											user_pubkey: member.0.user_pubkey,
+											server_pubkey: member.0.server_pubkey,
+											server_id: member.0.server_id,
+											user_bio: "default user bio".to_string(),
+											user_name: "default user name".to_string(),
+										};
+										ret.push((member_with_profile_info, member.1));
+					*/
 					ret.push(member);
 				}
 				None => {

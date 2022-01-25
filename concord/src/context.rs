@@ -13,8 +13,8 @@
 // limitations under the License.
 
 use crate::persistence::Event;
-use concorderror::Error;
-use concorderror::ErrorKind;
+use concorderror::Error as ConcordError;
+use concorderror::ErrorKind as ConcordErrorKind;
 use concordutil::torclient;
 use librustlet::RustletAsyncContext;
 use librustlet::*;
@@ -78,7 +78,7 @@ impl ConcordContext {
 		server_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		_tor_port: u16,
-	) -> Result<(), Error> {
+	) -> Result<(), ConcordError> {
 		// send event
 		let event: Vec<Event> = serde_json::from_str(&event)?;
 		let json = serde_json::to_string(&event)?;
@@ -102,7 +102,7 @@ impl ConcordContext {
 		Ok(())
 	}
 
-	fn start_remote(&self, interest: Vec<Interest>, tor_port: u16) -> Result<(), Error> {
+	fn start_remote(&self, interest: Vec<Interest>, tor_port: u16) -> Result<(), ConcordError> {
 		let listener_id: u128 = rand::random();
 		let context = self.clone();
 
@@ -167,10 +167,9 @@ impl ConcordContext {
 	// check if there is already a remote connection for this server, if so, check if we're already paying
 	// attention to this interest. If so, do nothing. If there is no remote connection, create one. If
 	// we're not paying attention to that interest, use the subscribe url to update our interests.
-	fn check_add_remote(&self, interest: Interest, tor_port: u16) -> Result<(), Error> {
-		let mut remote_interest = self.remote_interest.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining remote_interest lock: {}", e)).into();
+	fn check_add_remote(&self, interest: Interest, tor_port: u16) -> Result<(), ConcordError> {
+		let mut remote_interest = nioruntime_util::lockw!(self.remote_interest).map_err(|e| {
+			let error: ConcordError = ConcordErrorKind::LibRustletError(format!("{}", e)).into();
 			error
 		})?;
 		let current_interest = remote_interest.get_mut(&interest.server_pubkey);
@@ -204,17 +203,19 @@ impl ConcordContext {
 		ac: Option<RustletAsyncContext>,
 		interest_list: Vec<Interest>,
 		tor_port: u16,
-	) -> Result<(Option<RustletAsyncContext>, Vec<Event>), Error> {
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
+	) -> Result<(Option<RustletAsyncContext>, Vec<Event>), ConcordError> {
+		let mut listener_map = nioruntime_util::lockw!(self.listener_map).map_err(|e| {
+			let error: ConcordError =
+				ConcordErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
 			error
 		})?;
 
-		let mut subscription_map = self.subscription_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
-					.into();
+		let mut subscription_map = nioruntime_util::lockw!(self.subscription_map).map_err(|e| {
+			let error: ConcordError = ConcordErrorKind::LockError(format!(
+				"Error obtaining subscription_map lock: {}",
+				e
+			))
+			.into();
 			error
 		})?;
 
@@ -282,17 +283,19 @@ impl ConcordContext {
 		&self,
 		events: Vec<Event>,
 		interest: Interest,
-	) -> Result<Vec<RustletAsyncContext>, Error> {
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
+	) -> Result<Vec<RustletAsyncContext>, ConcordError> {
+		let mut listener_map = nioruntime_util::lockw!(self.listener_map).map_err(|e| {
+			let error: ConcordError =
+				ConcordErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
 			error
 		})?;
 
-		let subscription_map = self.subscription_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
-					.into();
+		let subscription_map = nioruntime_util::lockw!(self.subscription_map).map_err(|e| {
+			let error: ConcordError = ConcordErrorKind::LockError(format!(
+				"Error obtaining subscription_map lock: {}",
+				e
+			))
+			.into();
 			error
 		})?;
 
@@ -325,21 +328,25 @@ impl ConcordContext {
 
 	// gets any timed out listeners and also purges any listeners that haven't been seen for
 	// a specified time
-	pub fn get_timed_out_listeners_and_purge(&self) -> Result<Vec<RustletAsyncContext>, Error> {
+	pub fn get_timed_out_listeners_and_purge(
+		&self,
+	) -> Result<Vec<RustletAsyncContext>, ConcordError> {
 		let time_now = std::time::SystemTime::now()
 			.duration_since(std::time::UNIX_EPOCH)?
 			.as_millis();
 
-		let mut listener_map = self.listener_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
+		let mut listener_map = nioruntime_util::lockw!(self.listener_map).map_err(|e| {
+			let error: ConcordError =
+				ConcordErrorKind::LockError(format!("Error obtaining listener lock: {}", e)).into();
 			error
 		})?;
 
-		let mut subscription_map = self.subscription_map.write().map_err(|e| {
-			let error: Error =
-				ErrorKind::LockError(format!("Error obtaining subscription_map lock: {}", e))
-					.into();
+		let mut subscription_map = nioruntime_util::lockw!(self.subscription_map).map_err(|e| {
+			let error: ConcordError = ConcordErrorKind::LockError(format!(
+				"Error obtaining subscription_map lock: {}",
+				e
+			))
+			.into();
 			error
 		})?;
 

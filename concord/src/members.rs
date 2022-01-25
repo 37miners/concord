@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::utils::Pubkey;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
@@ -28,6 +29,9 @@ nioruntime_log::debug!(); // set log level to debug
 struct MemberJson {
 	server_id: String,
 	user_pubkey: String,
+	user_name: String,
+	user_bio: String,
+	user_pubkey_urlencoded: String,
 	user_type: u8,
 }
 
@@ -37,10 +41,18 @@ impl From<Member> for MemberJson {
 		let server_id = urlencoding::encode(&server_id).to_string();
 
 		let user_pubkey = OnionV3Address::from_bytes(member.user_pubkey).to_string();
+		let user_pubkey_urlencoded = Pubkey::from_bytes(member.user_pubkey)
+			.to_urlencoding()
+			.unwrap_or("".to_string());
+		let user_name = "".to_string();
+		let user_bio = "".to_string();
 
 		MemberJson {
 			server_id,
 			user_pubkey,
+			user_name,
+			user_bio,
+			user_pubkey_urlencoded,
 			user_type: 0u8,
 		}
 	}

@@ -74,7 +74,6 @@ function makeid(length) {
 }
 
 function close_interstitial() {
-	document.getElementById('interstitial').style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding3").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding1").style.visibility = 'hidden';
         document.getElementById("interstitialtextpadding2").style.visibility = 'hidden';
@@ -84,6 +83,7 @@ function close_interstitial() {
 	document.getElementById("interstitialtextpadding7").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding8").style.visibility = 'hidden';
 	document.getElementById("interstitialtextpadding9").style.visibility = 'hidden';
+	document.getElementById('interstitial').style.visibility = 'hidden';
 }
 
 function show_auth_error() {
@@ -330,7 +330,7 @@ function load_server_bar() {
 				img.onclick = function() {
 					var req = new XMLHttpRequest();
 					req.addEventListener("load", function() {
-						load_members(server.id);
+						load_members(server.id, server_pubkey);
 						var server_name_div = document.getElementById('server_name');
 						server_name_div.innerHTML = sname;
 						var add_channel = document.createElement('img');
@@ -682,28 +682,57 @@ function ping(listener_id, i) {
 	);
 }
 
-function load_members(sname) {
+function load_members(sname, spubkey) {
 	var req = new XMLHttpRequest();
 	req.addEventListener("load", function() {
  		var members = JSON.parse(this.responseText);
                 var status_bar = document.getElementById('statusbar');
                 status_bar.innerHTML = '';
                 members.forEach(function(member) {
+			var member_div = document.createElement('div');
+			member_div.className = 'member_div';
+/*
 			if (member.user_type == 1) {
-				status_bar.appendChild(
+				member_div.appendChild(
 					document.createTextNode(
 						member.user_pubkey.substring(0, 10) +
 						" [owner]"
 					)
 				);
 			} else {
-                                status_bar.appendChild(
+                                member_div.appendChild(
                                         document.createTextNode(
                                                 member.user_pubkey.substring(0, 10)
                                         )
                                 );
 			}
-			status_bar.appendChild(document.createElement('br'));
+*/
+			var rand = makeid(8);
+			var img = document.createElement('img');
+			img.src = '/get_profile_image?server_id=' + sname +
+				'&server_pubkey=' + spubkey +
+				'&user_pubkey=' + member.user_pubkey_urlencoded +
+				'&rand=' + rand;
+			img.className = 'member_avatar';
+			member_div.appendChild(img);
+			var user_name_span = document.createElement('span');
+			user_name_span.className = 'user_name_span';
+			if (member.user_type == 1) {
+				user_name_span.appendChild(
+                                	document.createTextNode(
+                                        	member.user_pubkey.substring(0, 10) + " [owner]"
+                                	)
+				);
+			} else {
+                                user_name_span.appendChild(
+                                        document.createTextNode(
+                                                member.user_pubkey.substring(0, 10)
+                                        )
+                                );
+			}
+			member_div.appendChild(user_name_span);
+			status_bar.appendChild(member_div);
+			
 		});
 	});
 	req.open("GET", '/get_members?server_id='+sname);
@@ -727,7 +756,24 @@ function accept_invitation() {
 }
 
 function update_profile() {
-	alert('do update');
+	var pubkey = document.forms['avatar']['pubkey'].value;
+	var user_name = document.forms['profile']['user_name'].value;
+	var user_bio = document.forms['profile']['user_bio'].value;
+	var rand = makeid(8);
+	var req = new XMLHttpRequest();
+	req.addEventListener("load", function() {
+		close_interstitial();
+		load_mini_profile();
+	});
+	req.open(
+		"GET", 
+		'/set_profile_data?server_id=AAAAAAAAAAA%3D&server_pubkey=' + pubkey +
+		'&user_pubkey=' + pubkey +
+		'&user_bio=' + encodeURIComponent(user_bio) +
+		'&user_name=' + encodeURIComponent(user_name) +
+		'&rand=' + rand
+	);
+	req.send();
 }
 
 window.onunload = function(event) { 

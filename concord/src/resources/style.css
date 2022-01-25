@@ -48,7 +48,6 @@ body {
 	min-width: 230px;
 	max-width: 230px;
 	height: 100%;
-	display: flex;
 	justify-content: center;
 }
 
@@ -354,6 +353,12 @@ a.button4:hover{
         margin-top: 10px;
 }
 
+.member_avatar {
+	height: 32px;
+	width: 32px;
+	background-color: #FFFFFF;
+}
+
 .mini_profile_text_div {
 	position: absolute;
 	display: inline;
@@ -368,4 +373,15 @@ a.button4:hover{
 	background-color: #FFFFFF;
 	margin: 10px;
 	float: right;
+}
+
+.member_div {
+	height: 32px;
+	padding: 3px;
+	width: 100%;
+}
+
+.user_name_span {
+	position: absolute;
+	margin: 7px;
 }

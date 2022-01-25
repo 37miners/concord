@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::try2;
 use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
 use crate::utils::extract_user_pubkey_from_query;
@@ -109,6 +110,8 @@ pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result
 				);
 			}
 		};
+		let user_bio = urlencoding::decode(&user_bio)?.to_string();
+
 		let user_name = match query!("user_name") {
 			Some(user_name) => user_name,
 			None => {
@@ -117,6 +120,7 @@ pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result
 				);
 			}
 		};
+		let user_name = urlencoding::decode(&user_name)?.to_string();
 
 		ds_context
 			.set_profile_data(
@@ -258,32 +262,26 @@ pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result
 		let server_pubkey = pubkey!();
 		let server_id = [0u8; 8]; // special server_id for our global data
 
-		let profile = ds_context
-			.get_profile(user_pubkey, server_pubkey, server_id)
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("get_profile error: {}", e)).into();
-				error
-			})?;
+		let profile = try2!(
+			{ ds_context.get_profile(user_pubkey, server_pubkey, server_id) },
+			"get_profile"
+		);
 
 		let profile = match profile {
 			Some(profile) => profile,
 			None => get_default_profile(),
 		};
 
-		let user_pubkey = Pubkey::from_bytes(user_pubkey)
-			.to_urlencoding()
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("pubkey parse error: {}", e)).into();
-				error
-			})?;
+		let user_pubkey = try2!(
+			{ Pubkey::from_bytes(user_pubkey).to_urlencoding() },
+			"pubkey parse error"
+		);
 
-		let json = serde_json::to_string(&(profile.profile_data, user_pubkey)).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
-			error
-		})?;
+		let json = try2!(
+			{ serde_json::to_string(&(profile.profile_data, user_pubkey)) },
+			"json parse error"
+		);
+
 		response!("{}", json);
 	});
 	rustlet_mapping!("/get_mini_profile", "get_mini_profile");
