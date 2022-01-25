@@ -387,8 +387,8 @@ impl<'a> Batch<'a> {
 	where
 		F: Fn(&[u8], &[u8]) -> Result<T, Error>,
 	{
-		let access = self.tx.access();
 		let lock = self.store.db.read();
+		let access = self.tx.access();
 		let db = lock.as_ref().ok_or_else(|| {
 			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
 			error
@@ -400,8 +400,8 @@ impl<'a> Batch<'a> {
 	/// Whether the provided key exists.
 	/// This is in the context of the current write transaction.
 	pub fn exists(&self, key: &[u8]) -> Result<bool, Error> {
-		let access = self.tx.access();
 		let lock = self.store.db.read();
+		let access = self.tx.access();
 		let db = lock.as_ref().ok_or_else(|| {
 			let error: Error = ErrorKind::NotFoundErr("chain db is None".to_string()).into();
 			error
