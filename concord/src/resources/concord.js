@@ -778,7 +778,7 @@ function update_profile() {
 
 window.onunload = function(event) { 
 	var req = new XMLHttpRequest();
-	req.open("GET", '/disconnect?listener_id='+listener_id);
+	req.open("GET", '/disconnect?listener_id='+listener_id_global);
 	req.send();
 }
 
