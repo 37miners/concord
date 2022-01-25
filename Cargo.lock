@@ -1132,7 +1132,7 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#a52bcfbe968a461a09a3c9cad13aa42990678ddb"
+source = "git+http://github.com/37miners/rustlet?branch=master#2a37f60568355c7f36a2a0ba0796050258faeb0e"
 dependencies = [
  "backtrace",
  "lazy_static",

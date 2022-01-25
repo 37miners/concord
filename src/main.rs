@@ -34,6 +34,7 @@ fn main() {
 		Ok(_) => {}
 		Err(e) => {
 			println!("Unexpected error in real_main: {}", e.to_string());
+			return;
 		}
 	}
 	std::thread::park(); // park the thread so we don't exit
