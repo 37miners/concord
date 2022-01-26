@@ -70,14 +70,12 @@ fn process_remote_image(
 	})?;
 	let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
 	let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-	error!("about to doget tor: {}", url);
 	let res = torclient::do_get_bin(host.clone(), path.clone(), tor_port).map_err(|e| {
 		let error: Error =
 			ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
 		error
 	});
 
-	error!("got res={:?}", res);
 	if res.is_ok() {
 		let data = res.unwrap();
 		let len = data.len();
@@ -140,7 +138,6 @@ fn load_remote_image(
 			tor_port,
 			ac,
 		);
-		error!("res={:?}", res);
 	});
 	Ok(())
 }

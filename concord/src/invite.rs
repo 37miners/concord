@@ -205,7 +205,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 
 	// accept an invite
 	rustlet!("accept_invite", {
-		error!("in accept invite");
 		let view_only = query!("view_only").is_some();
 		let invite_id = query!("id").unwrap_or("".to_string());
 		let invite_id = urlencoding::decode(&invite_id)?;
@@ -346,7 +345,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 					i += 1;
 				}
 
-				error!("replying with members={:?}", members);
 				let members = MemberList::new(members)
 					.map_err(|e| {
 						let error: Error = ErrorKind::ApplicationError(format!(
@@ -365,7 +363,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						.into();
 						error
 					})?;
-				error!("b58 encode = {:?}", members);
 				let sinfo: ServerInfoSerde = sinfo.into();
 				let server_state = ServerStateSerde {
 					sinfo,
@@ -379,7 +376,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							.into();
 					error
 				})?;
-				error!("json={}", json);
 				response!("{}", json);
 			}
 			None => {
@@ -474,13 +470,11 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		})?;
 		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
 		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-		error!("about to doget tor: {}", url);
 		let res = torclient::do_get(host.clone(), path.clone(), tor_port).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
 			error
 		})?;
-		error!("got a response of {:?}", res);
 		let start = res.find("\r\n\r\n");
 
 		match start {

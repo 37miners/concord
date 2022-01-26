@@ -1718,10 +1718,6 @@ impl DSContext {
 		channels: Vec<Channel>,
 		members: MemberList,
 	) -> Result<(), Error> {
-		error!(
-			"========================memberlist (add remote): {:?}",
-			members
-		);
 		let members = members.members;
 		{
 			let batch = self.store.batch()?;
@@ -2281,7 +2277,6 @@ impl DSContext {
 			.try_into()?;
 
 		let member = self.get_member(user_pubkey, server_id, server_pubkey, true, batch)?;
-		error!("member initial = {:?}", member);
 		let member = match member {
 			Some(mut member) => {
 				match profile {
@@ -2293,7 +2288,6 @@ impl DSContext {
 						// if avatar len is 0, it means the server didn't send it.
 						// maintain the old avatar if we have it.
 						if profile.avatar.len() == 0 && existing_avatar.len() > 0 {
-							error!("using existing avatar");
 							profile.avatar = existing_avatar;
 						}
 						member.profile = Some(profile);
