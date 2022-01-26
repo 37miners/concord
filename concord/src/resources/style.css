@@ -42,7 +42,7 @@ body {
 
 .statusbar {
 	background: #C0C0C0;
-        color: #000000;
+        color: #303179;
         padding: 3px;
 	width: 230px;
 	min-width: 230px;
@@ -384,4 +384,33 @@ a.button4:hover{
 .user_name_span {
 	position: absolute;
 	margin: 7px;
+}
+
+.crown {
+	height: 20px;
+	width: 20px;
+}
+
+.message_div {
+}
+
+.message_text_span {
+	margin: 10px;
+	color: #303179;
+}
+
+.message_hr {
+	border-top: 1px dashed blue;
+}
+
+.message_date_span {
+	float: right;
+	position: absolute;
+	margin: 10px;
+	color: #C0C0C0;
+	font-size: 11px;
+}
+
+.message_user_name_span {
+	color: #996515;
 }

@@ -30,9 +30,12 @@ pub struct Event {
 	pub ebody: String,
 	pub timestamp: String,
 	pub user_pubkey: String,
+	pub user_pubkey_urlencoded: String,
 	pub server_pubkey: String,
 	pub server_id: String,
 	pub channel_id: String,
+	pub user_bio: String,
+	pub user_name: String,
 }
 
 pub const EVENT_TYPE_MESSAGE: u16 = 1;
@@ -248,7 +251,10 @@ fn listener_cleanup_thread(context: &ConcordContext) -> Result<(), ConcordError>
 			ebody: "".to_string(),
 			timestamp: time_now.to_string(),
 			user_pubkey: "".to_string(),
+			user_pubkey_urlencoded: "".to_string(),
 			server_pubkey: "".to_string(),
+			user_name: "".to_string(),
+			user_bio: "".to_string(),
 			server_id: "".to_string(),
 			channel_id: "".to_string(),
 		};

@@ -92,17 +92,16 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						joined: true,
 					};
 
-					let server_id =
-						ds_context
-							.add_server(server_info, None, None)
-							.map_err(|e| {
-								let error: Error = ErrorKind::ApplicationError(format!(
-									"error adding server: {}",
-									e.to_string()
-								))
-								.into();
-								error
-							})?;
+					let server_id = ds_context
+						.add_server(server_info, None, None, false)
+						.map_err(|e| {
+							let error: Error = ErrorKind::ApplicationError(format!(
+								"error adding server: {}",
+								e.to_string()
+							))
+							.into();
+							error
+						})?;
 
 					let channel_key = ChannelKey {
 						server_pubkey,

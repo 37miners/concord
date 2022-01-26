@@ -13,17 +13,18 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::utils::extract_server_id_from_query;
+use crate::utils::extract_server_pubkey_from_query;
 use crate::utils::Pubkey;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
-use concorddata::concord::AUTH_FLAG_OWNER;
 use concorderror::Error as ConcordError;
 use librustlet::*;
+use nioruntime_log::*;
 use nioruntime_tor::ov3::OnionV3Address;
-use std::convert::TryInto;
 
-nioruntime_log::debug!(); // set log level to debug
+debug!(); // set log level to debug
 
 #[derive(Serialize)]
 struct MemberJson {
@@ -35,17 +36,21 @@ struct MemberJson {
 	user_type: u8,
 }
 
-impl From<Member> for MemberJson {
-	fn from(member: Member) -> MemberJson {
+impl From<&Member> for MemberJson {
+	fn from(member: &Member) -> MemberJson {
 		let server_id = base64::encode(member.server_id);
 		let server_id = urlencoding::encode(&server_id).to_string();
-
 		let user_pubkey = OnionV3Address::from_bytes(member.user_pubkey).to_string();
 		let user_pubkey_urlencoded = Pubkey::from_bytes(member.user_pubkey)
 			.to_urlencoding()
 			.unwrap_or("".to_string());
-		let user_name = "".to_string();
-		let user_bio = "".to_string();
+		let (user_name, user_bio) = match &member.profile {
+			Some(profile) => (
+				profile.profile_data.user_name.clone(),
+				profile.profile_data.user_bio.clone(),
+			),
+			None => ("".to_string(), "".to_string()),
+		};
 
 		MemberJson {
 			server_id,
@@ -53,7 +58,7 @@ impl From<Member> for MemberJson {
 			user_name,
 			user_bio,
 			user_pubkey_urlencoded,
-			user_type: 0u8,
+			user_type: if member.auth_flags == 3 { 1u8 } else { 0u8 },
 		}
 	}
 }
@@ -63,27 +68,51 @@ pub fn init_members(config: &ConcordConfig, _context: ConcordContext) -> Result<
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("get_members", {
-		let server_id = query!("server_id").unwrap_or("".to_string());
-		let server_id = urlencoding::decode(&server_id)?;
-		let server_id = base64::decode(&*server_id)?;
-		let server_id: [u8; 8] = server_id.as_slice().try_into()?;
+		let server_id = extract_server_id_from_query()?;
+		let server_pubkey = match extract_server_pubkey_from_query() {
+			Ok(server_pubkey) => server_pubkey,
+			Err(_) => Pubkey::from_bytes(pubkey!()),
+		};
 
-		let members = ds_context.get_members(server_id).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("get members error: {}", e.to_string())).into();
-			error
-		})?;
+		let mut members = ds_context
+			.get_members(
+				server_pubkey.to_bytes(),
+				server_id.to_bytes(),
+				0,
+				true,
+				true,
+			)
+			.map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"error accepting invite - members: {}",
+					e.to_string()
+				))
+				.into();
+				error
+			})?;
+
+		let mut other_members = ds_context
+			.get_members(
+				server_pubkey.to_bytes(),
+				server_id.to_bytes(),
+				0,
+				true,
+				false,
+			)
+			.map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"error accepting invite - members: {}",
+					e.to_string()
+				))
+				.into();
+				error
+			})?;
+		members.append(&mut other_members);
 
 		let mut members_json: Vec<MemberJson> = vec![];
 
 		for member in &members {
-			let mut member_json: MemberJson = member.0.clone().into();
-			member_json.user_type = if (member.1 & AUTH_FLAG_OWNER) != 0 {
-				1u8
-			} else {
-				0u8
-			};
-			members_json.push(member_json);
+			members_json.push(member.into());
 		}
 
 		let json = serde_json::to_string(&members_json).map_err(|e| {

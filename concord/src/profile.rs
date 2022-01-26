@@ -18,15 +18,19 @@ use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
 use crate::utils::extract_user_pubkey_from_query;
 use crate::utils::Pubkey;
+use crate::utils::ServerId;
 use concordconfig::ConcordConfig;
 use concorddata::concord::get_default_profile;
 use concorddata::concord::DSContext;
 use concorddata::concord::ProfileData;
 use concorderror::Error as ConcordError;
+use concordutil::torclient;
 use librustlet::*;
 use nioruntime_log::*;
 use std::fs::File;
 use std::io::Read;
+use url::Host::Domain;
+use url::Url;
 
 debug!(); // set log level to debug
 
@@ -36,6 +40,109 @@ fn get_default_user_icon(root_dir: String) -> Result<Vec<u8>, Error> {
 	let mut data = vec![];
 	file.read_to_end(&mut data)?;
 	Ok(data)
+}
+
+fn process_remote_image(
+	user_pubkey: Pubkey,
+	server_pubkey: Pubkey,
+	server_id: ServerId,
+	root_dir: String,
+	tor_port: u16,
+	ac: RustletAsyncContext,
+) -> Result<(), Error> {
+	let gear = format!("{}/www/images/gear.png", root_dir);
+	let mut file = File::open(gear).unwrap();
+	let mut data = vec![];
+	file.read_to_end(&mut data).unwrap();
+
+	let onion = server_pubkey.to_onion().unwrap();
+	let image_link = format!(
+		"http://{}.onion/get_profile_image?&user_pubkey={}&server_pubkey={}&server_id={}",
+		onion,
+		user_pubkey.to_urlencoding().unwrap(),
+		server_pubkey.to_urlencoding().unwrap(),
+		server_id.to_urlencoding().unwrap(),
+	);
+	let url = Url::parse(&image_link).map_err(|e| {
+		let error: Error =
+			ErrorKind::ApplicationError(format!("url parse error: {}", e.to_string())).into();
+		error
+	})?;
+	let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
+	let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
+	error!("about to doget tor: {}", url);
+	let res = torclient::do_get_bin(host.clone(), path.clone(), tor_port).map_err(|e| {
+		let error: Error =
+			ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
+		error
+	});
+
+	error!("got res={:?}", res);
+	if res.is_ok() {
+		let data = res.unwrap();
+		let len = data.len();
+		let mut start = 0;
+		for i in 4..len {
+			start = i;
+			if data[i - 1] == 10 && data[i - 2] == 13 && data[i - 3] == 10 && data[i - 4] == 13 {
+				break;
+			}
+		}
+		let data = &data[start..].to_vec();
+
+		let ds_context = DSContext::new(root_dir.clone()).map_err(|e| {
+			let error: Error =
+				ErrorKind::ApplicationError(format!("error getting ds_context: {}", e.to_string()))
+					.into();
+			error
+		})?;
+
+		ds_context
+			.set_profile_image(
+				user_pubkey.to_bytes(),
+				server_pubkey.to_bytes(),
+				server_id.to_bytes(),
+				data.to_vec(),
+			)
+			.map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"set_profile_image error: {}",
+					e.to_string()
+				))
+				.into();
+				error
+			})?;
+		async_context!(ac);
+		bin_write!(&data);
+		async_complete!();
+	} else {
+		async_context!(ac);
+		bin_write!(&data);
+		async_complete!();
+	}
+	Ok(())
+}
+
+fn load_remote_image(
+	user_pubkey: Pubkey,
+	server_pubkey: Pubkey,
+	server_id: ServerId,
+	root_dir: String,
+	tor_port: u16,
+) -> Result<(), Error> {
+	let ac = async_context!();
+	std::thread::spawn(move || {
+		let res = process_remote_image(
+			user_pubkey,
+			server_pubkey,
+			server_id,
+			root_dir,
+			tor_port,
+			ac,
+		);
+		error!("res={:?}", res);
+	});
+	Ok(())
 }
 
 // initialize this module.
@@ -180,9 +287,11 @@ pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result
 	rustlet_mapping!("/get_profile_images", "get_profile_images");
 
 	let root_dir = cconfig.root_dir.clone();
+	let tor_port = cconfig.tor_port;
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 	// get the profile images for the specified users on the specified server
 	rustlet!("get_profile_image", {
+		let local_pubkey = pubkey!();
 		let user_pubkey = extract_user_pubkey_from_query()?;
 		let server_pubkey = extract_server_pubkey_from_query()?;
 		let server_id = extract_server_id_from_query()?;
@@ -201,10 +310,39 @@ pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result
 
 		match image.len() {
 			1 => match &image[0] {
-				Some(image) => bin_write!(&image),
+				Some(image) => {
+					if image.len() > 0 {
+						bin_write!(&image);
+					} else {
+						if server_pubkey.to_bytes() != local_pubkey {
+							// try the remote server
+							load_remote_image(
+								user_pubkey,
+								server_pubkey,
+								server_id,
+								root_dir.clone(),
+								tor_port,
+							)?;
+						} else {
+							let def_user_icon = get_default_user_icon(root_dir.clone())?;
+							bin_write!(&def_user_icon);
+						}
+					}
+				}
 				None => {
-					let def_user_icon = get_default_user_icon(root_dir.clone())?;
-					bin_write!(&def_user_icon);
+					if server_pubkey.to_bytes() != local_pubkey {
+						// try the remote server
+						load_remote_image(
+							user_pubkey,
+							server_pubkey,
+							server_id,
+							root_dir.clone(),
+							tor_port,
+						)?;
+					} else {
+						let def_user_icon = get_default_user_icon(root_dir.clone())?;
+						bin_write!(&def_user_icon);
+					}
 				}
 			},
 			_ => response!("error! image not found!"),

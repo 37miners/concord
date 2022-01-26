@@ -140,6 +140,23 @@ fn init_webroot(config: &ConcordConfig) {
 			}
 		}
 
+		let bytes = include_bytes!("resources/images/crown.png");
+		match create_file_from_bytes(
+			"images/crown.png".to_string(),
+			config.root_dir.clone(),
+			bytes,
+		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
 		let bytes = include_bytes!("resources/images/gear.png");
 		match create_file_from_bytes(
 			"images/gear.png".to_string(),

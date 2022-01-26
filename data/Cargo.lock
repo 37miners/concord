@@ -123,6 +123,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "bit_reverse"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "99528ca30abb9495c7e106bf7c3177b257c62040fc0f2909fe470b0f43097296"
+
+[[package]]
 name = "bitflags"
 version = "0.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,6 +299,7 @@ name = "concorddata"
 version = "1.0.0"
 dependencies = [
  "base64",
+ "bit_reverse",
  "blake2-rfc",
  "bs58",
  "byteorder",
@@ -309,8 +316,8 @@ dependencies = [
  "grin_secp256k1zkp",
  "libc",
  "lmdb-zero",
- "log",
  "memmap",
+ "nioruntime_log",
  "parking_lot",
  "rand 0.6.5",
  "rand 0.8.4",
@@ -336,10 +343,12 @@ dependencies = [
  "lazy_static",
  "librustlet",
  "lmdb-zero",
+ "nioruntime_tor",
  "nix",
  "rand 0.8.4",
  "rustls",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

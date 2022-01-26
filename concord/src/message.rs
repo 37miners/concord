@@ -51,6 +51,9 @@ struct MessageInfo {
 	verified: bool,
 	timestamp: String,
 	user_pubkey: String,
+	user_pubkey_urlencoded: String,
+	user_name: String,
+	user_bio: String,
 	seqno: u64,
 }
 
@@ -317,12 +320,28 @@ fn process_local_messages(
 	let mut message_json = vec![];
 	for message in &messages {
 		let message_to_sign = build_signable_message(message)?;
+		let user_pubkey = Pubkey::from_bytes(message.user_pubkey);
 		message_json.push(MessageInfo {
 			text: std::str::from_utf8(&message.payload.clone())?.to_string(),
 			verified: verify!(&message_to_sign, message.user_pubkey, message.signature)
 				.unwrap_or(false),
 			timestamp: format!("{}", message.timestamp),
-			user_pubkey: OnionV3Address::from_bytes(message.user_pubkey).to_string(),
+			user_pubkey: user_pubkey.to_onion().map_err(|e| {
+				let error: Error = ErrorKind::ApplicationError(format!(
+					"error getting onion address for user_pubkey: {}",
+					e,
+				))
+				.into();
+				error
+			})?,
+			user_pubkey_urlencoded: user_pubkey.to_urlencoding().map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("url encoding of user_pubkey: {}", e,))
+						.into();
+				error
+			})?,
+			user_name: message.user_name.clone(),
+			user_bio: message.user_bio.clone(),
 			seqno: message.seqno,
 		});
 	}
@@ -331,6 +350,7 @@ fn process_local_messages(
 			ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string())).into();
 		error
 	})?;
+
 	response!("{}", json);
 	Ok(())
 }
@@ -454,6 +474,25 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 
 		let timestamp = timestamp.unwrap();
 
+		let profile = ds_context
+			.get_profile(
+				user_pubkey.to_bytes(),
+				server_pubkey.to_bytes(),
+				server_id.to_bytes(),
+			)
+			.map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("ds get profile err: {}", e)).into();
+				error
+			})?;
+		let (user_name, user_bio) = match profile {
+			Some(profile) => (
+				profile.profile_data.user_name,
+				profile.profile_data.user_bio,
+			),
+			None => ("".to_string(), "".to_string()),
+		};
+
 		let mut message = Message {
 			payload: payload.clone(),
 			signature: [0u8; 64],
@@ -466,6 +505,8 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 			channel_id,
 			timestamp,
 			user_pubkey: user_pubkey.to_bytes(),
+			user_name,
+			user_bio,
 			nonce,
 			seqno: 0,
 		};
@@ -484,7 +525,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 		}
 
 		if pubkey == server_pubkey.to_bytes() {
-			ds_context.post_message(message).map_err(|e| {
+			ds_context.post_message(message.clone()).map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error posting message: {}",
 					e.to_string()
@@ -564,6 +605,7 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 
 		if pubkey == server_pubkey.to_bytes() {
 			// send event
+			let user_pubkey_urlencoded = try2!(user_pubkey.to_urlencoding(), "url encoding error");
 			let user_pubkey_str = try2!(user_pubkey.to_onion(), "onion conversion error");
 			let server_pubkey_str = try2!(server_pubkey.to_urlencoding(), "url encoding error");
 			let server_id_str = try2!(server_id.to_urlencoding(), "url encoding error");
@@ -573,7 +615,10 @@ pub fn init_message(config: &ConcordConfig, context: ConcordContext) -> Result<(
 				ebody: std::str::from_utf8(&payload)?.to_string(),
 				timestamp: timestamp.to_string(),
 				user_pubkey: user_pubkey_str,
+				user_pubkey_urlencoded,
 				server_pubkey: server_pubkey_str,
+				user_name: message.user_name,
+				user_bio: message.user_bio,
 				server_id: server_id_str,
 				channel_id: channel_id.to_string(),
 			};

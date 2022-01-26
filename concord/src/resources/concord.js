@@ -289,6 +289,56 @@ function subscribe(server, listener_id) {
 	req.send();
 }
 
+function add_message_to_chat_area(
+	chat_area,
+	server_id,
+	server_pubkey,
+	user_pubkey_urlencoded,
+	user_pubkey_onion,
+	message_text,
+	timestamp,
+	user_name,
+	user_bio,
+) {
+	var div = document.createElement('div');
+	div.className = 'message_div';
+	var img = document.createElement('img');
+	var rand = makeid(8);
+	img.src = '/get_profile_image?server_id=' + server_id +
+		'&server_pubkey=' + server_pubkey +
+		'&user_pubkey=' + user_pubkey_urlencoded +
+		'&rand=' + rand;
+	img.title = user_bio;
+	img.className = 'mini_profile_avatar';
+	div.appendChild(img);
+	var date = new Date();
+	date.setTime(timestamp);
+	var user_name_span = document.createElement('span');
+	user_name_span.className = 'message_user_name_span';
+	user_name_span.appendChild(document.createTextNode(user_name + '> '));
+	var m = document.createTextNode(
+		message_text
+	);
+	var text_span = document.createElement('span');
+	text_span.className = 'message_text_span';
+	text_span.appendChild(user_name_span);
+	text_span.appendChild(m);
+
+	var date_span = document.createElement('span');
+	date_span.className = 'message_date_span';
+	var d = document.createTextNode(
+		date.toLocaleString()
+	);
+	date_span.appendChild(d);
+	div.appendChild(date_span);
+
+	div.appendChild(text_span);
+	chat_area.appendChild(div);
+	var hr = document.createElement('hr');
+	hr.className = 'message_hr';
+	chat_area.appendChild(hr);
+}
+
 function load_server_bar() {
 	// first clear server bar
 	document.getElementById('serverbartext').innerHTML = '';
@@ -361,21 +411,25 @@ function load_server_bar() {
 								req.addEventListener("load", function() {
 									var chat_area = document.getElementById('chat_area');
 									chat_area.innerHTML = '';
-try {
-									var messages = JSON.parse(this.responseText);
-									messages.forEach(function(message) {
-										var m = document.createTextNode(
-											message.user_pubkey.substring(0, 10) +
-											'> ' +
-											message.text
-										);
-										chat_area.appendChild(m);
-										chat_area.appendChild(document.createElement('br'));
-									});
-									chat_area.scrollTop = chat_area.scrollHeight;
-} catch(ex) {
-	console.error('error='+ex+'response='+this.responseText);
-}
+									try {
+										var messages = JSON.parse(this.responseText);
+										messages.forEach(function(message) {
+											add_message_to_chat_area(
+												chat_area,
+												cur_server,
+												cur_pubkey,
+												message.user_pubkey_urlencoded,
+												message.user_pubkey,
+												message.text,
+												message.timestamp,
+												message.user_name,
+												message.user_bio,
+											);
+										});
+										chat_area.scrollTop = chat_area.scrollHeight;
+									} catch(ex) {
+										console.error('error='+ex+'response='+this.responseText);
+									}
 								});
 								req.open(
 									"GET",
@@ -616,13 +670,17 @@ function process_response(response) {
 			event.server_id == cur_server &&
 			event.server_pubkey == cur_pubkey) {
 				var chat_area = document.getElementById('chat_area');
-				var m = document.createTextNode(
-					event.user_pubkey.substring(0, 10) +
-					'> ' +
-					event.ebody
+				add_message_to_chat_area(
+					chat_area,
+					event.server_id,
+					event.server_pubkey,
+					event.user_pubkey_urlencoded,
+					event.user_pubkey,
+					event.ebody,
+					event.timestamp,
+					event.user_name,
+					event.user_bio,
 				);
-				chat_area.appendChild(m);
-				chat_area.appendChild(document.createElement('br'));
 				chat_area.scrollTop = chat_area.scrollHeight;
 			}
 		} else if (event.etype == 3) { // pong complete
@@ -691,51 +749,40 @@ function load_members(sname, spubkey) {
                 members.forEach(function(member) {
 			var member_div = document.createElement('div');
 			member_div.className = 'member_div';
-/*
-			if (member.user_type == 1) {
-				member_div.appendChild(
-					document.createTextNode(
-						member.user_pubkey.substring(0, 10) +
-						" [owner]"
-					)
-				);
-			} else {
-                                member_div.appendChild(
-                                        document.createTextNode(
-                                                member.user_pubkey.substring(0, 10)
-                                        )
-                                );
-			}
-*/
 			var rand = makeid(8);
 			var img = document.createElement('img');
 			img.src = '/get_profile_image?server_id=' + sname +
 				'&server_pubkey=' + spubkey +
 				'&user_pubkey=' + member.user_pubkey_urlencoded +
 				'&rand=' + rand;
+			img.title = member.user_bio;
 			img.className = 'member_avatar';
 			member_div.appendChild(img);
 			var user_name_span = document.createElement('span');
 			user_name_span.className = 'user_name_span';
+			var user_name_str = member.user_name;
+			user_name_str = member.user_name;
+			if (member.user_name == "") {
+				user_name_str = member.user_pubkey.substring(0, 10);
+			}
+			user_name_span.appendChild(
+                               	document.createTextNode(
+					user_name_str + " "
+                               	)
+			);
 			if (member.user_type == 1) {
-				user_name_span.appendChild(
-                                	document.createTextNode(
-                                        	member.user_pubkey.substring(0, 10) + " [owner]"
-                                	)
-				);
-			} else {
-                                user_name_span.appendChild(
-                                        document.createTextNode(
-                                                member.user_pubkey.substring(0, 10)
-                                        )
-                                );
+				var crown = document.createElement('img');
+				crown.title = "Owner";
+				crown.src = '/images/crown.png';
+				crown.className = 'crown';
+				user_name_span.appendChild(crown);
 			}
 			member_div.appendChild(user_name_span);
 			status_bar.appendChild(member_div);
 			
 		});
 	});
-	req.open("GET", '/get_members?server_id='+sname);
+	req.open("GET", '/get_members?server_id='+sname+'&server_pubkey=' + spubkey);
 	req.send();
 }
 

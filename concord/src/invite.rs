@@ -18,11 +18,13 @@ use concorddata::concord::Channel;
 use concorddata::concord::DSContext;
 use concorddata::concord::JoinInfoReply;
 use concorddata::concord::MemberList;
+use concorddata::concord::Profile;
 use concorddata::concord::ServerInfo;
 use concorddata::concord::ServerInfoReply;
 use concorderror::Error as ConcordError;
 use concordutil::torclient;
 use librustlet::*;
+use nioruntime_log::*;
 use nioruntime_tor::ov3::OnionV3Address;
 use serde_json::Value;
 use std::convert::TryInto;
@@ -203,13 +205,13 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 
 	// accept an invite
 	rustlet!("accept_invite", {
+		error!("in accept invite");
 		let view_only = query!("view_only").is_some();
 		let invite_id = query!("id").unwrap_or("".to_string());
 		let invite_id = urlencoding::decode(&invite_id)?;
 		let invite_id = base64::decode(&*invite_id)?;
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
 		let invite_id = u128::from_be_bytes(invite_id);
-
 		if view_only {
 			let join_info_reply = ds_context.check_invite(invite_id).map_err(|e| {
 				let error: Error =
@@ -243,8 +245,27 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		let user_pubkey: [u8; 32] = user_pubkey.as_slice().try_into()?;
 		let server_pubkey = pubkey!();
 
+		let user_name = match query!("user_name") {
+			Some(user_name) => urlencoding::decode(&user_name)?.to_string(),
+			None => "".to_string(),
+		};
+
+		let user_bio = match query!("user_bio") {
+			Some(user_bio) => urlencoding::decode(&user_bio)?.to_string(),
+			None => "".to_string(),
+		};
+
+		let avatar: Vec<u8> = request_content!().to_vec();
+
 		let sinfo = ds_context
-			.accept_invite(invite_id, user_pubkey, server_pubkey)
+			.accept_invite(
+				invite_id,
+				user_pubkey,
+				server_pubkey,
+				user_name,
+				user_bio,
+				avatar,
+			)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error accepting invite: {}",
@@ -269,16 +290,64 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						error
 					})?;
 
-				let members = ds_context.get_members(sinfo.server_id).map_err(|e| {
-					let error: Error = ErrorKind::ApplicationError(format!(
-						"error accepting invite - members: {}",
-						e.to_string()
-					))
-					.into();
-					error
-				})?;
+				let mut members = ds_context
+					.get_members(sinfo.pubkey, sinfo.server_id, 0, false, true)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error accepting invite - members: {}",
+							e.to_string()
+						))
+						.into();
+						error
+					})?;
 
-				let members = MemberList::new(members, server_pubkey, sinfo.server_id)
+				let mut other_members = ds_context
+					.get_members(sinfo.pubkey, sinfo.server_id, 0, false, false)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error accepting invite - members: {}",
+							e.to_string()
+						))
+						.into();
+						error
+					})?;
+
+				members.append(&mut other_members);
+
+				let mut user_pubkeys = vec![];
+				for member in &members {
+					user_pubkeys.push(member.user_pubkey);
+				}
+				let profile_data_vec = ds_context
+					.get_profile_data(user_pubkeys, sinfo.pubkey, sinfo.server_id)
+					.map_err(|e| {
+						let error: Error = ErrorKind::ApplicationError(format!(
+							"error getting profile data: {}",
+							e
+						))
+						.into();
+						error
+					})?;
+
+				let mut i = 0;
+				for profile_data in profile_data_vec {
+					match profile_data {
+						Some(profile_data) => {
+							members[i].profile = Some(Profile {
+								server_id: sinfo.server_id,
+								server_pubkey: sinfo.pubkey,
+								user_pubkey: members[i].user_pubkey,
+								avatar: vec![],
+								profile_data,
+							});
+						}
+						None => {}
+					}
+					i += 1;
+				}
+
+				error!("replying with members={:?}", members);
+				let members = MemberList::new(members)
 					.map_err(|e| {
 						let error: Error = ErrorKind::ApplicationError(format!(
 							"error accepting invite - b58 members: {}",
@@ -296,7 +365,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						.into();
 						error
 					})?;
-
+				error!("b58 encode = {:?}", members);
 				let sinfo: ServerInfoSerde = sinfo.into();
 				let server_state = ServerStateSerde {
 					sinfo,
@@ -310,6 +379,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							.into();
 					error
 				})?;
+				error!("json={}", json);
 				response!("{}", json);
 			}
 			None => {
@@ -404,12 +474,13 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		})?;
 		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
 		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
+		error!("about to doget tor: {}", url);
 		let res = torclient::do_get(host.clone(), path.clone(), tor_port).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
 			error
 		})?;
-
+		error!("got a response of {:?}", res);
 		let start = res.find("\r\n\r\n");
 
 		match start {
@@ -424,7 +495,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						.into();
 						error
 					})?;
-
 				match join_reply_info {
 					Some(jri) => {
 						let server_info = ServerInfo {
@@ -434,7 +504,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							joined: false,
 						};
 						ds_context
-							.add_server(server_info, Some(jri.server_id), Some(pubkey!()))
+							.add_server(server_info, Some(jri.server_id), Some(pubkey!()), true)
 							.map_err(|e| {
 								let error: Error = ErrorKind::ApplicationError(format!(
 									"add server generated error: {}",
@@ -449,7 +519,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						let server_id = urlencoding::encode(&server_id).to_string();
 						let inviter_pubkey = base64::encode(jri.inviter_pubkey);
 						let inviter_pubkey = urlencoding::encode(&inviter_pubkey).to_string();
-
 						let invite_response = InviteResponseDisplay {
 							server_pubkey,
 							server_id,
@@ -465,13 +534,16 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							.into();
 							error
 						})?;
-
 						response!("{}", json);
 					}
-					None => {}
+					None => {
+						error!("no jri!");
+					}
 				}
 			}
-			None => {}
+			None => {
+				error!("no proper response found!");
+			}
 		}
 	});
 	rustlet_mapping!("/view_invite", "view_invite");
@@ -480,6 +552,26 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 	let ds_context = DSContext::new(config.root_dir.clone())?;
 
 	rustlet!("join_server", {
+		let user_pubkey = pubkey!();
+		let profile = ds_context
+			.get_profile(user_pubkey, user_pubkey, [0u8; 8])
+			.map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("error getting profile: {}", e)).into();
+				error
+			})?;
+		let (user_name, user_bio, avatar) = match profile {
+			Some(profile) => (
+				profile.profile_data.user_name,
+				profile.profile_data.user_bio,
+				profile.avatar,
+			),
+			None => ("".to_string(), "".to_string(), vec![]),
+		};
+
+		let user_name = urlencoding::encode(&user_name);
+		let user_bio = urlencoding::encode(&user_bio);
+
 		let link = query!("link").unwrap_or("".to_string());
 		let link = urlencoding::decode(&link)?.to_string();
 
@@ -506,8 +598,8 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		let signature = urlencoding::encode(&signature);
 
 		let join_link = format!(
-			"{}&timestamp={}&user_pubkey={}&signature={}",
-			link, timestamp, onion, signature,
+			"{}&timestamp={}&user_pubkey={}&signature={}&user_name={}&user_bio={}",
+			link, timestamp, onion, signature, user_name, user_bio
 		);
 		let url = Url::parse(&join_link).map_err(|e| {
 			let error: Error =
@@ -516,11 +608,13 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		})?;
 		let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
 		let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-		let res = torclient::do_get(host.clone(), path.clone(), tor_port).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
-			error
-		})?;
+		let res =
+			torclient::do_post(host.clone(), path.clone(), tor_port, avatar).map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string()))
+						.into();
+				error
+			})?;
 
 		let start = res.find("\r\n\r\n");
 
@@ -562,10 +656,14 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 				let channels = channels_vec;
 
 				let members = value.get("members").unwrap().as_str().unwrap().to_string();
-				let members = MemberList::from_b58(members)
-					.unwrap()
-					.read_member_list()
-					.unwrap();
+				let members = MemberList::from_b58(members).map_err(|e| {
+					let error: Error = ErrorKind::ApplicationError(format!(
+						"error converting memberlist to b58: {}",
+						e
+					))
+					.into();
+					error
+				})?;
 
 				match value_sinfo {
 					Some(value) => {
