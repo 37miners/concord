@@ -138,6 +138,12 @@ fn load_remote_image(
 			tor_port,
 			ac,
 		);
+		match res {
+			Ok(_) => {}
+			Err(e) => {
+				error!("Error occurred in process remote image: {}", e);
+			}
+		}
 	});
 	Ok(())
 }

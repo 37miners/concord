@@ -28,7 +28,7 @@ const MEMBER_BATCH_SIZE: u64 = 100;
 
 pub const TOKEN_EXPIRATION: u128 = 1000 * 60 * 60;
 
-nioruntime_log::debug!();
+debug!();
 
 pub fn get_default_profile() -> Profile {
 	Profile {
