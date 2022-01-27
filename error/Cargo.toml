@@ -11,7 +11,15 @@ edition = "2018"
 
 [dependencies]
 
+# Release
+#librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.2" }
+
+# Local Testing
+#librustlet = { path = "../../rustlet/rustlet" }
+
+# Bleeding Edge
 librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
+
 
 failure = "0.1"
 failure_derive = "0.1"

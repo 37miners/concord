@@ -576,7 +576,7 @@ function init_concord() {
 	var input_div = document.createElement('div');
 	var textarea = document.createElement('input');
 	textarea.type = 'text';
-	textarea.className = 'message_input noselect';
+	textarea.className = 'message_input';
 
 	textarea.addEventListener('keydown', function(evt) {
 		if (evt.keyCode == 13) {
