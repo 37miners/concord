@@ -391,11 +391,16 @@ function load_server_bar() {
 						server_name_div.className = 'server_name_div noselect';
 						server_name_div.innerHTML = sname;
 						var add_channel = document.createElement('img');
+						add_channel.className = 'add_channel_button';
 						add_channel.onclick = function(evt) {
 							do_add_channel(server.id);
 						};
-						add_channel.src = '/images/create.png';
+						add_channel.src = '/images/add_channel.png';
+						add_channel.title = 'Add a Channel';
 						server_name_div.appendChild(add_channel);
+						var hr = document.createElement('hr');
+						hr.className = 'channel_hr';
+						server_name_div.appendChild(hr);
 						var channels = JSON.parse(this.responseText);
 						var channel_list = document.getElementById('channel_list');
 						channel_list.innerHTML = '';

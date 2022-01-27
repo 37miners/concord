@@ -231,7 +231,7 @@ a.button4:hover{
 }
 
 .channel_list {
-	margin-top: 25px;
+	margin-top: 40px;
 	width: 100%;
 }
 
@@ -246,6 +246,11 @@ a.button4:hover{
 .channel_div {
 	cursor: pointer;
 	padding: 3px;
+	color: #C0C0C0;
+}
+
+.channel_div:hover {
+	color: #FFFFFF;
 }
 
 .delete_invite {
@@ -442,4 +447,19 @@ a.button4:hover{
 
 .server_name_div {
 	position: absolute;
+	width: 225px;
+	margin-top: 10px;
+}
+
+.add_channel_button {
+	float: right;
+	margin-right: 9px;
+	cursor: pointer;
+	height: 17px;
+	width: 17px;
+	background: #FFFFFF;
+}
+
+.channel_hr {
+        border-top: 1px dashed white;
 }
