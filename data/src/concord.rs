@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::lmdb::{Batch, Store};
+use crate::nioruntime_log;
 use crate::ser::serialize_default;
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use concorderror::{Error, ErrorKind};

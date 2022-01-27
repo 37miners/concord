@@ -18,6 +18,7 @@
 use std::fs;
 use std::sync::Arc;
 
+use crate::nioruntime_log;
 use lmdb_zero as lmdb;
 use lmdb_zero::traits::CreateCursor;
 use lmdb_zero::LmdbResultExt;

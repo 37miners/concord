@@ -29,3 +29,4 @@ mod server;
 mod utils;
 
 pub use crate::concord::concord_init;
+pub use concordutil::librustlet;

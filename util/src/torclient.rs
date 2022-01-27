@@ -12,8 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::nioruntime_log;
+use crate::nioruntime_log::*;
 use concorderror::{Error, ErrorKind};
-use nioruntime_log::*;
 use std::io::prelude::*;
 use std::net::*;
 use tor_stream::TorStream;

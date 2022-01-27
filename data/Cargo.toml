@@ -12,9 +12,7 @@ edition = "2018"
 [dependencies]
 
 concorderror = { path = "../error" }
-nioruntime_log = { git = "http://github.com/37miners/nioruntime", branch = "master" }
-#nioruntime_log = { path = "../../nioruntime/log" }
-
+concordutil = { path = "../util" }
 
 zeroize = { version = "1.1", features =["zeroize_derive"] }
 grin_secp256k1zkp = { git = "https://github.com/bitcoinmw/rust-secp256k1-zkp", features = ["bullet-proof-sizing"] }

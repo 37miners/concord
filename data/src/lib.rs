@@ -25,3 +25,5 @@ pub mod hex;
 pub mod lmdb;
 pub mod ser;
 pub use crate::hex::*;
+
+pub use concordutil::nioruntime_log;

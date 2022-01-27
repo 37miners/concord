@@ -17,14 +17,15 @@
 use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
 use concorderror::Error as ConcordError;
-use librustlet::*;
+use concordutil::librustlet;
+use librustlet::nioruntime_log;
 use nioruntime_log::*;
 
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 
-nioruntime_log::debug!(); // set log level to debug
+debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
 
 // create a file from bytes that are included in resources.

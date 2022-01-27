@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::nioruntime_tor::ov3::OnionV3Error;
 use failure::{Backtrace, Context, Fail};
-use nioruntime_tor::ov3::OnionV3Error;
 use std::array::TryFromSliceError;
 use std::convert::Infallible;
 use std::fmt;

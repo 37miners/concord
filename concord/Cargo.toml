@@ -11,18 +11,6 @@ edition = "2018"
 
 [dependencies]
 
-# master
-librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
-nioruntime_err = { git = "http://github.com/37miners/nioruntime", branch = "master" }
-nioruntime_tor = { git = "http://github.com/37miners/nioruntime", branch = "master" }
-nioruntime_log = { git = "http://github.com/37miners/nioruntime", branch = "master" }
-
-# local testing
-#librustlet = { path = "../../rustlet/rustlet" }
-#nioruntime_err = { path = "../../nioruntime/error" }
-#nioruntime_tor = { path = "../../nioruntime/tor" }
-#nioruntime_log = { path = "../../nioruntime/log" }
-
 concorddata = { path = "../data" }
 concorderror = { path = "../error" }
 concordutil = { path = "../util" }

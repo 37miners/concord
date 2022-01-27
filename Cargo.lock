@@ -354,7 +354,6 @@ dependencies = [
  "concordlib",
  "concordutil",
  "dirs",
- "librustlet",
  "serde",
  "serde_derive",
  "serde_json",
@@ -377,6 +376,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "concorderror",
+ "concordutil",
  "croaring-mw",
  "dirs",
  "failure",
@@ -386,7 +386,6 @@ dependencies = [
  "libc",
  "lmdb-zero",
  "memmap",
- "nioruntime_log",
  "parking_lot",
  "rand 0.8.4",
  "serde",
@@ -411,7 +410,6 @@ dependencies = [
  "lazy_static",
  "librustlet",
  "lmdb-zero",
- "nioruntime_tor",
  "nix",
  "rand 0.8.4",
  "rustls",
@@ -430,11 +428,7 @@ dependencies = [
  "concordutil",
  "fsutils",
  "hyper",
- "librustlet",
  "mime_multipart",
- "nioruntime_err",
- "nioruntime_log",
- "nioruntime_tor",
  "querystring",
  "rand 0.8.4",
  "serde",
@@ -450,7 +444,6 @@ name = "concordutil"
 version = "1.0.0"
 dependencies = [
  "concorderror",
- "nioruntime_log",
  "socks",
  "tor-stream",
  "url 2.2.2",
@@ -1100,9 +1093,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.113"
+version = "0.2.114"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eef78b64d87775463c549fbd80e19249ef436ea3bf1de2a1eb7e717ec7fab1e9"
+checksum = "b0005d08a8f7b65fb8073cb697aa0b12b631ed251ce73d862ce50eeb52ce3b50"
 
 [[package]]
 name = "libgit2-sys"
@@ -1139,7 +1132,7 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#d68d1eeafe22dd986462118bc45fb0a7c6cc6f4a"
+source = "git+http://github.com/37miners/rustlet?branch=master#2210053e02e02d7ee7f44d3f47b21df7631504da"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -1147,6 +1140,7 @@ dependencies = [
  "nioruntime_evh",
  "nioruntime_http",
  "nioruntime_log",
+ "nioruntime_tor",
  "nioruntime_util",
  "querystring",
  "rand 0.8.4",
@@ -2011,18 +2005,18 @@ checksum = "388a1df253eca08550bef6c72392cfe7c30914bf41df5269b68cbd6ff8f570a3"
 
 [[package]]
 name = "serde"
-version = "1.0.135"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2cf9235533494ea2ddcdb794665461814781c53f19d87b76e571a1c35acbad2b"
+checksum = "ce31e24b01e1e524df96f1c2fdd054405f8d7376249a5110886fb4b658484789"
 dependencies = [
  "serde_derive",
 ]
 
 [[package]]
 name = "serde_derive"
-version = "1.0.135"
+version = "1.0.136"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8dcde03d87d4c973c04be249e7d8f0b35db1c848c487bd43032808e59dd8328d"
+checksum = "08597e7152fcd306f41838ed3e37be9eaeed2b61c42e2117266a554fab4662f9"
 dependencies = [
  "proc-macro2",
  "quote",

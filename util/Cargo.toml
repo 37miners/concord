@@ -11,9 +11,6 @@ edition = "2018"
 
 [dependencies]
 
-nioruntime_log = { git = "http://github.com/37miners/nioruntime", branch = "master" }
-#nioruntime_log = { path = "../../nioruntime/log" }
-
 concorderror = { path = "../error" }
 tor-stream = "0.3.0"
 socks = "0.3.2"

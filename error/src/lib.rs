@@ -15,3 +15,5 @@
 mod error;
 
 pub use crate::error::{Error, ErrorKind};
+pub use librustlet;
+pub use librustlet::nioruntime_tor;

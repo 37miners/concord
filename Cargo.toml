@@ -5,8 +5,6 @@ edition = "2018"
 build = "src/build/build.rs"
 
 [dependencies]
-librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
-#librustlet = { path = "../rustlet/rustlet" }
 
 concordlib = { path = "./concord" }
 concorderror = { path = "./error" }

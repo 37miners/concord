@@ -13,3 +13,6 @@
 // limitations under the License.
 
 pub mod torclient;
+
+pub use concorderror::librustlet;
+pub use librustlet::nioruntime_log;
