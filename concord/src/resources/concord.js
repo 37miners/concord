@@ -4,6 +4,7 @@ var cur_server = '';
 var cur_channel = '';
 var cur_pubkey = '';
 var servers = '';
+var message_count = 0;
 
 var stopEnabled = false;
 var iconId = '';
@@ -210,7 +211,7 @@ function load_invite_list() {
 			invite_div.appendChild(document.createTextNode(invite.url));
 			var delete_button = document.createElement('img');
 			delete_button.src = '/images/delete.png';
-			delete_button.className = 'delete_invite';
+			delete_button.className = 'delete_invite noselect';
 			delete_button.onclick = function() {
 				var req = new XMLHttpRequest();
 				req.addEventListener("load", function() {
@@ -299,9 +300,14 @@ function add_message_to_chat_area(
 	timestamp,
 	user_name,
 	user_bio,
+	odd
 ) {
 	var div = document.createElement('div');
-	div.className = 'message_div';
+	if (odd) {
+		div.className = 'message_div_odd noselect';
+	} else {
+		div.className = 'message_div_even noselect';
+	}
 	var img = document.createElement('img');
 	var rand = makeid(8);
 	img.src = '/get_profile_image?server_id=' + server_id +
@@ -309,23 +315,23 @@ function add_message_to_chat_area(
 		'&user_pubkey=' + user_pubkey_urlencoded +
 		'&rand=' + rand;
 	img.title = user_bio;
-	img.className = 'mini_profile_avatar';
+	img.className = 'mini_profile_avatar noselect';
 	div.appendChild(img);
 	var date = new Date();
 	date.setTime(timestamp);
 	var user_name_span = document.createElement('span');
-	user_name_span.className = 'message_user_name_span';
+	user_name_span.className = 'message_user_name_span noselect';
 	user_name_span.appendChild(document.createTextNode(user_name + '> '));
 	var m = document.createTextNode(
 		message_text
 	);
 	var text_span = document.createElement('span');
-	text_span.className = 'message_text_span';
+	text_span.className = 'message_text_span noselect';
 	text_span.appendChild(user_name_span);
 	text_span.appendChild(m);
 
 	var date_span = document.createElement('span');
-	date_span.className = 'message_date_span';
+	date_span.className = 'message_date_span noselect';
 	var d = document.createTextNode(
 		date.toLocaleString()
 	);
@@ -335,7 +341,7 @@ function add_message_to_chat_area(
 	div.appendChild(text_span);
 	chat_area.appendChild(div);
 	var hr = document.createElement('hr');
-	hr.className = 'message_hr';
+	hr.className = 'message_hr noselect';
 	chat_area.appendChild(hr);
 }
 
@@ -365,7 +371,7 @@ function load_server_bar() {
 				var img = document.createElement('img');
 				var rand = makeid(8);
 				img.src = '/get_server_icon?server_id=' + server.id + '&server_pubkey='+server_pubkey + '&r=' + rand;
-				img.className = 'server_icon';
+				img.className = 'server_icon noselect';
 				var sname = decodeURIComponent(server.name);
 				img.title = sname;
 				img.id = server.id;
@@ -382,6 +388,7 @@ function load_server_bar() {
 					req.addEventListener("load", function() {
 						load_members(server.id, server_pubkey);
 						var server_name_div = document.getElementById('server_name');
+						server_name_div.className = 'server_name_div noselect';
 						server_name_div.innerHTML = sname;
 						var add_channel = document.createElement('img');
 						add_channel.onclick = function(evt) {
@@ -404,7 +411,7 @@ function load_server_bar() {
 								var chat_area = document.getElementById('chat_area');
 								var loading = document.createElement('img');
 								loading.src = '/images/Loading_icon.gif';
-								loading.className = 'loading';
+								loading.className = 'loading noselect';
 								chat_area.innerHTML = '';
 								chat_area.appendChild(loading);
 
@@ -424,7 +431,9 @@ function load_server_bar() {
 												message.timestamp,
 												message.user_name,
 												message.user_bio,
+												message_count % 2 == 0,
 											);
+											message_count++;
 										});
 										chat_area.scrollTop = chat_area.scrollHeight;
 									} catch(ex) {
@@ -441,11 +450,13 @@ function load_server_bar() {
 							}
 							channel_link.appendChild(channel_text);
 							channel_div.appendChild(channel_link);
-							channel_div.className = 'channel_div';
+							channel_div.className = 'channel_div noselect';
 							channel_list.appendChild(channel_div);
-							var delete_button = document.createElement('img');
-							delete_button.src = '/images/delete.png';
-							delete_button.className = 'delete_channel';
+
+							var delete_button = document.createElement('div');
+							delete_button.innerHTML = '<svg width="16" height="19" viewBox="0 0 16 19" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M11.681 2.41458C11.7194 2.55015 11.874 2.66 12.0286 2.66H15.0175C15.5603 2.66 16 3.05682 16 3.54666C16 3.95141 15.6996 4.29181 15.2906 4.39869L14.7774 17.1327C14.7358 18.1687 13.7807 19 12.6294 19H3.37062C2.22147 19 1.26424 18.1678 1.22258 17.1327L0.709425 4.39869C0.300438 4.29181 0 3.95141 0 3.54666C0 3.05682 0.439696 2.66 0.982467 2.66H3.97141C4.12602 2.66 4.28173 2.54817 4.31901 2.41458L4.52844 1.65557C4.78831 0.717461 5.80587 0 6.87606 0H9.12388C10.1952 0 11.2116 0.717436 11.4715 1.65557L11.681 2.41458ZM7.29835 6.71337V15.3267C7.29835 15.676 7.61305 15.96 8.00011 15.96C8.38718 15.96 8.70187 15.676 8.70187 15.3267V6.71337C8.70187 6.36405 8.38718 6.08004 8.00011 6.08004C7.61305 6.08004 7.29835 6.36405 7.29835 6.71337ZM4.07025 6.73217L4.35095 15.3455C4.36301 15.6948 4.68648 15.9699 5.07354 15.96C5.46061 15.9491 5.76542 15.6572 5.75448 15.3079L5.47377 6.69458C5.46171 6.34526 5.13824 6.07016 4.75118 6.08004C4.36412 6.09093 4.0593 6.38285 4.07025 6.73217ZM10.5265 6.69457L10.2458 15.3078C10.2348 15.6572 10.5396 15.9491 10.9267 15.96C11.3137 15.9699 11.6372 15.6948 11.6493 15.3454L11.93 6.73216C11.9409 6.38284 11.6361 6.09093 11.249 6.08003C10.862 6.07014 10.5385 6.34525 10.5265 6.69457ZM6.41553 2.66H9.58441C9.66117 2.66 9.70941 2.60558 9.69077 2.53829L9.56467 2.08505C9.5241 1.93661 9.29274 1.77332 9.12388 1.77332H6.87606C6.7072 1.77332 6.47583 1.93661 6.43527 2.08505L6.30917 2.53829C6.29053 2.60657 6.33877 2.66 6.41553 2.66H6.41553Z" fill="#EB5757"/></svg>';
+							delete_button.title = 'delete channel';
+							delete_button.className = 'delete_channel noselect';
 							delete_button.onclick = function(evt) {
 								var req = new XMLHttpRequest();
 								req.addEventListener("load", function() {
@@ -497,11 +508,11 @@ function add_server() {
 
 function init_concord() {
 	var div1 = document.createElement('div');
-	div1.className = 'serverbar';
+	div1.className = 'serverbar noselect';
 	document.body.appendChild(div1);
 	var plusdiv = document.createElement('div');
 	var plus = document.createElement('div');
-	plus.className = 'plusicon';
+	plus.className = 'plusicon noselect';
 	plus.title = 'Add A Server';
 	plus.alt = 'Add A Server';
 	plus.onclick = function() {
@@ -522,7 +533,7 @@ function init_concord() {
 	var br = document.createElement('br');
 	div1.appendChild(br);
 	var serverbartext = document.createElement('div');
-	serverbartext.className = 'serverbartext';
+	serverbartext.className = 'serverbartext noselect';
 	serverbartext.id = 'serverbartext';
 	div1.appendChild(serverbartext);
 
@@ -531,17 +542,17 @@ function init_concord() {
 	server_name.id = 'server_name';
 	server_name.innerHTML = '';
 	div2.appendChild(server_name);
-        div2.className = 'channelbar';
+        div2.className = 'channelbar noselect';
 
 	var mini_profile = document.createElement('div');
 	var mini_profile_loading_text = document.createElement('div');
-	mini_profile_loading_text.className = 'mini_profile_loading_text';
+	mini_profile_loading_text.className = 'mini_profile_loading_text noselect';
 	mini_profile_loading_text.appendChild(document.createTextNode('Mini Profile Loading...'));
 	mini_profile.appendChild(mini_profile_loading_text);
 	mini_profile.id = 'mini_profile';
-	mini_profile.className = 'mini_profile';
+	mini_profile.className = 'mini_profile noselect';
 	var mini_profile_loading = document.createElement('div');
-	mini_profile_loading.className = 'loader';
+	mini_profile_loading.className = 'loader noselect';
 	mini_profile.appendChild(mini_profile_loading);
 	div2.appendChild(mini_profile);
 
@@ -549,18 +560,18 @@ function init_concord() {
 
 	var channel_list = document.createElement('div');
 	channel_list.id = 'channel_list';
-	channel_list.className = 'channel_list';
+	channel_list.className = 'channel_list noselect';
 	div2.appendChild(channel_list);
         document.body.appendChild(div2);
 
         var div3 = document.createElement('div');
         div3.innerHTML = '&nbsp;';
-        div3.className = 'messagebar';
+        div3.className = 'messagebar noselect';
 
 	var input_div = document.createElement('div');
 	var textarea = document.createElement('input');
 	textarea.type = 'text';
-	textarea.className = 'message_input';
+	textarea.className = 'message_input noselect';
 
 	textarea.addEventListener('keydown', function(evt) {
 		if (evt.keyCode == 13) {
@@ -586,18 +597,18 @@ function init_concord() {
 	
 	var chat_area = document.createElement('div');
 	chat_area.innerHTML = '';
-	chat_area.className = 'chat_area';
+	chat_area.className = 'chat_area noselect';
 	chat_area.id = 'chat_area';
 	div3.appendChild(input_div);
 	input_div.appendChild(textarea);
 	input_div.appendChild(chat_area);
-	input_div.className = 'input_div';
+	input_div.className = 'input_div noselect';
 
         document.body.appendChild(div3);
 
         var div4 = document.createElement('div');
         div4.innerHTML = '';
-        div4.className = 'statusbar';
+        div4.className = 'statusbar noselect';
 	div4.id = 'statusbar';
         document.body.appendChild(div4);
 
@@ -617,13 +628,13 @@ function load_mini_profile() {
 			'/get_profile_image?server_id=AAAAAAAAAAA%3D&user_pubkey=' + pubkey +
 			'&server_pubkey=' + pubkey +
 			'&rand=' + rand;
-		img.className = 'mini_profile_avatar';
+		img.className = 'mini_profile_avatar noselect';
 		var text_div = document.createElement('div');
 		text_div.innerHTML = user_name;
-		text_div.className = 'mini_profile_text_div';
+		text_div.className = 'mini_profile_text_div noselect';
 		var gear = document.createElement('img');
 		gear.src = '/images/gear.png';
-		gear.className = 'gearimg';
+		gear.className = 'gearimg noselect';
 
 		var mini_profile =  document.getElementById('mini_profile');
 		mini_profile.onclick = function(evt) {
@@ -680,7 +691,9 @@ function process_response(response) {
 					event.timestamp,
 					event.user_name,
 					event.user_bio,
+					message_count % 2 == 0,
 				);
+				message_count++;
 				chat_area.scrollTop = chat_area.scrollHeight;
 			}
 		} else if (event.etype == 3) { // pong complete
@@ -748,7 +761,7 @@ function load_members(sname, spubkey) {
                 status_bar.innerHTML = '';
                 members.forEach(function(member) {
 			var member_div = document.createElement('div');
-			member_div.className = 'member_div';
+			member_div.className = 'member_div noselect';
 			var rand = makeid(8);
 			var img = document.createElement('img');
 			img.src = '/get_profile_image?server_id=' + sname +
@@ -756,10 +769,10 @@ function load_members(sname, spubkey) {
 				'&user_pubkey=' + member.user_pubkey_urlencoded +
 				'&rand=' + rand;
 			img.title = member.user_bio;
-			img.className = 'member_avatar';
+			img.className = 'member_avatar noselect';
 			member_div.appendChild(img);
 			var user_name_span = document.createElement('span');
-			user_name_span.className = 'user_name_span';
+			user_name_span.className = 'user_name_span noselect';
 			var user_name_str = member.user_name;
 			user_name_str = member.user_name;
 			if (member.user_name == "") {
@@ -774,7 +787,7 @@ function load_members(sname, spubkey) {
 				var crown = document.createElement('img');
 				crown.title = "Owner";
 				crown.src = '/images/crown.png';
-				crown.className = 'crown';
+				crown.className = 'crown noselect';
 				user_name_span.appendChild(crown);
 			}
 			member_div.appendChild(user_name_span);
