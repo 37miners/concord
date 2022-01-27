@@ -460,6 +460,10 @@ a.button4:hover{
 	background: #FFFFFF;
 }
 
+.add_channel_button:hover {
+	background: #C0C0C0;
+}
+
 .channel_hr {
         border-top: 1px dashed white;
 }
