@@ -1093,9 +1093,9 @@ checksum = "830d08ce1d1d941e6b30645f1a0eb5643013d835ce3779a5fc208261dbe10f55"
 
 [[package]]
 name = "libc"
-version = "0.2.114"
+version = "0.2.115"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0005d08a8f7b65fb8073cb697aa0b12b631ed251ce73d862ce50eeb52ce3b50"
+checksum = "0a8d982fa7a96a000f6ec4cfe966de9703eccde29750df2bb8949da91b0e818d"
 
 [[package]]
 name = "libgit2-sys"
@@ -1132,7 +1132,7 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#2210053e02e02d7ee7f44d3f47b21df7631504da"
+source = "git+http://github.com/37miners/rustlet?branch=master#3b7bc308e90c01226f9272e71342f153a4c9c00c"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -1266,7 +1266,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_err"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "backtrace",
  "base64 0.13.0",
@@ -1287,7 +1287,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_evh"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "backtrace",
  "errno",
@@ -1311,7 +1311,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_http"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "backtrace",
  "bytefmt",
@@ -1334,7 +1334,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_log"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "chrono",
  "failure",
@@ -1350,7 +1350,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_tor"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "backtrace",
  "chrono",
@@ -1385,7 +1385,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_util"
 version = "0.0.2-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#fd94639b680a0bb6e5aabaa387376a976e3b3425"
+source = "git+http://github.com/37miners/nioruntime?branch=master#18f6b769a8a592753ebe77bcac8b783e84d83882"
 dependencies = [
  "backtrace",
  "byteorder",
@@ -2565,9 +2565,9 @@ checksum = "e66366e18dc58b46801afbf2ca7661a9f59cc8c5962c29892b6039b4f86fa992"
 
 [[package]]
 name = "zeroize"
-version = "1.5.0"
+version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc222aec311c323c717f56060324f32b82da1ce1dd81d9a09aa6a9030bfe08db"
+checksum = "4062c749be08d90be727e9c5895371c3a0e49b90ba2b9592dc7afda95cc2b719"
 dependencies = [
  "zeroize_derive",
 ]
