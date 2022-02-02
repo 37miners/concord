@@ -128,6 +128,19 @@ fn init_webroot(config: &ConcordConfig) {
 			}
 		}
 
+		let bytes = include_bytes!("resources/ws.html");
+		match create_file_from_bytes("ws.html".to_string(), config.root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
 		let bytes = include_bytes!("resources/index.html");
 		match create_file_from_bytes("index.html".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
