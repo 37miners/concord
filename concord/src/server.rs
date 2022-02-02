@@ -18,13 +18,16 @@ use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::ChannelKey;
 use concorddata::concord::DSContext;
-use concorddata::concord::ServerInfo;
+use concorddata::concord::ServerInfo as DataServerInfo;
 use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER};
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
+
+use crate::send;
+use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, Pubkey, ServerInfo};
 
 use std::fs::File;
 use std::io::Read;
@@ -39,6 +42,41 @@ struct ServerInfoMin {
 	name: String,
 	server_pubkey: String,
 	id: String,
+}
+
+pub fn get_servers(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+) -> Result<bool, ConcordError> {
+	match &conn_info.pubkey {
+		None => {
+			return Ok(true);
+		}
+		Some(pubkey) => {
+			if pubkey.to_bytes() != pubkey!() {
+				return Ok(true);
+			}
+		}
+	}
+
+	let mut servers = vec![];
+	let db_servers = ds_context.get_servers()?;
+	for db_server in db_servers {
+		servers.push(ServerInfo {
+			name: db_server.name.into(),
+			description: "none".into(),
+			server_id: db_server.server_id.into(),
+			server_pubkey: Pubkey::from_bytes(db_server.pubkey),
+		});
+	}
+	let event = Event {
+		event_type: EventType::GetServersResponse,
+		get_servers_response: Some(GetServersResponse { servers }).into(),
+		..Default::default()
+	};
+	send!(conn_info.handle, event);
+
+	Ok(false)
 }
 
 pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
@@ -87,7 +125,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
 					let pubkey = pubkey!();
-					let server_info = ServerInfo {
+					let server_info = DataServerInfo {
 						pubkey,
 						name: name.clone(),
 						icon: buf,
@@ -341,7 +379,7 @@ pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 					let mut buf = vec![0 as u8; size];
 					f.read(&mut buf)?;
 					let pubkey = pubkey!();
-					let server_info = ServerInfo {
+					let server_info = DataServerInfo {
 						pubkey,
 						name: name.clone(),
 						icon: buf,

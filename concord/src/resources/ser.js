@@ -242,9 +242,21 @@ class Signature {
 	}
 }
 
-const EVENT_TYPE_AUTH      = 0;
-const EVENT_TYPE_CHALLENGE = 1;
-const EVENT_TYPE_AUTH_RESP = 2;
+// note that these must match with the server codes
+const EVENT_TYPE_AUTH              = 0;
+const EVENT_TYPE_CHALLENGE         = 1;
+const EVENT_TYPE_AUTH_RESP         = 2;
+const EVENT_TYPE_GET_SERVERS_EVENT = 3;
+
+class GetServersEvent {
+	constructor() {
+	}
+
+	serialize(get_servers_event) {
+		var ret = new ArrayBuffer(0);
+		return ret;
+	}
+}
 
 class ChallengeEvent {
 	constructor(challenge) {
@@ -335,6 +347,7 @@ class Event {
 	constructor(event_type, event_data) {
 		if(event_type !== undefined) {
 			this.version = EVENT_VERSION;
+			this.timestamp = Date.now();
 			this.event_type = event_type;
 			if(this.event_type == EVENT_TYPE_AUTH) {
 				this.auth_event = new SerOption(event_data);
@@ -342,65 +355,65 @@ class Event {
 				this.challenge_event = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_AUTH_RESP) {
 				this.auth_resp = new SerOption(event_data);
-			} else {
+			} else if(this.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
+				this.get_servers_event = new SerOption(new GetServersEvent());
+			}else {
 				throw "Unknown event type = " + event_type;
 			}
 		}
 	}
 
 	serialize(event) {
+		var x;
 		if(event.event_type == EVENT_TYPE_AUTH) {
-			var x = event.auth_event.serialize(event.auth_event, AuthEvent.prototype);
-			var y = new ArrayBuffer(x.length + 2);
-			var y = new Uint8Array(y);
-			y[0] = event.version;
-			y[1] = EVENT_TYPE_AUTH;
-			for(var i=0; i<x.length; i++) {
-				y[i+2] = x[i];
-			}
-			return y;
+			x = event.auth_event.serialize(event.auth_event, AuthEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
-			var x = event.challenge_event.serialize(event.challenge_event, ChallengeEvent.prototype);
-                        var y = new ArrayBuffer(x.length + 2);
-			var y = new Uint8Array(y);
-			y[0] = event.version;
-                        y[1] = EVENT_TYPE_CHALLENGE;
-                        for(var i=0; i<x.length; i++) {
-                                y[i+2] = x[i];
-                        }
-                        return y;
+			x = event.challenge_event.serialize(event.challenge_event, ChallengeEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
-                        var x = event.auth_resp.serialize(event.auth_resp, AuthResp.prototype);
-                        var y = new ArrayBuffer(x.length + 2);
-                        var y = new Uint8Array(y);
-                        y[0] = event.version;
-                        y[1] = EVENT_TYPE_AUTH_RESP;
-                        for(var i=0; i<x.length; i++) {
-                                y[i+2] = x[i];
-                        }
-                        return y;
+			x = event.auth_resp.serialize(event.auth_resp, AuthResp.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
+			x = new Uint8Array(1);
+			x[0] = 1;
 		} else {
 			throw "Unknown event type = " + event.event_type;
 		}
+
+		var ret = new ArrayBuffer(x.length + 18);
+		var ret = new Uint8Array(ret);
+		ret[0] = event.version;
+		var t = BigInt.prototype.serialize(event.timestamp);
+		for(var i=0; i<16; i++) {
+			ret[i+1] = t[i];
+		}
+		ret[17] = event.event_type;
+		for(var i=0; i<x.length; i++) {
+			ret[i+18] = x[i];
+		}
+		return ret;
 
 	}
 
 	deserialize(buffer) {
 		var event = new Event();
 		event.version = buffer[0];
-		event.event_type = buffer[1];
+		event.timestamp = BigInt.prototype.deserialize(buffer, 1);
+		event.event_type = buffer[17];
 		if(event.event_type == EVENT_TYPE_AUTH) {
 			event.auth_event = SerOption
 				.prototype
-				.deserialize(buffer, 2, AuthEvent.prototype);
+				.deserialize(buffer, 18, AuthEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
 			event.challenge_event = SerOption
 				.prototype
-				.deserialize(buffer, 2, ChallengeEvent.prototype);
+				.deserialize(buffer, 18, ChallengeEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
 			event.auth_resp = SerOption
 				.prototype
-				.deserialize(buffer, 2, AuthResp.prototype);
+				.deserialize(buffer, 18, AuthResp.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
+			event.get_servers = SerOption
+				.prototype
+				.deserialize(buffer, 18, GetServers.prototype);
 		} else {
 			throw "Unknown event type = " + event.event_type;
 		}
@@ -411,9 +424,7 @@ class Event {
 
 
 function array_buffer_to_event(buffer) {
-	var event = new Event();
-	var event2 = event.deserialize(buffer);
-	return event2;
+	return Event.prototype.deserialize(buffer);
 }
 
 function event_to_array_buffer(event) {

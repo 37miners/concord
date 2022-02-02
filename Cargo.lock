@@ -1162,7 +1162,7 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#5b2a4283ec4a1a9abb0eb1054467f61744f0c362"
+source = "git+http://github.com/37miners/rustlet?branch=master#0c77808024c3bea659f7a7cd4e871525a94a1861"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -2660,9 +2660,9 @@ checksum = "e66366e18dc58b46801afbf2ca7661a9f59cc8c5962c29892b6039b4f86fa992"
 
 [[package]]
 name = "zeroize"
-version = "1.5.1"
+version = "1.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4062c749be08d90be727e9c5895371c3a0e49b90ba2b9592dc7afda95cc2b719"
+checksum = "7c88870063c39ee00ec285a2f8d6a966e5b6fb2becc4e8dac77ed0d370ed6006"
 dependencies = [
  "zeroize_derive",
 ]

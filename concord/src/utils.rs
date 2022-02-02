@@ -13,12 +13,11 @@
 // limitations under the License.
 
 use crate::types::Pubkey;
-use concorderror::Error;
+use crate::types::ServerId;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
-use std::convert::TryInto;
 
 debug!();
 
@@ -77,33 +76,6 @@ pub fn extract_user_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
 		}
 	};
 	Ok(user_pubkey)
-}
-
-pub struct ServerId {
-	data: [u8; 8],
-}
-
-impl ServerId {
-	pub fn _from_bytes(data: [u8; 8]) -> Self {
-		Self { data }
-	}
-
-	pub fn to_bytes(&self) -> [u8; 8] {
-		self.data
-	}
-
-	pub fn from_urlencoding(data: String) -> Result<Self, Error> {
-		let data = urlencoding::decode(&data)?.to_string();
-		let data = base64::decode(data)?;
-		let data = data.as_slice().try_into()?;
-		Ok(Self { data })
-	}
-
-	pub fn to_urlencoding(&self) -> Result<String, Error> {
-		let data = base64::encode(self.data);
-		let data = urlencoding::encode(&data).to_string();
-		Ok(data)
-	}
 }
 
 #[macro_export]

@@ -99,6 +99,68 @@ impl<T> From<Option<T>> for SerOption<T> {
 	}
 }
 
+#[derive(Debug)]
+pub struct ServerId {
+	data: [u8; 8],
+}
+
+impl ServerId {
+	pub fn _from_bytes(data: [u8; 8]) -> Self {
+		Self { data }
+	}
+
+	pub fn to_bytes(&self) -> [u8; 8] {
+		self.data
+	}
+
+	pub fn from_urlencoding(data: String) -> Result<Self, Error> {
+		let data = urlencoding::decode(&data)?.to_string();
+		let data = base64::decode(data)?;
+		let data = data.as_slice().try_into()?;
+		Ok(Self { data })
+	}
+
+	pub fn to_urlencoding(&self) -> Result<String, Error> {
+		let data = base64::encode(self.data);
+		let data = urlencoding::encode(&data).to_string();
+		Ok(data)
+	}
+}
+
+impl Writeable for ServerId {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..8 {
+			writer.write_u8(self.data[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ServerId {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut data = [0u8; 8];
+
+		for i in 0..8 {
+			data[i] = reader.read_u8()?;
+		}
+
+		Ok(Self { data })
+	}
+}
+
+impl From<u64> for ServerId {
+	fn from(data: u64) -> Self {
+		let data = data.to_be_bytes();
+		Self { data }
+	}
+}
+
+impl From<[u8; 8]> for ServerId {
+	fn from(data: [u8; 8]) -> Self {
+		Self { data }
+	}
+}
+
 #[derive(Debug, Clone)]
 pub struct Pubkey {
 	data: [u8; 32],
@@ -165,6 +227,21 @@ pub struct ConnectionInfo {
 }
 
 #[derive(Debug)]
+pub struct GetServersEvent {}
+
+impl Writeable for GetServersEvent {
+	fn write<W: Writer>(&self, _: &mut W) -> Result<(), Error> {
+		Ok(())
+	}
+}
+
+impl Readable for GetServersEvent {
+	fn read<R: Reader>(_: &mut R) -> Result<Self, Error> {
+		Ok(Self {})
+	}
+}
+
+#[derive(Debug)]
 pub struct ChallengeEvent {
 	pub challenge: u128,
 }
@@ -219,6 +296,19 @@ impl Readable for AuthEvent {
 #[derive(Debug)]
 pub struct SerString {
 	pub data: String,
+}
+
+impl From<String> for SerString {
+	fn from(data: String) -> Self {
+		Self { data }
+	}
+}
+
+impl From<&str> for SerString {
+	fn from(data: &str) -> Self {
+		let data = data.to_string();
+		Self { data }
+	}
 }
 
 impl Writeable for SerString {
@@ -277,12 +367,73 @@ impl Readable for AuthResponse {
 	}
 }
 
+#[derive(Debug)]
+pub struct ServerInfo {
+	pub name: SerString,
+	pub description: SerString,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+}
+
+impl Writeable for ServerInfo {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.name, writer)?;
+		Writeable::write(&self.description, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ServerInfo {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let name = SerString::read(reader)?;
+		let description = SerString::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		Ok(Self {
+			name,
+			description,
+			server_id,
+			server_pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct GetServersResponse {
+	pub servers: Vec<ServerInfo>,
+}
+
+impl Writeable for GetServersResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u64(self.servers.len().try_into().unwrap_or(0))?;
+		for server in &self.servers {
+			Writeable::write(server, writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for GetServersResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut servers = vec![];
+		let len = reader.read_u64()?;
+		for _ in 0..len {
+			servers.push(ServerInfo::read(reader)?);
+		}
+		Ok(Self { servers })
+	}
+}
+
 #[derive(Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Clone)]
 #[repr(u8)]
 pub enum EventType {
 	AuthEvent,
 	ChallengeEvent,
 	AuthResponse,
+	GetServersEvent,
+	GetServersResponse,
 }
 
 #[derive(Debug)]
@@ -291,7 +442,10 @@ pub struct Event {
 	pub auth_event: SerOption<AuthEvent>,
 	pub challenge_event: SerOption<ChallengeEvent>,
 	pub auth_response: SerOption<AuthResponse>,
+	pub get_servers_event: SerOption<GetServersEvent>,
+	pub get_servers_response: SerOption<GetServersResponse>,
 	pub version: u8,
+	pub timestamp: u128,
 }
 
 impl Default for Event {
@@ -301,7 +455,13 @@ impl Default for Event {
 			auth_event: None.into(),
 			auth_response: None.into(),
 			challenge_event: None.into(),
+			get_servers_event: None.into(),
+			get_servers_response: None.into(),
 			version: PROTOCOL_VERSION,
+			timestamp: std::time::SystemTime::now()
+				.duration_since(std::time::UNIX_EPOCH)
+				.unwrap_or(std::time::Duration::from_millis(0))
+				.as_millis(),
 		}
 	}
 }
@@ -309,11 +469,14 @@ impl Default for Event {
 impl Writeable for Event {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(self.version)?;
+		writer.write_u128(self.timestamp)?;
 		writer.write_u8(self.event_type.clone().into())?;
 		match &self.event_type {
 			EventType::AuthEvent => Writeable::write(&self.auth_event, writer),
 			EventType::ChallengeEvent => Writeable::write(&self.challenge_event, writer),
 			EventType::AuthResponse => Writeable::write(&self.auth_response, writer),
+			EventType::GetServersEvent => Writeable::write(&self.get_servers_event, writer),
+			EventType::GetServersResponse => Writeable::write(&self.get_servers_response, writer),
 		}
 	}
 }
@@ -323,8 +486,11 @@ impl Readable for Event {
 		let mut auth_event = None.into();
 		let mut challenge_event = None.into();
 		let mut auth_response = None.into();
+		let mut get_servers_event = None.into();
+		let mut get_servers_response = None.into();
 
 		let version = reader.read_u8()?;
+		let timestamp = reader.read_u128()?;
 
 		let event_type: EventType = EventType::try_from(reader.read_u8()?).map_err(|e| {
 			let error: Error =
@@ -337,6 +503,8 @@ impl Readable for Event {
 			EventType::AuthEvent => auth_event = SerOption::read(reader)?,
 			EventType::ChallengeEvent => challenge_event = SerOption::read(reader)?,
 			EventType::AuthResponse => auth_response = SerOption::read(reader)?,
+			EventType::GetServersEvent => get_servers_event = SerOption::read(reader)?,
+			EventType::GetServersResponse => get_servers_response = SerOption::read(reader)?,
 		};
 
 		Ok(Self {
@@ -345,6 +513,9 @@ impl Readable for Event {
 			challenge_event,
 			auth_event,
 			auth_response,
+			get_servers_event,
+			get_servers_response,
+			timestamp,
 		})
 	}
 }

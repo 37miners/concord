@@ -14,6 +14,7 @@
 
 use crate::auth::ws_auth;
 use crate::context::ConcordContext;
+use crate::server::get_servers;
 use crate::types::*;
 use crate::{bin_event, close, send, try2};
 use concordconfig::ConcordConfig;
@@ -29,11 +30,20 @@ use std::sync::{Arc, RwLock};
 debug!(); // set log level to debug
 
 fn process_open(
-	mut handle: ConnData,
-	conn_info: &mut HashMap<u128, ConnectionInfo>,
+	handle: ConnData,
+	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
 ) -> Result<(), Error> {
 	let id = handle.get_connection_id();
 	debug!("websocket open: {}", id);
+
+	let event = Event {
+		event_type: EventType::ChallengeEvent,
+		challenge_event: Some(ChallengeEvent { challenge: id }).into(),
+		..Default::default()
+	};
+	send!(handle, event);
+
+	let mut conn_info = nioruntime_util::lockw!(conn_info)?;
 
 	conn_info.insert(
 		id,
@@ -43,19 +53,12 @@ fn process_open(
 		},
 	);
 
-	let event = Event {
-		event_type: EventType::ChallengeEvent,
-		challenge_event: Some(ChallengeEvent { challenge: id }).into(),
-		..Default::default()
-	};
-	send!(handle, event);
-
 	Ok(())
 }
 
 fn process_binary(
 	handle: ConnData,
-	conn_info: &mut HashMap<u128, ConnectionInfo>,
+	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
 	ds_context: &DSContext,
 ) -> Result<(), Error> {
 	let id = handle.get_connection_id();
@@ -73,21 +76,46 @@ fn process_binary(
 		_ => {
 			// for all other event types, we ensure that the user has
 			// a pubkey (meaning they've authenticated)
-			match conn_info.get(&id) {
-				Some(connection_info) => {
-					match &connection_info.pubkey {
-						Some(pubkey) => {
-							debug!("authed event on {}: {:?}, pubkey={:?}", id, event, pubkey);
-							// we know the user is authed, now process events
-						}
-						None => {
-							close!(handle, conn_info);
+
+			let close;
+			{
+				let conn_info = nioruntime_util::lockr!(conn_info)?;
+				close = match conn_info.get(&id) {
+					Some(connection_info) => {
+						match &connection_info.pubkey {
+							Some(pubkey) => {
+								debug!("authed event on {}: {:?}, pubkey={:?}", id, event, pubkey);
+								// we know the user is authed, now process events
+								match event.event_type {
+									EventType::GetServersEvent => {
+										try2!(
+											get_servers(connection_info, ds_context),
+											"get_servers error"
+										)
+									}
+									_ => {
+										debug!("unexpected event type. Closing conn = {}", id);
+										//close!(handle, conn_info);
+										true
+									}
+								}
+							}
+							None => {
+								//close!(handle, conn_info);
+								true
+							}
 						}
 					}
-				}
-				None => {
-					close!(handle, conn_info);
-				}
+					None => {
+						//close!(handle, conn_info);
+						true
+					}
+				};
+			}
+
+			if close {
+				let mut conn_info = nioruntime_util::lockw!(conn_info)?;
+				close!(handle, conn_info);
 			}
 		}
 	}
@@ -97,11 +125,12 @@ fn process_binary(
 
 fn process_close(
 	handle: ConnData,
-	conn_info: &mut HashMap<u128, ConnectionInfo>,
+	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
 ) -> Result<(), Error> {
 	let id = handle.get_connection_id();
-	conn_info.remove(&id);
 	debug!("close : {},", id);
+	let mut conn_info = nioruntime_util::lockw!(conn_info)?;
+	conn_info.remove(&id);
 	Ok(())
 }
 
@@ -111,17 +140,17 @@ pub fn init_ws(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), 
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 
 	socklet!("ws", {
-		let mut conn_info = nioruntime_util::lockw!(conn_info)?;
+		let conn_info = conn_info.clone();
 		let handle = handle!()?;
 		match event!()? {
 			Socklet::Open => {
-				process_open(handle, &mut conn_info)?;
+				process_open(handle, conn_info)?;
 			}
 			Socklet::Binary => {
-				process_binary(handle, &mut conn_info, &ds_context)?;
+				process_binary(handle, conn_info, &ds_context)?;
 			}
 			Socklet::Close => {
-				process_close(handle, &mut conn_info)?;
+				process_close(handle, conn_info)?;
 			}
 			_ => {}
 		}

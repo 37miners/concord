@@ -16,12 +16,11 @@ use crate::context::ConcordContext;
 use crate::types::ConnectionInfo;
 use crate::types::Pubkey;
 use crate::types::{AuthResponse, Event, EventType};
-use crate::{close, send, try2};
+use crate::{send, try2};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER, TOKEN_EXPIRATION};
 use concorderror::Error as ConcordError;
-use concorderror::ErrorKind as ConcordErrorKind;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
@@ -29,6 +28,7 @@ use nioruntime_log::*;
 use std::borrow::Cow::Borrowed;
 use std::collections::HashMap;
 use std::convert::TryInto;
+use std::sync::{Arc, RwLock};
 
 nioruntime_log::debug!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
@@ -45,30 +45,19 @@ struct ChallengeResponse {
 	challenge: String,
 }
 
-pub fn fail_auth(
-	message: &str,
+pub fn ws_auth(
 	handle: ConnData,
 	event: &Event,
-	conn_info: &mut HashMap<u128, ConnectionInfo>,
-) -> Result<(), ConcordError> {
-	close!(handle, conn_info);
-	warn!("ws_auth failure: {} by event: {:?}", message, event);
-	Ok(())
-}
-
-pub fn ws_auth(
-	mut handle: ConnData,
-	event: &Event,
 	ds_context: &DSContext,
-	conn_info: &mut HashMap<u128, ConnectionInfo>,
-) -> Result<(), ConcordError> {
+	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
+) -> Result<bool, ConcordError> {
 	let success;
 	let id = handle.get_connection_id();
-	let mut pubkey: Option<Pubkey> = None;
+	let pubkey: Option<Pubkey>;
 
 	if event.event_type != EventType::AuthEvent {
-		fail_auth("no auth event in ws_auth", handle, event, conn_info)?;
-		return Err(ConcordErrorKind::IllegalArgument("auth_event is none".to_string()).into());
+		warn!("invalid auth event. Type not AuthEvent: {:?}", event);
+		return Ok(true);
 	} else {
 		match &event.auth_event.0 {
 			Some(auth_event) => match &auth_event.token.0 {
@@ -91,7 +80,7 @@ pub fn ws_auth(
 							}
 						);
 					} else {
-						fail_auth("token not found", handle, event, conn_info)?;
+						return Ok(true);
 					}
 				}
 				None => {
@@ -100,22 +89,16 @@ pub fn ws_auth(
 					let spec_pubkey = match &auth_event.pubkey.0 {
 						Some(pubkey) => pubkey,
 						None => {
-							fail_auth("malformed event: no pubkey", handle, event, conn_info)?;
-							return Err(ConcordErrorKind::ArgumentMissingError(
-								"pubkey".to_string(),
-							)
-							.into());
+							warn!("malformed event: no pubkey: {:?}", event);
+							return Ok(true);
 						}
 					};
 
 					let signature = match &auth_event.signature.0 {
 						Some(signature) => signature,
 						None => {
-							fail_auth("malformed event: no signature", handle, event, conn_info)?;
-							return Err(ConcordErrorKind::ArgumentMissingError(
-								"signature".to_string(),
-							)
-							.into());
+							warn!("malformed event: no signature: {:?}", event);
+							return Ok(true);
 						}
 					};
 
@@ -125,37 +108,31 @@ pub fn ws_auth(
 					if success {
 						pubkey = Some((*spec_pubkey).clone());
 					} else {
-						fail_auth("signature was invalid", handle, event, conn_info)?;
-						return Err(ConcordErrorKind::InvalidSignatureError(
-							"signature was not valid".to_string(),
-						)
-						.into());
+						return Ok(true);
 					}
 				}
 			},
 			None => {
-				fail_auth("auth_event is none!", handle, event, conn_info)?;
-				return Err(ConcordErrorKind::ArgumentMissingError(
-					"auth_event is none".to_string(),
-				)
-				.into());
+				warn!("malformed event. No auth_event: {:?}", event);
+				return Ok(true);
 			}
 		}
 	}
 
 	if success {
+		let mut conn_info = nioruntime_util::lockw!(conn_info)?;
 		let info = conn_info.get_mut(&id);
 		match info {
 			Some(mut info) => {
 				info.pubkey = pubkey;
 			}
 			None => {
-				error!("unexpected none. No conn data for this connection");
+				// already closed.
 			}
 		}
 	}
 
-	Ok(())
+	Ok(!success)
 }
 
 // check whether a session is authorized. We assume that we are in the rustlet context
