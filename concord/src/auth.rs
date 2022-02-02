@@ -13,15 +13,21 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::types::ConnectionInfo;
+use crate::types::Pubkey;
+use crate::types::{AuthResponse, Event, EventType};
+use crate::{close, send, try2};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER, TOKEN_EXPIRATION};
 use concorderror::Error as ConcordError;
+use concorderror::ErrorKind as ConcordErrorKind;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
 use std::borrow::Cow::Borrowed;
+use std::collections::HashMap;
 use std::convert::TryInto;
 
 nioruntime_log::debug!(); // set log level to debug
@@ -37,6 +43,119 @@ struct TokenResponse {
 #[derive(Serialize)]
 struct ChallengeResponse {
 	challenge: String,
+}
+
+pub fn fail_auth(
+	message: &str,
+	handle: ConnData,
+	event: &Event,
+	conn_info: &mut HashMap<u128, ConnectionInfo>,
+) -> Result<(), ConcordError> {
+	close!(handle, conn_info);
+	warn!("ws_auth failure: {} by event: {:?}", message, event);
+	Ok(())
+}
+
+pub fn ws_auth(
+	mut handle: ConnData,
+	event: &Event,
+	ds_context: &DSContext,
+	conn_info: &mut HashMap<u128, ConnectionInfo>,
+) -> Result<(), ConcordError> {
+	let success;
+	let id = handle.get_connection_id();
+	let mut pubkey: Option<Pubkey> = None;
+
+	if event.event_type != EventType::AuthEvent {
+		fail_auth("no auth event in ws_auth", handle, event, conn_info)?;
+		return Err(ConcordErrorKind::IllegalArgument("auth_event is none".to_string()).into());
+	} else {
+		match &event.auth_event.0 {
+			Some(auth_event) => match &auth_event.token.0 {
+				Some(token) => {
+					let token = token.0;
+					success = ds_context.check_ws_auth_token(token)?;
+
+					if success {
+						pubkey = Some(Pubkey::from_bytes(pubkey!()));
+						send!(
+							handle,
+							Event {
+								event_type: EventType::AuthResponse,
+								auth_response: Some(AuthResponse {
+									redirect: None.into(),
+									success,
+								})
+								.into(),
+								..Default::default()
+							}
+						);
+					} else {
+						fail_auth("token not found", handle, event, conn_info)?;
+					}
+				}
+				None => {
+					let message = format!("{}", handle.get_connection_id());
+					let message = message.as_bytes();
+					let spec_pubkey = match &auth_event.pubkey.0 {
+						Some(pubkey) => pubkey,
+						None => {
+							fail_auth("malformed event: no pubkey", handle, event, conn_info)?;
+							return Err(ConcordErrorKind::ArgumentMissingError(
+								"pubkey".to_string(),
+							)
+							.into());
+						}
+					};
+
+					let signature = match &auth_event.signature.0 {
+						Some(signature) => signature,
+						None => {
+							fail_auth("malformed event: no signature", handle, event, conn_info)?;
+							return Err(ConcordErrorKind::ArgumentMissingError(
+								"signature".to_string(),
+							)
+							.into());
+						}
+					};
+
+					success =
+						verify!(message, spec_pubkey.to_bytes(), signature.0).unwrap_or(false);
+
+					if success {
+						pubkey = Some((*spec_pubkey).clone());
+					} else {
+						fail_auth("signature was invalid", handle, event, conn_info)?;
+						return Err(ConcordErrorKind::InvalidSignatureError(
+							"signature was not valid".to_string(),
+						)
+						.into());
+					}
+				}
+			},
+			None => {
+				fail_auth("auth_event is none!", handle, event, conn_info)?;
+				return Err(ConcordErrorKind::ArgumentMissingError(
+					"auth_event is none".to_string(),
+				)
+				.into());
+			}
+		}
+	}
+
+	if success {
+		let info = conn_info.get_mut(&id);
+		match info {
+			Some(mut info) => {
+				info.pubkey = pubkey;
+			}
+			None => {
+				error!("unexpected none. No conn data for this connection");
+			}
+		}
+	}
+
+	Ok(())
 }
 
 // check whether a session is authorized. We assume that we are in the rustlet context
@@ -96,6 +215,12 @@ pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<()
 
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 	let auth_token: u128 = rand::random(); // generate a 128 bit auth token.
+
+	// save the auth token for ws_auth
+	try2!(
+		ds_context.save_ws_auth_token(auth_token),
+		"save auth token error"
+	);
 
 	let mut config = get_config_multi!(MAIN_LOG)?;
 

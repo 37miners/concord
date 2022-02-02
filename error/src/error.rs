@@ -114,6 +114,9 @@ pub enum ErrorKind {
 	/// SerdeJsonError
 	#[fail(display = "SerdeJsonError: {}", _0)]
 	SerdeJsonError(String),
+	/// Serialization error
+	#[fail(display = "SerializationError: {}", _0)]
+	SerializationError(String),
 	/// TryFromIntError
 	#[fail(display = "TryFromIntError: {}", _0)]
 	TryFromIntError(String),
@@ -123,6 +126,15 @@ pub enum ErrorKind {
 	/// OnionV3Error
 	#[fail(display = "OnionV3Error: {}", _0)]
 	OnionV3Error(String),
+	/// ArgumentMissingError
+	#[fail(display = "Argument Missing Error: {}", _0)]
+	ArgumentMissingError(String),
+	/// Invalid SignatureError
+	#[fail(display = "Invalid Signature Error: {}", _0)]
+	InvalidSignatureError(String),
+	/// IllegalArgument
+	#[fail(display = "Illegal argument: {}", _0)]
+	IllegalArgument(String),
 }
 
 impl Display for Error {

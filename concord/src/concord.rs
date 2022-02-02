@@ -102,6 +102,19 @@ fn init_webroot(config: &ConcordConfig) {
 			}
 		}
 
+		let bytes = include_bytes!("resources/ser.js");
+		match create_file_from_bytes("js/ser.js".to_string(), config.root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
 		let bytes = include_bytes!("resources/concord.js");
 		match create_file_from_bytes("js/concord.js".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
@@ -389,6 +402,7 @@ pub fn concord_init(config: &ConcordConfig) -> Result<(), ConcordError> {
 	crate::invite::init_invite(config, context.clone())?; // invite module
 	crate::members::init_members(config, context.clone())?; // members module
 	crate::persistence::init_persistence(config, context.clone())?; // persistence module
+	crate::ws::init_ws(config, context.clone())?; // websocket module
 	crate::profile::init_profile(config, context.clone())?; // profile module
 
 	Ok(())

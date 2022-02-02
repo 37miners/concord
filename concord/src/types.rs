@@ -1,0 +1,350 @@
+// Copyright 2022 37 Miners, LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use crate::librustlet::nioruntime_tor::ov3::OnionV3Address;
+use crate::librustlet::ConnData;
+use concorddata::ser::{Readable, Reader, Writeable, Writer};
+use concorderror::{Error, ErrorKind};
+use concordutil::nioruntime_log;
+use nioruntime_log::*;
+use num_enum::{IntoPrimitive, TryFromPrimitive};
+use std::convert::TryFrom;
+use std::convert::TryInto;
+
+debug!();
+
+const PROTOCOL_VERSION: u8 = 1;
+
+#[derive(Debug)]
+pub struct U128(pub u128);
+
+impl Writeable for U128 {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.0)?;
+		Ok(())
+	}
+}
+
+impl Readable for U128 {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		Ok(Self(reader.read_u128()?))
+	}
+}
+
+#[derive(Debug)]
+pub struct Signature(pub [u8; 64]);
+
+impl Writeable for Signature {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..64 {
+			writer.write_u8(self.0[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for Signature {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut signature = [0u8; 64];
+		for i in 0..64 {
+			signature[i] = reader.read_u8()?;
+		}
+
+		Ok(Self(signature))
+	}
+}
+
+#[derive(Debug)]
+pub struct SerOption<T>(pub Option<T>);
+
+impl<T: Writeable> Writeable for SerOption<T> {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		match &self.0 {
+			Some(writeable) => {
+				debug!("ser option is some");
+				writer.write_u8(1)?;
+				Writeable::write(&writeable, writer)
+			}
+			None => {
+				debug!("ser option is none");
+				writer.write_u8(0)
+			}
+		}
+	}
+}
+
+impl<T: Readable> Readable for SerOption<T> {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		Ok(match reader.read_u8()? {
+			0 => Self(None),
+			_ => Self(Some(Readable::read(reader)?)),
+		})
+	}
+}
+
+impl<T> From<Option<T>> for SerOption<T> {
+	fn from(opt: Option<T>) -> SerOption<T> {
+		SerOption(opt)
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct Pubkey {
+	data: [u8; 32],
+}
+
+impl Pubkey {
+	pub fn from_bytes(data: [u8; 32]) -> Self {
+		Pubkey { data }
+	}
+
+	pub fn to_bytes(&self) -> [u8; 32] {
+		self.data
+	}
+
+	pub fn from_urlencoding(data: String) -> Result<Self, Error> {
+		let data = urlencoding::decode(&data)?.to_string();
+		let data = base64::decode(data)?;
+		let data = data.as_slice().try_into()?;
+		Ok(Self { data })
+	}
+
+	pub fn to_urlencoding(&self) -> Result<String, Error> {
+		let data = base64::encode(self.data);
+		let data = urlencoding::encode(&data).to_string();
+		Ok(data)
+	}
+
+	pub fn _from_onion(onion_address: &str) -> Result<Self, Error> {
+		let onion_address: OnionV3Address = onion_address.try_into()?;
+		Ok(Self {
+			data: *onion_address.as_bytes(),
+		})
+	}
+
+	pub fn to_onion(&self) -> Result<String, Error> {
+		Ok(OnionV3Address::from_bytes(self.data).to_string())
+	}
+}
+
+impl Writeable for Pubkey {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		for i in 0..32 {
+			writer.write_u8(self.data[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for Pubkey {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut data = [0u8; 32];
+
+		for i in 0..32 {
+			data[i] = reader.read_u8()?;
+		}
+
+		Ok(Self { data })
+	}
+}
+
+pub struct ConnectionInfo {
+	pub handle: ConnData,
+	pub pubkey: Option<Pubkey>,
+}
+
+#[derive(Debug)]
+pub struct ChallengeEvent {
+	pub challenge: u128,
+}
+
+impl Writeable for ChallengeEvent {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.challenge)?;
+		Ok(())
+	}
+}
+
+impl Readable for ChallengeEvent {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let challenge = reader.read_u128()?;
+		Ok(Self { challenge })
+	}
+}
+
+// There are two methods to authenticate.
+// 1.) Use auth token (u128) provided on startup of concord server.
+// 2.) Sign a ChallengeEvent with your pubkey.
+#[derive(Debug)]
+pub struct AuthEvent {
+	pub signature: SerOption<Signature>,
+	pub token: SerOption<U128>,
+	pub pubkey: SerOption<Pubkey>,
+}
+
+impl Writeable for AuthEvent {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.signature, writer)?;
+		Writeable::write(&self.token, writer)?;
+		Writeable::write(&self.pubkey, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for AuthEvent {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let signature = SerOption::read(reader)?;
+		let token = SerOption::read(reader)?;
+		let pubkey = SerOption::read(reader)?;
+
+		Ok(Self {
+			signature,
+			token,
+			pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct SerString {
+	pub data: String,
+}
+
+impl Writeable for SerString {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.data.len();
+		let bytes = self.data.as_bytes();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			writer.write_u8(bytes[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for SerString {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let len = reader.read_u64()?;
+		let mut byte_vec = vec![];
+		for _ in 0..len {
+			byte_vec.push(reader.read_u8()?);
+		}
+
+		Ok(Self {
+			data: std::str::from_utf8(&byte_vec)?.to_string(),
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct AuthResponse {
+	pub success: bool,
+	pub redirect: SerOption<SerString>,
+}
+
+impl Writeable for AuthResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		match self.success {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		debug!("writing self.redirect");
+		Writeable::write(&self.redirect, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for AuthResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let success = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		let redirect = SerOption::read(reader)?;
+
+		Ok(Self { success, redirect })
+	}
+}
+
+#[derive(Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Clone)]
+#[repr(u8)]
+pub enum EventType {
+	AuthEvent,
+	ChallengeEvent,
+	AuthResponse,
+}
+
+#[derive(Debug)]
+pub struct Event {
+	pub event_type: EventType,
+	pub auth_event: SerOption<AuthEvent>,
+	pub challenge_event: SerOption<ChallengeEvent>,
+	pub auth_response: SerOption<AuthResponse>,
+	pub version: u8,
+}
+
+impl Default for Event {
+	fn default() -> Self {
+		Self {
+			event_type: EventType::ChallengeEvent,
+			auth_event: None.into(),
+			auth_response: None.into(),
+			challenge_event: None.into(),
+			version: PROTOCOL_VERSION,
+		}
+	}
+}
+
+impl Writeable for Event {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(self.version)?;
+		writer.write_u8(self.event_type.clone().into())?;
+		match &self.event_type {
+			EventType::AuthEvent => Writeable::write(&self.auth_event, writer),
+			EventType::ChallengeEvent => Writeable::write(&self.challenge_event, writer),
+			EventType::AuthResponse => Writeable::write(&self.auth_response, writer),
+		}
+	}
+}
+
+impl Readable for Event {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut auth_event = None.into();
+		let mut challenge_event = None.into();
+		let mut auth_response = None.into();
+
+		let version = reader.read_u8()?;
+
+		let event_type: EventType = EventType::try_from(reader.read_u8()?).map_err(|e| {
+			let error: Error =
+				ErrorKind::SerializationError(format!("invalid event, unkown event type: {}", e))
+					.into();
+			error
+		})?;
+
+		match event_type {
+			EventType::AuthEvent => auth_event = SerOption::read(reader)?,
+			EventType::ChallengeEvent => challenge_event = SerOption::read(reader)?,
+			EventType::AuthResponse => auth_response = SerOption::read(reader)?,
+		};
+
+		Ok(Self {
+			version,
+			event_type,
+			challenge_event,
+			auth_event,
+			auth_response,
+		})
+	}
+}

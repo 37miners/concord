@@ -1531,6 +1531,27 @@ impl Readable for Channel {
 	}
 }
 
+pub struct WSAuthToken {
+	pub token: u128,
+}
+
+impl Writeable for WSAuthToken {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u8(WS_AUTH_TOKEN)?;
+		writer.write_u128(self.token)?;
+		Ok(())
+	}
+}
+
+impl Readable for WSAuthToken {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let _ = reader.read_u8()?;
+		Ok(WSAuthToken {
+			token: reader.read_u128()?,
+		})
+	}
+}
+
 pub struct AuthInfo {
 	creation_time: u128,
 	pub last_access_time: u128,
@@ -1575,6 +1596,7 @@ const PROFILE_PREFIX: u8 = 10;
 const MEMBER_HASH_PREFIX: u8 = 11;
 const MEMBER_META_DATA_PREFIX: u8 = 12;
 const MEMBER_AUTH_PREFIX: u8 = 13;
+const WS_AUTH_TOKEN: u8 = 14;
 
 // auth levels
 pub const AUTH_FLAG_OWNER: u64 = 1;
@@ -2885,6 +2907,23 @@ impl DSContext {
 			}
 			None => Err(ErrorKind::ProfileNotFoundErr("profile not found".to_string()).into()),
 		}
+	}
+
+	pub fn save_ws_auth_token(&self, token: u128) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key_buffer = vec![];
+		serialize_default(&mut key_buffer, &WSAuthToken { token })?;
+		batch.put_ser(&key_buffer, &0u8)?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	pub fn check_ws_auth_token(&self, token: u128) -> Result<bool, Error> {
+		let batch = self.store.batch()?;
+		let mut key_buffer = vec![];
+		serialize_default(&mut key_buffer, &WSAuthToken { token })?;
+		let v: Option<u8> = batch.get_ser(&key_buffer)?;
+		Ok(v.is_some())
 	}
 
 	// create a dscontext instance

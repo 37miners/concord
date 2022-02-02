@@ -25,6 +25,9 @@ mod message;
 mod persistence;
 mod profile;
 mod server;
+mod types;
+mod ws;
+
 #[macro_use]
 mod utils;
 

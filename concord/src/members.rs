@@ -13,9 +13,9 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::types::Pubkey;
 use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
-use crate::utils::Pubkey;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
