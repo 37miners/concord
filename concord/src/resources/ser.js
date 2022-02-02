@@ -145,12 +145,12 @@ class SerString {
         deserialize(buffer, offset) {
 		var len = U64.prototype.deserialize(buffer, offset);
 		var ret = new SerString();
-		var str_buffer = Uint8Array(len.value);
+		var str_buffer = new Uint8Array(Number(len.value));
 		for(var i=0; i<len.value; i++) {
 			str_buffer[i] = buffer[8+offset+i];
 		}
 		ret.value = String.fromCharCode.apply(null, str_buffer);
-		ret.offset = offset + 8 + len.value;
+		ret.offset = offset + 8 + Number(len.value);
 		return ret;
         }
 }
@@ -218,6 +218,31 @@ class Pubkey {
 	}
 }
 
+class ServerId {
+        constructor() {
+        }
+
+        serialize(server_id) {
+                var ret = new ArrayBuffer(8);
+                var ret = new Uint8Array(ret);
+
+                for(var i=0; i<8; i++) {
+                        ret[i] = server_id.data[i];
+                }
+                return ret;
+        }
+
+        deserialize(buffer, offset) {
+                var server_id= new ServerId();
+                server_id.data = [];
+                for(var i=offset; i<offset+8; i++) {
+                        server_id.data[i-offset] = buffer[i];
+                }
+                server_id.offset = offset + 8;
+                return server_id;
+        }
+}
+
 class Signature {
 	constructor() {
 	}
@@ -243,10 +268,11 @@ class Signature {
 }
 
 // note that these must match with the server codes
-const EVENT_TYPE_AUTH              = 0;
-const EVENT_TYPE_CHALLENGE         = 1;
-const EVENT_TYPE_AUTH_RESP         = 2;
-const EVENT_TYPE_GET_SERVERS_EVENT = 3;
+const EVENT_TYPE_AUTH                 = 0;
+const EVENT_TYPE_CHALLENGE            = 1;
+const EVENT_TYPE_AUTH_RESP            = 2;
+const EVENT_TYPE_GET_SERVERS_EVENT    = 3;
+const EVENT_TYPE_GET_SERVERS_RESPONSE = 4;
 
 class GetServersEvent {
 	constructor() {
@@ -343,6 +369,42 @@ class AuthEvent {
 	}
 }
 
+class ServerInfo {
+	constructor(name, description, server_id, server_pubkey) {
+		this.name = name;
+		this.description = description;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+	}
+}
+
+class GetServersResponse {
+	serialize(get_servers_response) {
+		// TODO: but is this really needed? Should only come from a server.
+	}
+
+	deserialize(buffer, offset) {
+		var servers_response = new GetServersResponse();
+		var len = U64.prototype.deserialize(buffer, offset).value;
+		offset += 8;
+		servers_response.servers = [];
+		for(var i=0; i<len; i++) {
+			var name = SerString.prototype.deserialize(buffer, offset);
+			var offset = name.offset;
+			var description = SerString.prototype.deserialize(buffer, offset);
+			var offset = description.offset;
+			var server_id = ServerId.prototype.deserialize(buffer, offset);
+			var offset = offset + 8;
+			var server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
+			var offset = offset + 32;
+			servers_response.servers.push(new ServerInfo(name, description, server_id, server_pubkey));
+		}
+		servers_response.offset = offset;
+
+		return servers_response;
+	}
+}
+
 class Event {
 	constructor(event_type, event_data) {
 		if(event_type !== undefined) {
@@ -357,7 +419,7 @@ class Event {
 				this.auth_resp = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
 				this.get_servers_event = new SerOption(new GetServersEvent());
-			}else {
+			} else {
 				throw "Unknown event type = " + event_type;
 			}
 		}
@@ -414,6 +476,10 @@ class Event {
 			event.get_servers = SerOption
 				.prototype
 				.deserialize(buffer, 18, GetServers.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
+			event.get_servers_response = SerOption
+				.prototype
+				.deserialize(buffer, 18, GetServersResponse.prototype);
 		} else {
 			throw "Unknown event type = " + event.event_type;
 		}
