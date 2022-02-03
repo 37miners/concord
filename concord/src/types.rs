@@ -227,6 +227,63 @@ pub struct ConnectionInfo {
 }
 
 #[derive(Debug)]
+pub struct DeleteServerEvent {
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
+}
+
+impl Writeable for DeleteServerEvent {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for DeleteServerEvent {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+
+		Ok(Self {
+			server_id,
+			server_pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct CreateServerEvent {
+	pub name: SerString,
+	pub icon: Vec<u8>,
+}
+
+impl Writeable for CreateServerEvent {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.name, writer)?;
+		let len = self.icon.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			writer.write_u8(self.icon[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for CreateServerEvent {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut icon = vec![];
+		let name = SerString::read(reader)?;
+		let len: u64 = reader.read_u64()?.try_into()?;
+		for _ in 0..len {
+			icon.push(reader.read_u8()?);
+		}
+
+		Ok(Self { name, icon })
+	}
+}
+
+#[derive(Debug)]
 pub struct GetServersEvent {}
 
 impl Writeable for GetServersEvent {
@@ -326,6 +383,7 @@ impl Writeable for SerString {
 impl Readable for SerString {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let len = reader.read_u64()?;
+		error!("ser_strlen={}", len);
 		let mut byte_vec = vec![];
 		for _ in 0..len {
 			byte_vec.push(reader.read_u8()?);
@@ -368,11 +426,46 @@ impl Readable for AuthResponse {
 }
 
 #[derive(Debug)]
+pub struct Icon {
+	data: Vec<u8>,
+}
+
+impl Writeable for Icon {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.data.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			writer.write_u8(self.data[i])?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for Icon {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let len = reader.read_u64()?;
+		let mut data = vec![];
+		for _ in 0..len {
+			data.push(reader.read_u8()?);
+		}
+
+		Ok(Self { data })
+	}
+}
+
+impl From<Vec<u8>> for Icon {
+	fn from(data: Vec<u8>) -> Self {
+		Self { data }
+	}
+}
+
+#[derive(Debug)]
 pub struct ServerInfo {
 	pub name: SerString,
 	pub description: SerString,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
+	pub icon: Icon,
 }
 
 impl Writeable for ServerInfo {
@@ -381,6 +474,7 @@ impl Writeable for ServerInfo {
 		Writeable::write(&self.description, writer)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.icon, writer)?;
 		Ok(())
 	}
 }
@@ -391,11 +485,13 @@ impl Readable for ServerInfo {
 		let description = SerString::read(reader)?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
+		let icon = Icon::read(reader)?;
 		Ok(Self {
 			name,
 			description,
 			server_id,
 			server_pubkey,
+			icon,
 		})
 	}
 }
@@ -434,6 +530,8 @@ pub enum EventType {
 	AuthResponse,
 	GetServersEvent,
 	GetServersResponse,
+	CreateServerEvent,
+	DeleteServerEvent,
 }
 
 #[derive(Debug)]
@@ -444,6 +542,8 @@ pub struct Event {
 	pub auth_response: SerOption<AuthResponse>,
 	pub get_servers_event: SerOption<GetServersEvent>,
 	pub get_servers_response: SerOption<GetServersResponse>,
+	pub create_server_event: SerOption<CreateServerEvent>,
+	pub delete_server_event: SerOption<DeleteServerEvent>,
 	pub version: u8,
 	pub timestamp: u128,
 }
@@ -457,6 +557,8 @@ impl Default for Event {
 			challenge_event: None.into(),
 			get_servers_event: None.into(),
 			get_servers_response: None.into(),
+			create_server_event: None.into(),
+			delete_server_event: None.into(),
 			version: PROTOCOL_VERSION,
 			timestamp: std::time::SystemTime::now()
 				.duration_since(std::time::UNIX_EPOCH)
@@ -477,6 +579,8 @@ impl Writeable for Event {
 			EventType::AuthResponse => Writeable::write(&self.auth_response, writer),
 			EventType::GetServersEvent => Writeable::write(&self.get_servers_event, writer),
 			EventType::GetServersResponse => Writeable::write(&self.get_servers_response, writer),
+			EventType::CreateServerEvent => Writeable::write(&self.create_server_event, writer),
+			EventType::DeleteServerEvent => Writeable::write(&self.delete_server_event, writer),
 		}
 	}
 }
@@ -488,6 +592,8 @@ impl Readable for Event {
 		let mut auth_response = None.into();
 		let mut get_servers_event = None.into();
 		let mut get_servers_response = None.into();
+		let mut create_server_event = None.into();
+		let mut delete_server_event = None.into();
 
 		let version = reader.read_u8()?;
 		let timestamp = reader.read_u128()?;
@@ -505,6 +611,8 @@ impl Readable for Event {
 			EventType::AuthResponse => auth_response = SerOption::read(reader)?,
 			EventType::GetServersEvent => get_servers_event = SerOption::read(reader)?,
 			EventType::GetServersResponse => get_servers_response = SerOption::read(reader)?,
+			EventType::CreateServerEvent => create_server_event = SerOption::read(reader)?,
+			EventType::DeleteServerEvent => delete_server_event = SerOption::read(reader)?,
 		};
 
 		Ok(Self {
@@ -515,6 +623,8 @@ impl Readable for Event {
 			auth_response,
 			get_servers_event,
 			get_servers_response,
+			create_server_event,
+			delete_server_event,
 			timestamp,
 		})
 	}

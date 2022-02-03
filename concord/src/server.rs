@@ -26,8 +26,8 @@ use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
 
-use crate::send;
 use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, Pubkey, ServerInfo};
+use crate::{owner, send};
 
 use std::fs::File;
 use std::io::Read;
@@ -48,33 +48,84 @@ pub fn get_servers(
 	conn_info: &ConnectionInfo,
 	ds_context: &DSContext,
 ) -> Result<bool, ConcordError> {
-	match &conn_info.pubkey {
-		None => {
-			return Ok(true);
-		}
-		Some(pubkey) => {
-			if pubkey.to_bytes() != pubkey!() {
-				return Ok(true);
-			}
-		}
-	}
+	owner!(conn_info);
 
 	let mut servers = vec![];
-	let db_servers = ds_context.get_servers()?;
-	for db_server in db_servers {
+	let data = ds_context.get_servers()?;
+	for d in data {
 		servers.push(ServerInfo {
-			name: db_server.name.into(),
+			name: d.name.into(),
 			description: "none".into(),
-			server_id: db_server.server_id.into(),
-			server_pubkey: Pubkey::from_bytes(db_server.pubkey),
+			server_id: d.server_id.into(),
+			server_pubkey: Pubkey::from_bytes(d.pubkey),
+			icon: d.icon.into(),
 		});
 	}
+
 	let event = Event {
 		event_type: EventType::GetServersResponse,
 		get_servers_response: Some(GetServersResponse { servers }).into(),
 		..Default::default()
 	};
 	send!(conn_info.handle, event);
+
+	Ok(false)
+}
+
+pub fn create_server(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	owner!(conn_info);
+
+	let icon = match event.create_server_event.0.as_ref() {
+		Some(event) => event.icon.clone(),
+		None => {
+			warn!("Malformed create server event. No icon: {:?}", event);
+			return Ok(true);
+		}
+	};
+
+	let name = match event.create_server_event.0.as_ref() {
+		Some(event) => event.name.data.clone(),
+		None => {
+			warn!("Malformed create server event. No name: {:?}", event);
+			return Ok(true);
+		}
+	};
+
+	let data_server_info = DataServerInfo {
+		pubkey: pubkey!(),
+		name,
+		icon,
+		joined: true,
+	};
+
+	ds_context.add_server(data_server_info, None, None, false)?;
+
+	Ok(false)
+}
+
+pub fn delete_server(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	owner!(conn_info);
+
+	let (server_id, server_pubkey) = match event.delete_server_event.0.as_ref() {
+		Some(event) => (event.server_id.to_bytes(), event.server_pubkey.to_bytes()),
+		None => {
+			warn!(
+				"Malformed delete server event. No server_id/server_pubkey: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
+
+	ds_context.delete_server_ws(server_id, server_pubkey)?;
 
 	Ok(false)
 }

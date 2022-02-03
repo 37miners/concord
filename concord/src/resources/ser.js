@@ -38,6 +38,15 @@
                 </script>
 */
 
+function uint8ToBase64( bytes ) {
+	var binary = '';
+	var len = bytes.byteLength;
+	for (var i = 0; i < len; i++) {
+		binary += String.fromCharCode( bytes[ i ] );
+	}
+	return window.btoa( binary );
+}
+
 var EVENT_VERSION = 1;
 
 // u128
@@ -89,13 +98,12 @@ class U64 {
 			buffer[i] = 0;
 		}
 
-		var str16 = v.toString(16);
+		var str16 = bint.toString(16);
 		var len = str16.length;
 		if(len % 2 != 0) {
 			str16 = '0' + str16;
 			len++;
 		}
-
 		var itt = 7;
 		for(var i=len-2; i>=0; i-=2) {
 			var hex = str16.substring(i, i+2);
@@ -125,17 +133,17 @@ class SerString {
 	}
 
         serialize(str) {
-		var len = new U64(str.length);
-		// len + bytes for storing len
 		var ret = new ArrayBuffer(str.length + 8);
 		var ret = new Uint8Array(ret);
 
-		var ser_len = len.serialize(len);
+		var ser_len = U64.prototype.serialize(str.length);
 		for(var i=0; i<8; i++) {
 			ret[i] = ser_len[i];
 		}
 
-		var buffer = new Buffer(str, 'utf8');
+
+		const encoder = new TextEncoder();
+		var buffer = encoder.encode(str);
 		for(var i=0; i<str.length; i++) {
 			ret[i+8] = buffer[i];
 		}
@@ -193,6 +201,41 @@ class SerOption {
 	}
 }
 
+class Icon {
+        constructor(value) {
+                this.value = value;
+        }
+
+        serialize(data) {
+                var len = new U64(data.length);
+                // len + bytes for storing len
+                var ret = new ArrayBuffer(data.length + 8);
+                var ret = new Uint8Array(ret);
+
+                var ser_len = len.serialize(len);
+                for(var i=0; i<8; i++) {
+                        ret[i] = ser_len[i];
+                }
+
+                for(var i=0; i<data.length; i++) {
+                        ret[i+8] = data[i];
+                }
+                return ret;
+        }
+
+        deserialize(buffer, offset) {
+                var len = U64.prototype.deserialize(buffer, offset);
+                var ret = new Icon();
+                var data = new Uint8Array(Number(len.value));
+                for(var i=0; i<len.value; i++) {
+                        data[i] = buffer[8+offset+i];
+                }
+                ret.value = data;
+                ret.offset = offset + 8 + Number(len.value);
+                return ret;
+        }
+}
+
 class Pubkey {
 	constructor() {
 	}
@@ -234,7 +277,7 @@ class ServerId {
 
         deserialize(buffer, offset) {
                 var server_id= new ServerId();
-                server_id.data = [];
+		server_id.data = []
                 for(var i=offset; i<offset+8; i++) {
                         server_id.data[i-offset] = buffer[i];
                 }
@@ -273,6 +316,53 @@ const EVENT_TYPE_CHALLENGE            = 1;
 const EVENT_TYPE_AUTH_RESP            = 2;
 const EVENT_TYPE_GET_SERVERS_EVENT    = 3;
 const EVENT_TYPE_GET_SERVERS_RESPONSE = 4;
+const EVENT_TYPE_CREATE_SERVER_EVENT  = 5;
+const EVENT_TYPE_DELETE_SERVER_EVENT  = 6;
+
+class DeleteServerEvent {
+	constructor(server_id, server_pubkey) {
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+	}
+
+	serialize(delete_server_event) {
+		var ret = new Uint8Array(new ArrayBuffer(40));
+		for(var i=0; i<32; i++)
+			ret[i] = delete_server_event.server_pubkey[i];
+		for(var i=0; i<8; i++)
+			ret[i+32] = delete_server_event.server_id[i];
+		return ret;
+	}
+
+	deserialize(buffer, offset) {
+		throw "TODO: implement DeleteServerEvent.deserialize";
+	}
+}
+
+class CreateServerEvent {
+	constructor(name, icon) {
+		this.name = name;
+		this.icon = icon;
+	}
+
+	serialize(create_server_event) {
+                var x = SerString.prototype.serialize(create_server_event.name);
+		var ser_len = U64.prototype.serialize(create_server_event.icon.length);
+		var ret = new ArrayBuffer(x.length + 8 + create_server_event.icon.length);
+		var ret = new Uint8Array(ret);
+		for(var i=0; i<x.length; i++)
+			ret[i] = x[i];
+		for(var i=0; i<8; i++)
+			ret[i+x.length] = ser_len[i];
+		for(var i=0; i<create_server_event.icon.length; i++)
+			ret[i+x.length+8] = create_server_event.icon[i];
+                return ret;
+	}
+
+	deserialize(buffer, offset) {
+		throw "TODO: implement CreateServerEvent.deserialize";
+	}
+}
 
 class GetServersEvent {
 	constructor() {
@@ -281,6 +371,10 @@ class GetServersEvent {
 	serialize(get_servers_event) {
 		var ret = new ArrayBuffer(0);
 		return ret;
+	}
+
+	deserialize(buffer, offset) {
+		throw "TODO: implement GetServersEvent.deserialize";
 	}
 }
 
@@ -370,17 +464,18 @@ class AuthEvent {
 }
 
 class ServerInfo {
-	constructor(name, description, server_id, server_pubkey) {
+	constructor(name, description, server_id, server_pubkey, icon) {
 		this.name = name;
 		this.description = description;
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
+		this.icon = icon;
 	}
 }
 
 class GetServersResponse {
 	serialize(get_servers_response) {
-		// TODO: but is this really needed? Should only come from a server.
+		throw "TODO: implement GetServersResponse.serialize";
 	}
 
 	deserialize(buffer, offset) {
@@ -390,14 +485,24 @@ class GetServersResponse {
 		servers_response.servers = [];
 		for(var i=0; i<len; i++) {
 			var name = SerString.prototype.deserialize(buffer, offset);
-			var offset = name.offset;
+			offset = name.offset;
 			var description = SerString.prototype.deserialize(buffer, offset);
-			var offset = description.offset;
+			offset = description.offset;
 			var server_id = ServerId.prototype.deserialize(buffer, offset);
-			var offset = offset + 8;
+			offset = offset + 8;
 			var server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
-			var offset = offset + 32;
-			servers_response.servers.push(new ServerInfo(name, description, server_id, server_pubkey));
+			offset = offset + 32;
+			var icon = Icon.prototype.deserialize(buffer, offset);
+			offset = icon.offset;
+			servers_response.servers.push(
+				new ServerInfo(
+					name,
+					description,
+					server_id,
+					server_pubkey,
+					icon
+				)
+			);
 		}
 		servers_response.offset = offset;
 
@@ -419,8 +524,12 @@ class Event {
 				this.auth_resp = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
 				this.get_servers_event = new SerOption(new GetServersEvent());
+			} else if(this.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
+				this.create_server_event = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
+				this.delete_server_event = new SerOption(event_data);
 			} else {
-				throw "Unknown event type = " + event_type;
+				throw "Unknown event in Event.constructor type = " + event_type;
 			}
 		}
 	}
@@ -436,8 +545,12 @@ class Event {
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
 			x = new Uint8Array(1);
 			x[0] = 1;
+		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
+			x = event.create_server_event.serialize(event.create_server_event, CreateServerEvent.prototype);
+		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
+			x = event.delete_server_event.serialize(event.delete_server_event, DeleteServerEvent.prototype);
 		} else {
-			throw "Unknown event type = " + event.event_type;
+			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
 
 		var ret = new ArrayBuffer(x.length + 18);
@@ -480,8 +593,16 @@ class Event {
 			event.get_servers_response = SerOption
 				.prototype
 				.deserialize(buffer, 18, GetServersResponse.prototype);
+		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
+			event.create_server_event = SerOption
+				.prototype
+				.deserialize(buffer, 18, CreateServerEvent.prototype);	
+		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
+			event.delete_server_event = SerOption
+				.prototype
+				.deserialize(buffer, 18, DeleteServerEvent.prototype);
 		} else {
-			throw "Unknown event type = " + event.event_type;
+			throw "Unknown event type in event.deserialize = " + event.event_type;
 		}
 
 		return event;

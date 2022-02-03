@@ -1,9 +1,47 @@
 <html>
 	<head>
 		<title>Welcome to NIO Runtime Httpd Server!</title>
+        	<script>
+			var sock;
+
+function convertBinaryStringToUint8Array(bStr) {
+	var i, len = bStr.length, u8_array = new Uint8Array(len);
+	for (var i = 0; i < len; i++) {
+		u8_array[i] = bStr.charCodeAt(i);
+	}
+	return u8_array;
+}
+
+                	function create_server(file) {
+				var reader = new FileReader();
+				reader.onload = function(e) {
+					var name = document.forms['create_server']['server_name'].value;
+					var icon = convertBinaryStringToUint8Array(e.target.result);
+                                        var event = new Event(
+                                                EVENT_TYPE_CREATE_SERVER_EVENT,
+                                                new CreateServerEvent(
+							name,
+							icon,
+                                                )
+                                        );
+
+                                        let create_server_buffer = event.serialize(event);
+                                        sock.send(create_server_buffer);
+				};
+				reader.onerror = function(e) {
+					// error occurred
+					console.log('Error reading bin data: ' + e.type);
+				};
+				reader.readAsBinaryString(file);
+			}
+        	</script>
 	</head>
 	<script src='/js/ser.js'></script>
 	<body>
+		<form name="create_server">
+			Server Name: <input type="text" name="server_name" id="server_name"/>
+			<input type="file" onchange="window.create_server(this.files[0]);"/>
+		</form>
 		Test WS
 		<script>
 			function getCookie(cname) {
@@ -24,7 +62,8 @@
 
 			//var token = BigInt(getCookie("auth"));
 			var token = BigInt("155836489535448287648775751004424988888");
-			var sock = new WebSocket("ws://localhost:8093/ws");
+			sock = new WebSocket("ws://localhost:8093/ws");
+			window.sock = sock;
 			sock.binaryType = "arraybuffer";
 			sock.onclose = function(ev) {
 				console.log("websocket closed");
@@ -57,10 +96,41 @@
 					sock.send(resp_buffer);
 				} else if(recv_event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
 					for(var i=0; i<recv_event.get_servers_response.value.servers.length; i++) {
-						console.log(recv_event.get_servers_response.value.servers[i].name);
+						var name = recv_event.get_servers_response.value.servers[i].name.value;
+						var server_id = recv_event.get_servers_response.value.servers[i].server_id.data;
+						var server_pubkey = recv_event.get_servers_response.value.servers[i].server_pubkey.data;
+						console.log('name='+name);
 						console.log(recv_event.get_servers_response.value.servers[i].description);
-						console.log(recv_event.get_servers_response.value.servers[i].server_id);
-						console.log(recv_event.get_servers_response.value.servers[i].server_pubkey);
+						console.log('server_id='+server_id);
+						console.log('server_pubkey='+server_pubkey);
+						console.log(recv_event.get_servers_response.value.servers[i].icon);
+						var arr = recv_event.get_servers_response.value.servers[i].icon.value;
+						console.log(arr[0] + " " + arr[1] + " " +  arr[2]);
+						var base64icon = uint8ToBase64(arr);
+
+						var icon = document.createElement('img');
+						icon.src = "data:image;base64," + base64icon;
+						icon.title = recv_event.get_servers_response.value.servers[i].name.value;
+						document.body.appendChild(icon);
+						var del_server = document.createElement('a');
+						del_server.innerHTML = 'delete ' + server_id + ' (' + name + ')';
+						del_server.server_id = server_id;
+						del_server.server_pubkey = server_pubkey;
+						del_server.onclick = function(evt) {
+							console.log('id=\''+this.server_id + '\',pubkey=\'' + this.server_pubkey+'\'');
+							var event = new Event(
+							EVENT_TYPE_DELETE_SERVER_EVENT,
+								new DeleteServerEvent(
+									this.server_id,
+									this.server_pubkey,
+								)
+							);
+
+							let buffer = event.serialize(event);
+							sock.send(buffer);
+						}
+						document.body.appendChild(del_server);
+						document.body.appendChild(document.createElement('br'));
 					}
 				}
 			}

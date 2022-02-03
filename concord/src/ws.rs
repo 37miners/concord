@@ -14,7 +14,7 @@
 
 use crate::auth::ws_auth;
 use crate::context::ConcordContext;
-use crate::server::get_servers;
+use crate::server::{create_server, delete_server, get_servers};
 use crate::types::*;
 use crate::{bin_event, close, send, try2};
 use concordconfig::ConcordConfig;
@@ -91,6 +91,18 @@ fn process_binary(
 										try2!(
 											get_servers(connection_info, ds_context),
 											"get_servers error"
+										)
+									}
+									EventType::CreateServerEvent => {
+										try2!(
+											create_server(connection_info, ds_context, &event),
+											"create_server error"
+										)
+									}
+									EventType::DeleteServerEvent => {
+										try2!(
+											delete_server(connection_info, ds_context, &event),
+											"delete_server error"
 										)
 									}
 									_ => {

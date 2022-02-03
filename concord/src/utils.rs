@@ -92,6 +92,7 @@ macro_rules! try2 {
 #[macro_export]
 macro_rules! send {
 	($handle:expr,$event:expr) => {{
+		debug!("send event {:?}", $event);
 		let mut buffer = vec![];
 		crate::try2!(
 			concorddata::ser::serialize_default(&mut buffer, &$event,),
@@ -133,8 +134,18 @@ macro_rules! close {
 }
 
 #[macro_export]
-macro_rules! is_owner {
-	($pubkey:expr) => {{
-		$pubkey == pubkey!()
+macro_rules! owner {
+	($conn_info:expr) => {{
+		match &$conn_info.pubkey {
+			None => {
+				return Ok(true);
+			}
+			Some(pubkey) => {
+				let server_pubkey = pubkey!();
+				if pubkey.to_bytes() != server_pubkey {
+					return Ok(true);
+				}
+			}
+		}
 	}};
 }

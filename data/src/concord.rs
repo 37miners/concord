@@ -1608,7 +1608,8 @@ impl DSContext {
 		let batch = self.store.batch()?;
 		// get the iterator for each server info
 		let mut itt = batch.iter(&(vec![SERVER_PREFIX])[..], |k, v| {
-			let id = base64::encode(&k[1..]);
+			let mut id = [0u8; 8];
+			id.clone_from_slice(&k[1..9]);
 			let mut cursor = Cursor::new(v.to_vec());
 			cursor.set_position(0);
 			let mut reader = BinReader::new(&mut cursor, ProtocolVersion::local());
@@ -1619,7 +1620,7 @@ impl DSContext {
 		loop {
 			match itt.next() {
 				Some((server, server_id)) => {
-					let server_id = base64::decode(server_id)?.as_slice().try_into()?;
+					let server_id = *(&server_id[..].try_into()?);
 					if server.joined {
 						ret.push(ServerInfoReply {
 							server_id,
@@ -1671,6 +1672,7 @@ impl DSContext {
 			None => rand::random(),
 		};
 		key.append(&mut server_id.to_vec());
+		key.append(&mut server_info.pubkey.to_vec());
 		batch.put_ser(&key, &server_info)?;
 		// add ourselves as the server owner
 		let user_pubkey = match user_pubkey {
@@ -1707,6 +1709,16 @@ impl DSContext {
 		)?;
 		batch.commit()?;
 		Ok(server_id)
+	}
+
+	pub fn delete_server_ws(&self, server_id: [u8; 8], pubkey: [u8; 32]) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![SERVER_PREFIX];
+		key.append(&mut server_id.to_vec());
+		key.append(&mut pubkey.to_vec());
+		batch.delete(&key)?;
+		batch.commit()?;
+		Ok(())
 	}
 
 	// delete a server
