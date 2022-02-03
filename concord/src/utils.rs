@@ -19,7 +19,7 @@ use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
 
-debug!();
+info!();
 
 pub fn extract_server_id_from_query() -> Result<ServerId, librustlet::Error> {
 	let server_id = match query!("server_id") {

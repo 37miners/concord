@@ -14,7 +14,7 @@
 
 use crate::auth::ws_auth;
 use crate::context::ConcordContext;
-use crate::server::{create_server, delete_server, get_servers};
+use crate::server::{create_server, delete_server, get_servers, modify_server};
 use crate::types::*;
 use crate::{bin_event, close, send, try2};
 use concordconfig::ConcordConfig;
@@ -27,7 +27,7 @@ use nioruntime_log::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-debug!(); // set log level to debug
+info!(); // set log level to debug
 
 fn process_open(
 	handle: ConnData,
@@ -68,10 +68,15 @@ fn process_binary(
 
 	match event.event_type {
 		EventType::AuthEvent => {
-			try2!(
-				ws_auth(handle, &event, ds_context, conn_info),
+			let close = try2!(
+				ws_auth(handle.clone(), &event, ds_context, conn_info.clone()),
 				"ws_auth error"
 			);
+
+			if close {
+				let mut conn_info = nioruntime_util::lockw!(conn_info)?;
+				close!(handle, conn_info);
+			}
 		}
 		_ => {
 			// for all other event types, we ensure that the user has
@@ -103,6 +108,12 @@ fn process_binary(
 										try2!(
 											delete_server(connection_info, ds_context, &event),
 											"delete_server error"
+										)
+									}
+									EventType::ModifyServerEvent => {
+										try2!(
+											modify_server(connection_info, ds_context, &event),
+											"modify_server error"
 										)
 									}
 									_ => {

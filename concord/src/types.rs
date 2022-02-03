@@ -22,7 +22,7 @@ use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
 use std::convert::TryInto;
 
-debug!();
+info!();
 
 const PROTOCOL_VERSION: u8 = 1;
 
@@ -65,7 +65,7 @@ impl Readable for Signature {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SerOption<T>(pub Option<T>);
 
 impl<T: Writeable> Writeable for SerOption<T> {
@@ -253,6 +253,40 @@ impl Readable for DeleteServerEvent {
 }
 
 #[derive(Debug)]
+pub struct ModifyServerEvent {
+	pub name: SerOption<SerString>,
+	pub icon: SerOption<Icon>,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+}
+
+impl Writeable for ModifyServerEvent {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.name, writer)?;
+		Writeable::write(&self.icon, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ModifyServerEvent {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let name = SerOption::read(reader)?;
+		let icon = SerOption::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+
+		Ok(Self {
+			server_id,
+			name,
+			icon,
+			server_pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
 pub struct CreateServerEvent {
 	pub name: SerString,
 	pub icon: Vec<u8>,
@@ -350,7 +384,7 @@ impl Readable for AuthEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SerString {
 	pub data: String,
 }
@@ -383,7 +417,6 @@ impl Writeable for SerString {
 impl Readable for SerString {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let len = reader.read_u64()?;
-		error!("ser_strlen={}", len);
 		let mut byte_vec = vec![];
 		for _ in 0..len {
 			byte_vec.push(reader.read_u8()?);
@@ -425,9 +458,9 @@ impl Readable for AuthResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Icon {
-	data: Vec<u8>,
+	pub data: Vec<u8>,
 }
 
 impl Writeable for Icon {
@@ -466,6 +499,7 @@ pub struct ServerInfo {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
 	pub icon: Icon,
+	pub seqno: u64,
 }
 
 impl Writeable for ServerInfo {
@@ -475,6 +509,7 @@ impl Writeable for ServerInfo {
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		Writeable::write(&self.icon, writer)?;
+		writer.write_u64(self.seqno)?;
 		Ok(())
 	}
 }
@@ -486,12 +521,14 @@ impl Readable for ServerInfo {
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let icon = Icon::read(reader)?;
+		let seqno = reader.read_u64()?;
 		Ok(Self {
 			name,
 			description,
 			server_id,
 			server_pubkey,
 			icon,
+			seqno,
 		})
 	}
 }
@@ -532,6 +569,7 @@ pub enum EventType {
 	GetServersResponse,
 	CreateServerEvent,
 	DeleteServerEvent,
+	ModifyServerEvent,
 }
 
 #[derive(Debug)]
@@ -544,6 +582,7 @@ pub struct Event {
 	pub get_servers_response: SerOption<GetServersResponse>,
 	pub create_server_event: SerOption<CreateServerEvent>,
 	pub delete_server_event: SerOption<DeleteServerEvent>,
+	pub modify_server_event: SerOption<ModifyServerEvent>,
 	pub version: u8,
 	pub timestamp: u128,
 }
@@ -559,6 +598,7 @@ impl Default for Event {
 			get_servers_response: None.into(),
 			create_server_event: None.into(),
 			delete_server_event: None.into(),
+			modify_server_event: None.into(),
 			version: PROTOCOL_VERSION,
 			timestamp: std::time::SystemTime::now()
 				.duration_since(std::time::UNIX_EPOCH)
@@ -581,6 +621,7 @@ impl Writeable for Event {
 			EventType::GetServersResponse => Writeable::write(&self.get_servers_response, writer),
 			EventType::CreateServerEvent => Writeable::write(&self.create_server_event, writer),
 			EventType::DeleteServerEvent => Writeable::write(&self.delete_server_event, writer),
+			EventType::ModifyServerEvent => Writeable::write(&self.modify_server_event, writer),
 		}
 	}
 }
@@ -594,6 +635,7 @@ impl Readable for Event {
 		let mut get_servers_response = None.into();
 		let mut create_server_event = None.into();
 		let mut delete_server_event = None.into();
+		let mut modify_server_event = None.into();
 
 		let version = reader.read_u8()?;
 		let timestamp = reader.read_u128()?;
@@ -613,6 +655,7 @@ impl Readable for Event {
 			EventType::GetServersResponse => get_servers_response = SerOption::read(reader)?,
 			EventType::CreateServerEvent => create_server_event = SerOption::read(reader)?,
 			EventType::DeleteServerEvent => delete_server_event = SerOption::read(reader)?,
+			EventType::ModifyServerEvent => modify_server_event = SerOption::read(reader)?,
 		};
 
 		Ok(Self {
@@ -625,6 +668,7 @@ impl Readable for Event {
 			get_servers_response,
 			create_server_event,
 			delete_server_event,
+			modify_server_event,
 			timestamp,
 		})
 	}

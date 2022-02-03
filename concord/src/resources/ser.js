@@ -122,8 +122,9 @@ class U64 {
                 	num += BigInt(buffer[i]) << (BigInt(itt) * 8n);
                 	itt++;
         	}
-        	U64.prototype.offset = offset + 8;
-        	return new U64(num);
+		var ret = new U64(num);
+        	ret.offset = offset + 8;
+        	return ret;
 	}
 }
 
@@ -237,7 +238,8 @@ class Icon {
 }
 
 class Pubkey {
-	constructor() {
+	constructor(data) {
+		this.data = data;
 	}
 
 	serialize(pubkey) {
@@ -262,7 +264,8 @@ class Pubkey {
 }
 
 class ServerId {
-        constructor() {
+        constructor(data) {
+		this.data = data;
         }
 
         serialize(server_id) {
@@ -318,6 +321,7 @@ const EVENT_TYPE_GET_SERVERS_EVENT    = 3;
 const EVENT_TYPE_GET_SERVERS_RESPONSE = 4;
 const EVENT_TYPE_CREATE_SERVER_EVENT  = 5;
 const EVENT_TYPE_DELETE_SERVER_EVENT  = 6;
+const EVENT_TYPE_MODIFY_SERVER_EVENT  = 7;
 
 class DeleteServerEvent {
 	constructor(server_id, server_pubkey) {
@@ -336,6 +340,43 @@ class DeleteServerEvent {
 
 	deserialize(buffer, offset) {
 		throw "TODO: implement DeleteServerEvent.deserialize";
+	}
+}
+
+class ModifyServerEvent {
+	constructor(server_id, server_pubkey, name, icon) {
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.name = name;
+		this.icon = icon;
+	}
+
+	serialize(modify_server_event) {
+		var w = SerOption.prototype.serialize(modify_server_event.name, SerString.prototype);
+		var x = SerOption.prototype.serialize(modify_server_event.icon, Icon.prototype);
+		var y = ServerId.prototype.serialize(modify_server_event.server_id, ServerId.prototype);
+		var z = Pubkey.prototype.serialize(modify_server_event.server_pubkey, Pubkey.prototype);
+
+		var ret = new Uint8Array(new ArrayBuffer(w.length + x.length + y.length + z.length));
+
+		for(var i=0; i<w.length; i++) {
+			ret[i] = w[i];
+		}
+		for(var i=0; i<x.length; i++) {
+			ret[i+w.length] = x[i];
+		}
+		for(var i=0; i<y.length; i++) {
+			ret[i+w.length + x.length] = y[i];
+		}
+		for(var i=0; i<z.length; i++) {
+			ret[i+w.length+x.length+y.length] = z[i];
+		}
+
+		return ret;
+	}
+
+	deserialize(buffer, offset) {
+		throw "TODO: implement ModServerEvent.deserialize";
 	}
 }
 
@@ -464,12 +505,13 @@ class AuthEvent {
 }
 
 class ServerInfo {
-	constructor(name, description, server_id, server_pubkey, icon) {
+	constructor(name, description, server_id, server_pubkey, icon, seqno) {
 		this.name = name;
 		this.description = description;
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 		this.icon = icon;
+		this.seqno = seqno;
 	}
 }
 
@@ -494,13 +536,16 @@ class GetServersResponse {
 			offset = offset + 32;
 			var icon = Icon.prototype.deserialize(buffer, offset);
 			offset = icon.offset;
+			var seqno = U64.prototype.deserialize(buffer, offset);
+			offset = seqno.offset;
 			servers_response.servers.push(
 				new ServerInfo(
 					name,
 					description,
 					server_id,
 					server_pubkey,
-					icon
+					icon,
+					seqno,
 				)
 			);
 		}
@@ -528,6 +573,8 @@ class Event {
 				this.create_server_event = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
 				this.delete_server_event = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
+				this.modify_server_event = new SerOption(event_data);
 			} else {
 				throw "Unknown event in Event.constructor type = " + event_type;
 			}
@@ -549,6 +596,8 @@ class Event {
 			x = event.create_server_event.serialize(event.create_server_event, CreateServerEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
 			x = event.delete_server_event.serialize(event.delete_server_event, DeleteServerEvent.prototype);
+		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
+			x = event.modify_server_event.serialize(event.modify_server_event, ModifyServerEvent.prototype);
 		} else {
 			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
@@ -601,6 +650,10 @@ class Event {
 			event.delete_server_event = SerOption
 				.prototype
 				.deserialize(buffer, 18, DeleteServerEvent.prototype);
+		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
+			event.modify_server_event = SerOption
+				.prototype
+				.deserialize(buffer, 18, ModifyServerEvent.prototype);
 		} else {
 			throw "Unknown event type in event.deserialize = " + event.event_type;
 		}

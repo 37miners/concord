@@ -26,6 +26,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                         );
 
                                         let create_server_buffer = event.serialize(event);
+console.log('sending create server event: ' + create_server_buffer);
                                         sock.send(create_server_buffer);
 				};
 				reader.onerror = function(e) {
@@ -42,7 +43,7 @@ function convertBinaryStringToUint8Array(bStr) {
 			Server Name: <input type="text" name="server_name" id="server_name"/>
 			<input type="file" onchange="window.create_server(this.files[0]);"/>
 		</form>
-		Test WS
+		Test WS</br>
 		<script>
 			function getCookie(cname) {
 				let name = cname + "=";
@@ -61,7 +62,7 @@ function convertBinaryStringToUint8Array(bStr) {
 			}
 
 			//var token = BigInt(getCookie("auth"));
-			var token = BigInt("155836489535448287648775751004424988888");
+			var token = BigInt("183356405534408327905818855820415121423");
 			sock = new WebSocket("ws://localhost:8093/ws");
 			window.sock = sock;
 			sock.binaryType = "arraybuffer";
@@ -99,6 +100,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						var name = recv_event.get_servers_response.value.servers[i].name.value;
 						var server_id = recv_event.get_servers_response.value.servers[i].server_id.data;
 						var server_pubkey = recv_event.get_servers_response.value.servers[i].server_pubkey.data;
+						var seqno = recv_event.get_servers_response.value.servers[i].seqno.value;
 						console.log('name='+name);
 						console.log(recv_event.get_servers_response.value.servers[i].description);
 						console.log('server_id='+server_id);
@@ -109,6 +111,8 @@ function convertBinaryStringToUint8Array(bStr) {
 						var base64icon = uint8ToBase64(arr);
 
 						var icon = document.createElement('img');
+						icon.style.height = '15px';
+						icon.style.width = '15px';
 						icon.src = "data:image;base64," + base64icon;
 						icon.title = recv_event.get_servers_response.value.servers[i].name.value;
 						document.body.appendChild(icon);
@@ -119,7 +123,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						del_server.onclick = function(evt) {
 							console.log('id=\''+this.server_id + '\',pubkey=\'' + this.server_pubkey+'\'');
 							var event = new Event(
-							EVENT_TYPE_DELETE_SERVER_EVENT,
+								EVENT_TYPE_DELETE_SERVER_EVENT,
 								new DeleteServerEvent(
 									this.server_id,
 									this.server_pubkey,
@@ -129,7 +133,29 @@ function convertBinaryStringToUint8Array(bStr) {
 							let buffer = event.serialize(event);
 							sock.send(buffer);
 						}
+						var mod_server = document.createElement('a');
+						mod_server.innerHTML = 'mod ' + server_id + ' (' + name + ')';
+						mod_server.server_id = server_id;
+						mod_server.server_pubkey = server_pubkey;
+						mod_server.onclick = function(evt) {
+							var name_update = document.forms['create_server']['server_name'].value;
+							var event = new Event(
+								EVENT_TYPE_MODIFY_SERVER_EVENT,
+								new ModifyServerEvent(
+									new ServerId(this.server_id),
+									new Pubkey(this.server_pubkey),
+									new SerOption(name_update),
+									new SerOption(),
+								)
+							);
+
+							let buffer = event.serialize(event);
+							sock.send(buffer);
+						}
 						document.body.appendChild(del_server);
+						document.body.appendChild(document.createTextNode('     '));
+						document.body.appendChild(mod_server);
+						document.body.appendChild(document.createTextNode(' seqno='+seqno));
 						document.body.appendChild(document.createElement('br'));
 					}
 				}

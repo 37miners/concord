@@ -30,7 +30,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
 
-nioruntime_log::debug!(); // set log level to debug
+info!(); // set log level to debug
 const MAIN_LOG: &str = "mainlog";
 
 const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
@@ -64,22 +64,23 @@ pub fn ws_auth(
 				Some(token) => {
 					let token = token.0;
 					success = ds_context.check_ws_auth_token(token)?;
-
+					debug!("success={}", success);
+					send!(
+						handle,
+						Event {
+							event_type: EventType::AuthResponse,
+							auth_response: Some(AuthResponse {
+								redirect: None.into(),
+								success,
+							})
+							.into(),
+							..Default::default()
+						}
+					);
 					if success {
 						pubkey = Some(Pubkey::from_bytes(pubkey!()));
-						send!(
-							handle,
-							Event {
-								event_type: EventType::AuthResponse,
-								auth_response: Some(AuthResponse {
-									redirect: None.into(),
-									success,
-								})
-								.into(),
-								..Default::default()
-							}
-						);
 					} else {
+						debug!("return true");
 						return Ok(true);
 					}
 				}

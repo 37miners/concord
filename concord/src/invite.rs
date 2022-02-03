@@ -498,6 +498,9 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							name: jri.name.clone(),
 							icon: jri.icon,
 							joined: false,
+							seqno: 1, // TODO: this is just to get this to compile.
+							          // when join is revisited need to get the seqno from
+							          // remote server
 						};
 						ds_context
 							.add_server(server_info, Some(jri.server_id), Some(pubkey!()), true)
@@ -693,6 +696,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							name,
 							icon,
 							joined: true,
+							seqno: 1, // TODO: need to revisit this. Just making it compile now.
 						};
 						ds_context
 							.add_remote_server(server_id, server_info, channels, members)

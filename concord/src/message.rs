@@ -63,22 +63,24 @@ fn get_auth_token(
 	ds_context: &DSContext,
 	server_pubkey: [u8; 32],
 	tor_port: u16,
-	bypass_db: bool,
+	_bypass_db: bool,
 ) -> Result<String, Error> {
 	let onion_address = OnionV3Address::from_bytes(server_pubkey);
 
-	if !bypass_db {
-		let token = ds_context.get_auth_token(server_pubkey).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("get_auth_token db error: {}", e.to_string()))
-					.into();
-			error
-		})?;
+	/*
+		if !bypass_db {
+			let token = ds_context.get_auth_token(server_pubkey).map_err(|e| {
+				let error: Error =
+					ErrorKind::ApplicationError(format!("get_auth_token db error: {}", e.to_string()))
+						.into();
+				error
+			})?;
 
-		if token != 0 {
-			return Ok(format!("{}", token));
+			if token != 0 {
+				return Ok(format!("{}", token));
+			}
 		}
-	}
+	*/
 
 	let pubkey = pubkey!();
 	let pubkey = base64::encode(pubkey);

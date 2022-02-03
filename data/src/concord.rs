@@ -29,7 +29,7 @@ const MEMBER_BATCH_SIZE: u64 = 100;
 
 pub const TOKEN_EXPIRATION: u128 = 1000 * 60 * 60;
 
-debug!();
+info!();
 
 pub fn get_default_profile() -> Profile {
 	Profile {
@@ -1356,6 +1356,7 @@ pub struct ServerInfo {
 	pub name: String,
 	pub icon: Vec<u8>,
 	pub joined: bool,
+	pub seqno: u64,
 }
 
 #[derive(Debug)]
@@ -1364,6 +1365,7 @@ pub struct ServerInfoReply {
 	pub server_id: [u8; 8],
 	pub name: String,
 	pub icon: Vec<u8>,
+	pub seqno: u64,
 }
 
 // the Writeable implmenetation for serializing ServerInfo
@@ -1389,6 +1391,8 @@ impl Writeable for ServerInfo {
 			false => writer.write_u8(0)?,
 			true => writer.write_u8(1)?,
 		}
+
+		writer.write_u64(self.seqno)?;
 
 		Ok(())
 	}
@@ -1420,11 +1424,14 @@ impl Readable for ServerInfo {
 
 		let joined = reader.read_u8()? != 0;
 
+		let seqno = reader.read_u64()?;
+
 		Ok(ServerInfo {
 			pubkey,
 			name,
 			icon,
 			joined,
+			seqno,
 		})
 	}
 }
@@ -1627,6 +1634,7 @@ impl DSContext {
 							name: server.name,
 							pubkey: server.pubkey,
 							icon: server.icon,
+							seqno: server.seqno,
 						});
 					}
 				}
@@ -1637,24 +1645,61 @@ impl DSContext {
 		Ok(ret)
 	}
 
-	// get server info about a specific server id
-	pub fn get_server_info(&self, server_id: String) -> Result<Option<ServerInfoReply>, Error> {
+	pub fn get_server_info(
+		&self,
+		server_id: [u8; 8],
+		server_pubkey: [u8; 32],
+	) -> Result<Option<ServerInfoReply>, Error> {
 		let batch = self.store.batch()?;
-		let server_id = urlencoding::decode(&server_id)?;
-		let server_id = base64::decode(&*server_id)?;
-
 		let mut key = vec![SERVER_PREFIX];
-		key.append(&mut server_id.clone());
+		key.append(&mut server_id.to_vec());
+		key.append(&mut server_pubkey.to_vec());
 		let ret: Option<ServerInfo> = batch.get_ser(&key)?;
 		match ret {
 			None => Ok(None),
 			Some(ret) => Ok(Some(ServerInfoReply {
-				server_id: server_id.as_slice().try_into()?,
+				server_id,
 				icon: ret.icon,
 				pubkey: ret.pubkey,
 				name: ret.name,
+				seqno: ret.seqno,
 			})),
 		}
+	}
+
+	pub fn modify_server(
+		&self,
+		server_id: [u8; 8],
+		server_pubkey: [u8; 32],
+		name: Option<String>,
+		icon: Option<Vec<u8>>,
+	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let mut key = vec![SERVER_PREFIX];
+		key.append(&mut server_id.to_vec());
+		key.append(&mut server_pubkey.to_vec());
+		let server_info: Option<ServerInfo> = batch.get_ser(&key)?;
+
+		let server_info = match server_info {
+			None => return Ok(()), // shouldn't happen, but deal with it in client
+			Some(mut server_info) => {
+				match name {
+					Some(name) => server_info.name = name,
+					None => {}
+				}
+
+				match icon {
+					Some(icon) => server_info.icon = icon,
+					None => {}
+				}
+				server_info.seqno = server_info.seqno + 1;
+				server_info
+			}
+		};
+
+		batch.put_ser(&key, &server_info)?;
+		batch.commit()?;
+		Ok(())
 	}
 
 	// add a server
@@ -1711,36 +1756,12 @@ impl DSContext {
 		Ok(server_id)
 	}
 
-	pub fn delete_server_ws(&self, server_id: [u8; 8], pubkey: [u8; 32]) -> Result<(), Error> {
+	pub fn delete_server(&self, server_id: [u8; 8], pubkey: [u8; 32]) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
 		key.append(&mut server_id.to_vec());
 		key.append(&mut pubkey.to_vec());
 		batch.delete(&key)?;
-		batch.commit()?;
-		Ok(())
-	}
-
-	// delete a server
-	pub fn delete_server(&self, id: String) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		let mut key = vec![SERVER_PREFIX];
-		let id = urlencoding::decode(&id)?;
-		let mut id = base64::decode(&*id)?;
-		key.append(&mut id);
-		batch.delete(&key)?;
-		batch.commit()?;
-		Ok(())
-	}
-
-	// modify a server
-	pub fn modify_server(&self, id: String, server_info: ServerInfo) -> Result<(), Error> {
-		let batch = self.store.batch()?;
-		let mut key = vec![SERVER_PREFIX];
-		let id = urlencoding::decode(&id)?;
-		let mut id = base64::decode(&*id)?;
-		key.append(&mut id);
-		batch.put_ser(&key, &server_info)?;
 		batch.commit()?;
 		Ok(())
 	}
@@ -1789,12 +1810,14 @@ impl DSContext {
 			batch.commit()?;
 		}
 
-		self.modify_server(id, server_info)
+		//self.modify_server(id, server_info)
+		Ok(())
 	}
 
 	// delete a remote server
-	pub fn delete_remove_server(&self, id: String) -> Result<(), Error> {
-		self.delete_server(id)
+	pub fn delete_remove_server(&self, _id: String) -> Result<(), Error> {
+		//self.delete_server(id)
+		Ok(())
 	}
 
 	// post the specified message to our local DB.
@@ -2207,6 +2230,7 @@ impl DSContext {
 							icon: ret.icon,
 							name: ret.name,
 							server_id: invite.server_id,
+							seqno: ret.seqno,
 						})),
 						None => Ok(None),
 					}
@@ -2711,17 +2735,19 @@ impl DSContext {
 		Ok(())
 	}
 
-	// get an auth token
-	pub fn get_auth_token(&self, server_pubkey: [u8; 32]) -> Result<u128, Error> {
-		let batch = self.store.batch()?;
-		let mut key = vec![STORED_AUTH_TOKEN_PREFIX];
-		key.append(&mut server_pubkey.to_vec());
-		let auth_token: Option<AuthToken> = batch.get_ser(&key)?;
-		Ok(match auth_token {
-			Some(auth_token) => auth_token.auth_token,
-			None => 0,
-		})
-	}
+	/*
+		// get an auth token
+		pub fn get_auth_token(&self, server_pubkey: [u8; 32]) -> Result<u128, Error> {
+			let batch = self.store.batch()?;
+			let mut key = vec![STORED_AUTH_TOKEN_PREFIX];
+			key.append(&mut server_pubkey.to_vec());
+			let auth_token: Option<AuthToken> = batch.get_ser(&key)?;
+			Ok(match auth_token {
+				Some(auth_token) => auth_token.auth_token,
+				None => 0,
+			})
+		}
+	*/
 
 	pub fn get_profile(
 		&self,
