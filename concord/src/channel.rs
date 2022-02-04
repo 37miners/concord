@@ -26,7 +26,7 @@ use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
 
-debug!(); // set log level to debug
+info!(); // set log level to debug
 
 #[derive(Serialize, Deserialize)]
 struct ChannelInfo {

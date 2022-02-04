@@ -772,9 +772,8 @@ impl Writeable for Icon {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let len = self.data.len();
 		writer.write_u64(len.try_into()?)?;
-		for i in 0..len {
-			writer.write_u8(self.data[i])?;
-		}
+		writer.write_fixed_bytes(&self.data)?;
+
 		Ok(())
 	}
 }
@@ -782,10 +781,7 @@ impl Writeable for Icon {
 impl Readable for Icon {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let len = reader.read_u64()?;
-		let mut data = vec![];
-		for _ in 0..len {
-			data.push(reader.read_u8()?);
-		}
+		let data = reader.read_fixed_bytes(len.try_into()?)?;
 
 		Ok(Self { data })
 	}

@@ -512,15 +512,9 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
-		// not reading more than 100k bytes in a single read
-		if len > 100_000 {
-			return Err(ErrorKind::TooLargeReadErr("too large read".to_string()).into());
-		}
 		let mut buf = vec![0; len];
-		self.source
-			.read_exact(&mut buf)
-			.map(move |_| buf)
-			.map_err(map_io_err)
+		self.source.read_exact(&mut buf).map_err(map_io_err)?;
+		Ok(buf)
 	}
 
 	fn expect_u8(&mut self, val: u8) -> Result<u8, Error> {

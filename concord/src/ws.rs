@@ -28,7 +28,7 @@ use nioruntime_log::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-debug!(); // set log level to debug
+info!(); // set log level to debug
 
 fn process_open(
 	handle: ConnData,

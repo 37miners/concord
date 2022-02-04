@@ -1382,10 +1382,10 @@ impl Writeable for ServerInfo {
 			writer.write_u8(name_bytes[i])?;
 		}
 
-		writer.write_u32(self.icon.len().try_into().unwrap_or(0))?;
-		for b in &self.icon {
-			writer.write_u8(*b)?;
-		}
+		let icon_len: u32 = self.icon.len().try_into()?;
+		writer.write_u32(icon_len)?;
+
+		writer.write_fixed_bytes(&self.icon)?;
 
 		match self.joined {
 			false => writer.write_u8(0)?,
@@ -1413,11 +1413,8 @@ impl Readable for ServerInfo {
 			name.push(reader.read_u8()?);
 		}
 
-		let icon_len = reader.read_u32()?;
-		let mut icon = vec![];
-		for _ in 0..icon_len {
-			icon.push(reader.read_u8()?);
-		}
+		let icon_len: usize = reader.read_u32()?.try_into()?;
+		let icon = reader.read_fixed_bytes(icon_len)?;
 
 		let name = std::str::from_utf8(&name)?;
 		let name = name.to_string();
