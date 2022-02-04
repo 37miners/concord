@@ -1752,6 +1752,21 @@ impl DSContext {
 			None,
 			&batch,
 		)?;
+
+		// add the default channel
+		let channel_id = rand::random();
+		let channel_key = ChannelKey {
+			server_pubkey: user_pubkey,
+			server_id,
+			channel_id,
+		};
+		let channel = Channel {
+			name: "mainchat".to_string(),
+			description: "Welcome to mainchat!".to_string(),
+			channel_id,
+		};
+		self.set_channel_impl(channel_key, channel, &batch)?;
+
 		batch.commit()?;
 		Ok(server_id)
 	}
@@ -2000,28 +2015,95 @@ impl DSContext {
 		Ok(ret)
 	}
 
-	pub fn set_channel(&self, channel_key: ChannelKey, channel: Channel) -> Result<(), Error> {
+	pub fn add_channel(
+		&self,
+		server_id: [u8; 8],
+		server_pubkey: [u8; 32],
+		name: String,
+		description: String,
+	) -> Result<u64, Error> {
+		let channel_id = rand::random();
+		let channel_key = ChannelKey {
+			channel_id,
+			server_id,
+			server_pubkey,
+		};
+		let channel = Channel {
+			name,
+			description,
+			channel_id,
+		};
+		self.set_channel(channel_key, channel)?;
+		Ok(channel_id)
+	}
+
+	pub fn modify_channel(
+		&self,
+		server_id: [u8; 8],
+		server_pubkey: [u8; 32],
+		channel_id: u64,
+		name: String,
+		description: String,
+	) -> Result<(), Error> {
+		let channel_key = ChannelKey {
+			channel_id,
+			server_id,
+			server_pubkey,
+		};
+		let channel = Channel {
+			name,
+			description,
+			channel_id,
+		};
+		self.set_channel(channel_key, channel)?;
+		Ok(())
+	}
+
+	fn set_channel(&self, channel_key: ChannelKey, channel: Channel) -> Result<(), Error> {
 		let batch = self.store.batch()?;
+		self.set_channel_impl(channel_key, channel, &batch)?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	fn set_channel_impl(
+		&self,
+		channel_key: ChannelKey,
+		channel: Channel,
+		batch: &Batch,
+	) -> Result<(), Error> {
 		let mut buffer = vec![];
 		serialize_default(&mut buffer, &channel_key)?;
 		let mut buffer2 = vec![CHANNEL_PREFIX];
 		buffer2.append(&mut buffer);
 		batch.put_ser(&buffer2, &channel)?;
+		Ok(())
+	}
+
+	pub fn delete_channel(
+		&self,
+		server_id: [u8; 8],
+		server_pubkey: [u8; 32],
+		channel_id: u64,
+	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		let channel_key = ChannelKey {
+			channel_id,
+			server_id,
+			server_pubkey,
+		};
+		self.delete_channel_impl(channel_key, &batch)?;
+
 		batch.commit()?;
 		Ok(())
 	}
 
-	pub fn delete_channel(&self, channel_key: ChannelKey) -> Result<(), Error> {
-		let batch = self.store.batch()?;
+	fn delete_channel_impl(&self, channel_key: ChannelKey, batch: &Batch) -> Result<(), Error> {
 		let mut buffer = vec![];
 		serialize_default(&mut buffer, &channel_key)?;
 		let mut buffer2 = vec![CHANNEL_PREFIX];
 		buffer2.append(&mut buffer);
-
-		// this throws an error if the item is not found. Don't think that's correct.
-		// ignore this error
 		let _ = batch.delete(&buffer2);
-		batch.commit()?;
 		Ok(())
 	}
 

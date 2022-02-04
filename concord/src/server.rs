@@ -15,8 +15,6 @@
 use crate::auth::check_auth;
 use crate::context::ConcordContext;
 use concordconfig::ConcordConfig;
-use concorddata::concord::Channel;
-use concorddata::concord::ChannelKey;
 use concorddata::concord::DSContext;
 use concorddata::concord::ServerInfo as DataServerInfo;
 use concorddata::concord::AUTH_FLAG_OWNER;
@@ -28,9 +26,6 @@ use nioruntime_log::*;
 
 use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, Pubkey, ServerInfo};
 use crate::{owner, send};
-
-use std::fs::File;
-use std::io::Read;
 
 const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
 const MAIN_LOG: &str = "mainlog";
@@ -173,97 +168,96 @@ pub fn modify_server(
 }
 
 pub fn init_server(config: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
-	// create a ds context. Each rustlet needs its own
-	let ds_context = DSContext::new(config.root_dir.clone())?;
-
-	// create a server on this concord instance
-	rustlet!("create_server", {
-		// make sure we're authenticated
-		let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
-		match res {
-			Ok(_) => {}
-			Err(e) => {
-				log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
-				response!("{}", NOT_AUTHORIZED);
-				return Ok(());
+	/*
+		// create a server on this concord instance
+		rustlet!("create_server", {
+			// make sure we're authenticated
+			let res = check_auth(&ds_context, AUTH_FLAG_OWNER);
+			match res {
+				Ok(_) => {}
+				Err(e) => {
+					log_multi!(ERROR, MAIN_LOG, "auth error: {}", e);
+					response!("{}", NOT_AUTHORIZED);
+					return Ok(());
+				}
 			}
-		}
 
-		let server_pubkey = pubkey!();
+			let server_pubkey = pubkey!();
 
-		// get query parameters
-		let query = request!("query");
-		let query_vec = querystring::querify(&query);
-		let mut name = "".to_string();
-		for query_param in query_vec {
-			if query_param.0 == "name" {
-				name = query_param.1.to_string();
-				break;
+			// get query parameters
+			let query = request!("query");
+			let query_vec = querystring::querify(&query);
+			let mut name = "".to_string();
+			for query_param in query_vec {
+				if query_param.0 == "name" {
+					name = query_param.1.to_string();
+					break;
+				}
 			}
-		}
 
-		let content = request_content!();
-		let content = &mut &content[..];
-		let mut headers = hyper::header::Headers::new();
-		for i in 0..header_len!() {
-			headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
-		}
-		// parse the mime_multipart data in this request
-		let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
-		for node in &res {
-			match node {
-				mime_multipart::Node::File(filepart) => {
-					let mut f = File::open(&filepart.path)?;
-					let size = filepart.size.unwrap_or(0);
-					let mut buf = vec![0 as u8; size];
-					f.read(&mut buf)?;
-					let pubkey = pubkey!();
-					let server_info = DataServerInfo {
-						pubkey,
-						name: name.clone(),
-						icon: buf,
-						joined: true,
-						seqno: 1,
-					};
+			let content = request_content!();
+			let content = &mut &content[..];
+			let mut headers = hyper::header::Headers::new();
+			for i in 0..header_len!() {
+				headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
+			}
+			// parse the mime_multipart data in this request
+			let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
+			for node in &res {
+				match node {
+					mime_multipart::Node::File(filepart) => {
+						let mut f = File::open(&filepart.path)?;
+						let size = filepart.size.unwrap_or(0);
+						let mut buf = vec![0 as u8; size];
+						f.read(&mut buf)?;
+						let pubkey = pubkey!();
+						let server_info = DataServerInfo {
+							pubkey,
+							name: name.clone(),
+							icon: buf,
+							joined: true,
+							seqno: 1,
+						};
 
-					let server_id = ds_context
-						.add_server(server_info, None, None, false)
-						.map_err(|e| {
+						let server_id = ds_context
+							.add_server(server_info, None, None, false)
+							.map_err(|e| {
+								let error: Error = ErrorKind::ApplicationError(format!(
+									"error adding server: {}",
+									e.to_string()
+								))
+								.into();
+								error
+							})?;
+
+						let channel_key = ChannelKey {
+							server_pubkey,
+							server_id,
+							channel_id: 0,
+						};
+						let channel = Channel {
+							name: "mainchat".to_string(),
+							description: "Welcome to mainchat!".to_string(),
+							channel_id: 0,
+						};
+
+						ds_context.set_channel(channel_key, channel).map_err(|e| {
 							let error: Error = ErrorKind::ApplicationError(format!(
-								"error adding server: {}",
+								"error adding channel: {}",
 								e.to_string()
 							))
 							.into();
 							error
 						})?;
 
-					let channel_key = ChannelKey {
-						server_pubkey,
-						server_id,
-						channel_id: 0,
-					};
-					let channel = Channel {
-						name: "mainchat".to_string(),
-						description: "Welcome to mainchat!".to_string(),
-						channel_id: 0,
-					};
-
-					ds_context.set_channel(channel_key, channel).map_err(|e| {
-						let error: Error = ErrorKind::ApplicationError(format!(
-							"error adding channel: {}",
-							e.to_string()
-						))
-						.into();
-						error
-					})?;
-
-					break;
+						break;
+					}
+					_ => {}
 				}
-				_ => {}
 			}
-		}
-	});
-	rustlet_mapping!("/create_server", "create_server");
+		});
+		rustlet_mapping!("/create_server", "create_server");
+	*/
 
 	// create a new context for each rustlet, synchronization handled by batches
 	let ds_context = DSContext::new(config.root_dir.clone())?;

@@ -149,3 +149,10 @@ macro_rules! owner {
 		}
 	}};
 }
+
+#[macro_export]
+macro_rules! member {
+	($conn_info:expr, $ds_context:expr) => {{
+		// for now just continue. TODO: implement this to check if the user is a member
+	}};
+}

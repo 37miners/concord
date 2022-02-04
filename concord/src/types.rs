@@ -105,7 +105,7 @@ pub struct ServerId {
 }
 
 impl ServerId {
-	pub fn _from_bytes(data: [u8; 8]) -> Self {
+	pub fn from_bytes(data: [u8; 8]) -> Self {
 		Self { data }
 	}
 
@@ -318,6 +318,305 @@ impl Readable for CreateServerEvent {
 }
 
 #[derive(Debug)]
+pub struct Channel {
+	pub name: SerString,
+	pub description: SerString,
+	pub channel_id: u64,
+}
+
+impl Writeable for Channel {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u64(self.channel_id)?;
+		Writeable::write(&self.name, writer)?;
+		Writeable::write(&self.description, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for Channel {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let channel_id = reader.read_u64()?;
+		let name = SerString::read(reader)?;
+		let description = SerString::read(reader)?;
+		Ok(Self {
+			channel_id,
+			name,
+			description,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct AddChannelRequest {
+	pub request_id: u128,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+	pub name: SerString,
+	pub description: SerString,
+}
+
+impl Writeable for AddChannelRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.name, writer)?;
+		Writeable::write(&self.description, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for AddChannelRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let name = SerString::read(reader)?;
+		let description = SerString::read(reader)?;
+		Ok(Self {
+			request_id,
+			server_id,
+			server_pubkey,
+			name,
+			description,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct AddChannelResponse {
+	pub request_id: u128,
+	pub channel_id: u64,
+	pub success: bool,
+}
+
+impl Writeable for AddChannelResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		match self.success {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		writer.write_u64(self.channel_id)?;
+		Ok(())
+	}
+}
+
+impl Readable for AddChannelResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let success = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		let channel_id = reader.read_u64()?;
+		Ok(Self {
+			request_id,
+			success,
+			channel_id,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct ModifyChannelRequest {
+	pub request_id: u128,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+	pub channel_id: u64,
+	pub name: SerString,
+	pub description: SerString,
+}
+
+impl Writeable for ModifyChannelRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		writer.write_u64(self.channel_id)?;
+		Writeable::write(&self.name, writer)?;
+		Writeable::write(&self.description, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ModifyChannelRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let channel_id = reader.read_u64()?;
+		let name = SerString::read(reader)?;
+		let description = SerString::read(reader)?;
+		Ok(Self {
+			request_id,
+			channel_id,
+			server_id,
+			server_pubkey,
+			name,
+			description,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct ModifyChannelResponse {
+	pub request_id: u128,
+	pub success: bool,
+}
+
+impl Writeable for ModifyChannelResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		match self.success {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		Ok(())
+	}
+}
+
+impl Readable for ModifyChannelResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let success = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		Ok(Self {
+			request_id,
+			success,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct DeleteChannelRequest {
+	pub request_id: u128,
+	pub channel_id: u64,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+}
+
+impl Writeable for DeleteChannelRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		writer.write_u64(self.channel_id)?;
+		Ok(())
+	}
+}
+
+impl Readable for DeleteChannelRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let channel_id = reader.read_u64()?;
+		Ok(Self {
+			request_id,
+			channel_id,
+			server_id,
+			server_pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct DeleteChannelResponse {
+	pub request_id: u128,
+	pub success: bool,
+}
+
+impl Writeable for DeleteChannelResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		match self.success {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		Ok(())
+	}
+}
+
+impl Readable for DeleteChannelResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let success = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		Ok(Self {
+			request_id,
+			success,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct GetChannelsResponse {
+	pub channels: Vec<Channel>,
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+}
+
+impl Writeable for GetChannelsResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		writer.write_u64(self.channels.len().try_into()?)?;
+		for channel in &self.channels {
+			Writeable::write(&channel, writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for GetChannelsResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let len = reader.read_u64()?;
+		let mut channels = vec![];
+		for _ in 0..len {
+			channels.push(Channel::read(reader)?);
+		}
+
+		Ok(Self {
+			channels,
+			server_id,
+			server_pubkey,
+		})
+	}
+}
+#[derive(Debug)]
+pub struct GetChannelsRequest {
+	pub server_id: ServerId,
+	pub server_pubkey: Pubkey,
+}
+
+impl Writeable for GetChannelsRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for GetChannelsRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_id = ServerId::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+
+		Ok(Self {
+			server_id,
+			server_pubkey,
+		})
+	}
+}
+
+#[derive(Debug)]
 pub struct GetServersEvent {}
 
 impl Writeable for GetServersEvent {
@@ -387,6 +686,12 @@ impl Readable for AuthEvent {
 #[derive(Debug, Clone)]
 pub struct SerString {
 	pub data: String,
+}
+
+impl SerString {
+	pub fn to_string(&self) -> String {
+		self.data.clone()
+	}
 }
 
 impl From<String> for SerString {
@@ -560,7 +865,7 @@ impl Readable for GetServersResponse {
 }
 
 #[derive(Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Clone)]
-#[repr(u8)]
+#[repr(u16)]
 pub enum EventType {
 	AuthEvent,
 	ChallengeEvent,
@@ -570,6 +875,14 @@ pub enum EventType {
 	CreateServerEvent,
 	DeleteServerEvent,
 	ModifyServerEvent,
+	GetChannelsRequest,
+	GetChannelsResponse,
+	AddChannelRequest,
+	DeleteChannelRequest,
+	ModifyChannelRequest,
+	AddChannelResponse,
+	DeleteChannelResponse,
+	ModifyChannelResponse,
 }
 
 #[derive(Debug)]
@@ -583,6 +896,14 @@ pub struct Event {
 	pub create_server_event: SerOption<CreateServerEvent>,
 	pub delete_server_event: SerOption<DeleteServerEvent>,
 	pub modify_server_event: SerOption<ModifyServerEvent>,
+	pub get_channels_request: SerOption<GetChannelsRequest>,
+	pub get_channels_response: SerOption<GetChannelsResponse>,
+	pub delete_channel_request: SerOption<DeleteChannelRequest>,
+	pub delete_channel_response: SerOption<DeleteChannelResponse>,
+	pub modify_channel_request: SerOption<ModifyChannelRequest>,
+	pub modify_channel_response: SerOption<ModifyChannelResponse>,
+	pub add_channel_request: SerOption<AddChannelRequest>,
+	pub add_channel_response: SerOption<AddChannelResponse>,
 	pub version: u8,
 	pub timestamp: u128,
 }
@@ -599,6 +920,14 @@ impl Default for Event {
 			create_server_event: None.into(),
 			delete_server_event: None.into(),
 			modify_server_event: None.into(),
+			get_channels_request: None.into(),
+			get_channels_response: None.into(),
+			delete_channel_request: None.into(),
+			delete_channel_response: None.into(),
+			modify_channel_request: None.into(),
+			modify_channel_response: None.into(),
+			add_channel_request: None.into(),
+			add_channel_response: None.into(),
 			version: PROTOCOL_VERSION,
 			timestamp: std::time::SystemTime::now()
 				.duration_since(std::time::UNIX_EPOCH)
@@ -612,7 +941,7 @@ impl Writeable for Event {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(self.version)?;
 		writer.write_u128(self.timestamp)?;
-		writer.write_u8(self.event_type.clone().into())?;
+		writer.write_u16(self.event_type.clone().into())?;
 		match &self.event_type {
 			EventType::AuthEvent => Writeable::write(&self.auth_event, writer),
 			EventType::ChallengeEvent => Writeable::write(&self.challenge_event, writer),
@@ -622,6 +951,22 @@ impl Writeable for Event {
 			EventType::CreateServerEvent => Writeable::write(&self.create_server_event, writer),
 			EventType::DeleteServerEvent => Writeable::write(&self.delete_server_event, writer),
 			EventType::ModifyServerEvent => Writeable::write(&self.modify_server_event, writer),
+			EventType::GetChannelsRequest => Writeable::write(&self.get_channels_request, writer),
+			EventType::GetChannelsResponse => Writeable::write(&self.get_channels_response, writer),
+			EventType::AddChannelResponse => Writeable::write(&self.add_channel_response, writer),
+			EventType::ModifyChannelResponse => {
+				Writeable::write(&self.modify_channel_response, writer)
+			}
+			EventType::DeleteChannelResponse => {
+				Writeable::write(&self.delete_channel_response, writer)
+			}
+			EventType::AddChannelRequest => Writeable::write(&self.add_channel_request, writer),
+			EventType::ModifyChannelRequest => {
+				Writeable::write(&self.modify_channel_request, writer)
+			}
+			EventType::DeleteChannelRequest => {
+				Writeable::write(&self.delete_channel_request, writer)
+			}
 		}
 	}
 }
@@ -636,11 +981,19 @@ impl Readable for Event {
 		let mut create_server_event = None.into();
 		let mut delete_server_event = None.into();
 		let mut modify_server_event = None.into();
+		let mut get_channels_request = None.into();
+		let mut get_channels_response = None.into();
+		let mut add_channel_request = None.into();
+		let mut add_channel_response = None.into();
+		let mut modify_channel_request = None.into();
+		let mut modify_channel_response = None.into();
+		let mut delete_channel_request = None.into();
+		let mut delete_channel_response = None.into();
 
 		let version = reader.read_u8()?;
 		let timestamp = reader.read_u128()?;
 
-		let event_type: EventType = EventType::try_from(reader.read_u8()?).map_err(|e| {
+		let event_type: EventType = EventType::try_from(reader.read_u16()?).map_err(|e| {
 			let error: Error =
 				ErrorKind::SerializationError(format!("invalid event, unkown event type: {}", e))
 					.into();
@@ -656,6 +1009,14 @@ impl Readable for Event {
 			EventType::CreateServerEvent => create_server_event = SerOption::read(reader)?,
 			EventType::DeleteServerEvent => delete_server_event = SerOption::read(reader)?,
 			EventType::ModifyServerEvent => modify_server_event = SerOption::read(reader)?,
+			EventType::GetChannelsRequest => get_channels_request = SerOption::read(reader)?,
+			EventType::GetChannelsResponse => get_channels_response = SerOption::read(reader)?,
+			EventType::AddChannelRequest => add_channel_request = SerOption::read(reader)?,
+			EventType::ModifyChannelRequest => modify_channel_request = SerOption::read(reader)?,
+			EventType::DeleteChannelRequest => delete_channel_request = SerOption::read(reader)?,
+			EventType::AddChannelResponse => add_channel_response = SerOption::read(reader)?,
+			EventType::ModifyChannelResponse => modify_channel_response = SerOption::read(reader)?,
+			EventType::DeleteChannelResponse => delete_channel_response = SerOption::read(reader)?,
 		};
 
 		Ok(Self {
@@ -669,6 +1030,14 @@ impl Readable for Event {
 			create_server_event,
 			delete_server_event,
 			modify_server_event,
+			get_channels_request,
+			get_channels_response,
+			add_channel_request,
+			add_channel_response,
+			modify_channel_request,
+			modify_channel_response,
+			delete_channel_request,
+			delete_channel_response,
 			timestamp,
 		})
 	}

@@ -1,43 +1,3 @@
-/*
-	Example using this:
-                <script>
-                        function getCookie(cname) {
-                                let name = cname + "=";
-                                let decodedCookie = decodeURIComponent(document.cookie);
-                                let ca = decodedCookie.split(';');
-                                for(let i = 0; i <ca.length; i++) {
-                                        let c = ca[i];
-                                        while (c.charAt(0) == ' ') {
-                                                c = c.substring(1);
-                                        }
-                                        if (c.indexOf(name) == 0) {
-                                                return c.substring(name.length, c.length);
-                                        }
-                                }
-                                return "";
-                        }
-
-                        var token = BigInt(getCookie("auth"));
-                        var sock = new WebSocket("ws://localhost:8093/ws");
-                        sock.binaryType = "arraybuffer";
-                        sock.onmessage = function (event) {
-                                var event = new Event(
-                                        EVENT_TYPE_AUTH,
-                                        new AuthEvent(
-                                                new SerOption(),
-                                                new SerOption(
-                                                        token,
-                                                ),
-                                                new SerOption(),
-                                        )
-                                );
-
-                                let buffer = event.serialize(event);
-                                sock.send(buffer);
-                        }
-                </script>
-*/
-
 function uint8ToBase64( bytes ) {
 	var binary = '';
 	var len = bytes.byteLength;
@@ -314,14 +274,192 @@ class Signature {
 }
 
 // note that these must match with the server codes
-const EVENT_TYPE_AUTH                 = 0;
-const EVENT_TYPE_CHALLENGE            = 1;
-const EVENT_TYPE_AUTH_RESP            = 2;
-const EVENT_TYPE_GET_SERVERS_EVENT    = 3;
-const EVENT_TYPE_GET_SERVERS_RESPONSE = 4;
-const EVENT_TYPE_CREATE_SERVER_EVENT  = 5;
-const EVENT_TYPE_DELETE_SERVER_EVENT  = 6;
-const EVENT_TYPE_MODIFY_SERVER_EVENT  = 7;
+const EVENT_TYPE_AUTH                    = 0;
+const EVENT_TYPE_CHALLENGE               = 1;
+const EVENT_TYPE_AUTH_RESP               = 2;
+const EVENT_TYPE_GET_SERVERS_EVENT       = 3;
+const EVENT_TYPE_GET_SERVERS_RESPONSE    = 4;
+const EVENT_TYPE_CREATE_SERVER_EVENT     = 5;
+const EVENT_TYPE_DELETE_SERVER_EVENT     = 6;
+const EVENT_TYPE_MODIFY_SERVER_EVENT     = 7;
+const EVENT_TYPE_GET_CHANNELS_REQUEST    = 8;
+const EVENT_TYPE_GET_CHANNELS_RESPONSE   = 9;
+const EVENT_TYPE_ADD_CHANNEL_REQUEST     = 10;
+const EVENT_TYPE_DELETE_CHANNEL_REQUEST  = 11;
+const EVENT_TYPE_MODIFY_CHANNEL_REQUEST  = 12;
+const EVENT_TYPE_ADD_CHANNEL_RESPONSE    = 13;
+const EVENT_TYPE_DELETE_CHANNEL_RESPONSE = 14;
+const EVENT_TYPE_MODIFY_CHANNEL_RESPONSE = 15;
+
+class ModifyChannelRequest {
+	constructor(request_id, server_id, server_pubkey, channel_id, name, description) {
+		this.request_id = request_id;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.channel_id = channel_id;
+		this.name = name;
+		this.description = description;
+	}
+
+	serialize(modify_channel_request) {
+		var x = U64.prototype.serialize(modify_channel_request.channel_id);
+                var y = SerString.prototype.serialize(modify_channel_request.name);
+                var z = SerString.prototype.serialize(modify_channel_request.description);
+                var ret = new Uint8Array(new ArrayBuffer(64 + y.length + z.length));
+                var request_id = BigInt.prototype.serialize(modify_channel_request.request_id);
+                for(var i=0; i<16; i++)
+                        ret[i] = request_id[i];
+                for(var i=0; i<8; i++)
+                        ret[i+16] = modify_channel_request.server_id[i];
+                for(var i=0; i<32; i++)
+                        ret[i+24] = modify_channel_request.server_pubkey[i];
+		
+                for(var i=0; i<x.length; i++)
+                        ret[i+56] = x[i];
+                for(var i=0; i<y.length; i++)
+                        ret[i+x.length+56] = y[i];
+		for(var i=0; i<z.length; i++)
+			ret[i+x.length+y.length+56] = z[i];
+                return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement ModifyChannelRequest.deserialize";
+	}
+}
+
+class DeleteChannelRequest {
+	constructor(request_id, server_id, server_pubkey, channel_id) {
+		this.request_id = request_id;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.channel_id = channel_id;
+	}
+
+	serialize(delete_channel_request) {
+                var ret = new Uint8Array(new ArrayBuffer(64));
+                var request_id = BigInt.prototype.serialize(delete_channel_request.request_id);
+                for(var i=0; i<16; i++)
+                        ret[i] = request_id[i];
+                for(var i=0; i<8; i++)
+                        ret[i+16] = delete_channel_request.server_id[i];
+                for(var i=0; i<32; i++)
+                        ret[i+24] = delete_channel_request.server_pubkey[i];
+		var x = U64.prototype.serialize(delete_channel_request.channel_id);
+		for(var i=0; i<8; i++)
+			ret[i+56] = x[i];
+                return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement DeleteChannelRequest.deserialize";
+	}
+}
+
+class AddChannelRequest {
+	constructor(request_id, server_id, server_pubkey, name, description) {
+		this.request_id = request_id;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.name = name;
+		this.description = description;
+	}
+
+	serialize(add_channel_request) {
+		var x = SerString.prototype.serialize(add_channel_request.name);
+		var y = SerString.prototype.serialize(add_channel_request.description);
+                var ret = new Uint8Array(new ArrayBuffer(56 + x.length + y.length));
+		var request_id = BigInt.prototype.serialize(add_channel_request.request_id);
+                for(var i=0; i<16; i++)
+                        ret[i] = request_id[i];
+		for(var i=0; i<8; i++)
+			ret[i+16] = add_channel_request.server_id[i];
+                for(var i=0; i<32; i++)
+                        ret[i+24] = add_channel_request.server_pubkey[i];
+		for(var i=0; i<x.length; i++)
+			ret[i+56] = x[i];
+		for(var i=0; i<y.length; i++)
+			ret[i+x.length+56] = y[i];
+                return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement AddChannelRequest.deserialize";
+	}
+}
+
+class Channel {
+	constructor(channel_id, name, description, server_id, server_pubkey) {
+		this.channel_id = channel_id;
+		this.name = name;
+		this.description = description;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+	}
+
+	serialize() {
+		throw "TODO: implement Channel.serialize";
+	}
+
+	deserialize(buffer, offset) {
+		var channel_id = U64.prototype.deserialize(buffer, offset);
+		offset += 8;
+		var name = SerString.prototype.deserialize(buffer, offset);
+		offset = name.offset;
+		var description = SerString.prototype.deserialize(buffer, offset);
+		offset = description.offset;
+		var ret = new Channel(channel_id, name, description);
+		ret.offset = offset;
+		return ret;
+	}
+}
+
+class GetChannelsResponse {
+	serialize() {
+		throw "TODO: implement GetChannelsResponse.serialize";
+	}
+
+	deserialize(buffer, offset) {
+		var server_id = ServerId.prototype.deserialize(buffer, offset);
+		offset = server_id.offset;
+		var server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
+		offset = server_pubkey.offset;
+		var len = U64.prototype.deserialize(buffer, offset).value;
+		offset += 8;
+		var channels = [];
+		for(var i=0; i<len; i++) {
+			var channel = Channel.prototype.deserialize(buffer, offset);
+			offset = channel.offset;
+			channels.push(channel);
+		}
+
+		var ret = new GetChannelsResponse();
+		ret.channels = channels;
+		ret.server_pubkey = server_pubkey;
+		ret.server_id = server_id;
+		return ret;
+	}
+}
+
+class GetChannelsRequest {
+	constructor(server_id, server_pubkey) {
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+	}
+
+	serialize(get_channels_request) {
+		var ret = new Uint8Array(new ArrayBuffer(40));
+		for(var i=0; i<8; i++)
+			ret[i] = get_channels_request.server_id[i];
+		for(var i=0; i<32; i++)
+			ret[i+8] = get_channels_request.server_pubkey[i];
+		return ret;
+	}
+
+        deserialize(buffer, offset) {
+                throw "TODO: implement GetChannelsRequest.deserialize";
+        }
+}
 
 class DeleteServerEvent {
 	constructor(server_id, server_pubkey) {
@@ -575,6 +713,16 @@ class Event {
 				this.delete_server_event = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
 				this.modify_server_event = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
+				this.get_channels_request = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
+				this.get_channels_response = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
+				this.add_channel_request = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
+				this.delete_channel_request = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
+				this.modify_channel_request = new SerOption(event_data);
 			} else {
 				throw "Unknown event in Event.constructor type = " + event_type;
 			}
@@ -598,20 +746,28 @@ class Event {
 			x = event.delete_server_event.serialize(event.delete_server_event, DeleteServerEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
 			x = event.modify_server_event.serialize(event.modify_server_event, ModifyServerEvent.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
+			x = event.get_channels_request.serialize(event.get_channels_request, GetChannelsRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
+			x = event.add_channel_request.serialize(event.add_channel_request, AddChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
+			x = event.delete_channel_request.serialize(event.delete_channel_request, DeleteChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
+			x = event.modify_channel_request.serialize(event.modify_channel_request, ModifyChannelRequest.prototype);
 		} else {
 			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
 
-		var ret = new ArrayBuffer(x.length + 18);
+		var ret = new ArrayBuffer(x.length + 19);
 		var ret = new Uint8Array(ret);
 		ret[0] = event.version;
 		var t = BigInt.prototype.serialize(event.timestamp);
 		for(var i=0; i<16; i++) {
 			ret[i+1] = t[i];
 		}
-		ret[17] = event.event_type;
+		ret[18] = event.event_type;
 		for(var i=0; i<x.length; i++) {
-			ret[i+18] = x[i];
+			ret[i+19] = x[i];
 		}
 		return ret;
 
@@ -621,39 +777,63 @@ class Event {
 		var event = new Event();
 		event.version = buffer[0];
 		event.timestamp = BigInt.prototype.deserialize(buffer, 1);
-		event.event_type = buffer[17];
+		event.event_type = buffer[18];
 		if(event.event_type == EVENT_TYPE_AUTH) {
 			event.auth_event = SerOption
 				.prototype
-				.deserialize(buffer, 18, AuthEvent.prototype);
+				.deserialize(buffer, 19, AuthEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
 			event.challenge_event = SerOption
 				.prototype
-				.deserialize(buffer, 18, ChallengeEvent.prototype);
+				.deserialize(buffer, 19, ChallengeEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
 			event.auth_resp = SerOption
 				.prototype
-				.deserialize(buffer, 18, AuthResp.prototype);
+				.deserialize(buffer, 19, AuthResp.prototype);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
 			event.get_servers = SerOption
 				.prototype
-				.deserialize(buffer, 18, GetServers.prototype);
+				.deserialize(buffer, 19, GetServers.prototype);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
 			event.get_servers_response = SerOption
 				.prototype
-				.deserialize(buffer, 18, GetServersResponse.prototype);
+				.deserialize(buffer, 19, GetServersResponse.prototype);
 		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
 			event.create_server_event = SerOption
 				.prototype
-				.deserialize(buffer, 18, CreateServerEvent.prototype);	
+				.deserialize(buffer, 19, CreateServerEvent.prototype);	
 		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
 			event.delete_server_event = SerOption
 				.prototype
-				.deserialize(buffer, 18, DeleteServerEvent.prototype);
+				.deserialize(buffer, 19, DeleteServerEvent.prototype);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
 			event.modify_server_event = SerOption
 				.prototype
-				.deserialize(buffer, 18, ModifyServerEvent.prototype);
+				.deserialize(buffer, 19, ModifyServerEvent.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
+			event.get_channels_request = SerOption
+				.prototype
+				.deserialize(buffer, 19, GetChannelsRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
+			event.get_channels_response = SerOption
+				.prototype
+				.deserialize(buffer, 19, GetChannelsResponse.prototype);
+		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
+			event.add_channel_response = SerOption
+				.prototype
+				.deserialize(buffer, 19, AddChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
+			event.delete_channel_request = SerOption
+				.prototype
+				.deserialize(buffer, 19, DeleteChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
+			event.modify_channel_request = SerOption
+				.prototype
+				.deserialize(buffer, 19, ModifyChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_RESPONSE ||
+			event.event_type == EVENT_TYPE_MODIFY_CHANNEL_RESPONSE ||
+			event.event_type == EVENT_TYPE_DELETE_CHANNEL_RESPONSE){
+			// for now we don't process these
 		} else {
 			throw "Unknown event type in event.deserialize = " + event.event_type;
 		}
@@ -661,7 +841,6 @@ class Event {
 		return event;
 	}
 }
-
 
 function array_buffer_to_event(buffer) {
 	return Event.prototype.deserialize(buffer);

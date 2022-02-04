@@ -13,6 +13,7 @@
 // limitations under the License.
 
 use crate::auth::ws_auth;
+use crate::channel::{add_channel, delete_channel, get_channels, modify_channel};
 use crate::context::ConcordContext;
 use crate::server::{create_server, delete_server, get_servers, modify_server};
 use crate::types::*;
@@ -27,7 +28,7 @@ use nioruntime_log::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-info!(); // set log level to debug
+debug!(); // set log level to debug
 
 fn process_open(
 	handle: ConnData,
@@ -116,9 +117,34 @@ fn process_binary(
 											"modify_server error"
 										)
 									}
+									EventType::GetChannelsRequest => {
+										try2!(
+											get_channels(connection_info, ds_context, &event),
+											"get_channels error"
+										)
+									}
+									EventType::AddChannelRequest => {
+										try2!(
+											add_channel(connection_info, ds_context, &event),
+											"add_channel error"
+										)
+									}
+									EventType::ModifyChannelRequest => {
+										try2!(
+											modify_channel(connection_info, ds_context, &event),
+											"modify channel error"
+										)
+									}
+									EventType::DeleteChannelRequest => {
+										try2!(
+											delete_channel(connection_info, ds_context, &event),
+											"delete channel error"
+										)
+									}
 									_ => {
-										debug!("unexpected event type. Closing conn = {}", id);
-										//close!(handle, conn_info);
+										warn!("unexpected event type in event {:?}. Closing conn = {}",
+											event, id
+										);
 										true
 									}
 								}

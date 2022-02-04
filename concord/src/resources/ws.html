@@ -1,8 +1,11 @@
-<html>
-	<head>
+<html> <head>
 		<title>Welcome to NIO Runtime Httpd Server!</title>
         	<script>
 			var sock;
+
+function uint8arraytobase64string(arr) {
+	return btoa(String.fromCharCode.apply(null, arr))
+}
 
 function convertBinaryStringToUint8Array(bStr) {
 	var i, len = bStr.length, u8_array = new Uint8Array(len);
@@ -26,7 +29,6 @@ function convertBinaryStringToUint8Array(bStr) {
                                         );
 
                                         let create_server_buffer = event.serialize(event);
-console.log('sending create server event: ' + create_server_buffer);
                                         sock.send(create_server_buffer);
 				};
 				reader.onerror = function(e) {
@@ -35,12 +37,25 @@ console.log('sending create server event: ' + create_server_buffer);
 				};
 				reader.readAsBinaryString(file);
 			}
+			
+			function request_channels(server_id, server_pubkey) {
+				var event = new Event(
+					EVENT_TYPE_GET_CHANNELS_REQUEST,
+					new GetChannelsRequest(
+						server_id,
+						server_pubkey,
+					)
+				);
+				let buffer = event.serialize(event);
+				sock.send(buffer);
+			}
         	</script>
 	</head>
 	<script src='/js/ser.js'></script>
 	<body>
 		<form name="create_server">
 			Server Name: <input type="text" name="server_name" id="server_name"/>
+			Other values: <input type="text" name="other" id="other"/>
 			<input type="file" onchange="window.create_server(this.files[0]);"/>
 		</form>
 		Test WS</br>
@@ -62,7 +77,7 @@ console.log('sending create server event: ' + create_server_buffer);
 			}
 
 			//var token = BigInt(getCookie("auth"));
-			var token = BigInt("183356405534408327905818855820415121423");
+			var token = BigInt("69241461829396105165786280638602626877");
 			sock = new WebSocket("ws://localhost:8093/ws");
 			window.sock = sock;
 			sock.binaryType = "arraybuffer";
@@ -74,7 +89,7 @@ console.log('sending create server event: ' + create_server_buffer);
 				var recv_event = array_buffer_to_event(buffer);
 				console.log("recv_event.event_type = " + recv_event.event_type);
 				if(recv_event.event_type == EVENT_TYPE_AUTH_RESP) {
-					console.log("auth_resp.success = " + recv_event.auth_resp.value.success);
+					
 					var event = new Event(
 						EVENT_TYPE_GET_SERVERS_EVENT,
 					);
@@ -95,6 +110,91 @@ console.log('sending create server event: ' + create_server_buffer);
 
 					let resp_buffer = event.serialize(event);
 					sock.send(resp_buffer);
+				} else if(recv_event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
+					var channels = recv_event.get_channels_response.value.channels;
+					var len = channels.length;
+					var full_text = '';
+					var server_id_raw = recv_event.get_channels_response.value.server_id.data;
+					var server_pubkey_raw = recv_event.get_channels_response.value.server_pubkey.data;
+					var server_id = recv_event.get_channels_response.value.server_id.data;
+					var server_pubkey = recv_event.get_channels_response.value.server_pubkey.data;
+					var server_id = uint8arraytobase64string(server_id);
+					var server_pubkey = uint8arraytobase64string(server_pubkey);
+					var channel_div = document.getElementById('channel-'+server_id+'-'+server_pubkey);
+					for(var i=0; i<len; i++) {
+						text = document.createTextNode(
+							'[' + channels[i].name.value + ', \'' +
+							channels[i].description.value + "\', " +
+							channels[i].channel_id.value + 
+							"]");
+						channel_div.appendChild(text);
+						var delete_chan = document.createElement('a');
+						delete_chan.innerHTML = 'del chan';
+						delete_chan.channel_id = channels[i].channel_id.value;
+						delete_chan.onclick = function(evt) {
+                                                	var event = new Event(
+                                                        	EVENT_TYPE_DELETE_CHANNEL_REQUEST,
+                                                        	new DeleteChannelRequest(
+                                                                	1,
+                                                                	server_id_raw,
+                                                                	server_pubkey_raw,
+									this.channel_id,
+                                                        	)
+                                                	);
+
+                                                	let buffer = event.serialize(event);
+                                                	sock.send(buffer);
+						};
+						channel_div.appendChild(delete_chan);
+
+                                                var mod_chan = document.createElement('a');
+                                                mod_chan.innerHTML = 'mod chan';
+                                                mod_chan.channel_id = channels[i].channel_id.value;
+                                                mod_chan.onclick = function(evt) {
+							var name = document.forms['create_server']['server_name'].value;
+							var description = document.forms['create_server']['other'].value;
+							var channel_id = this.channel_id;
+                                                        var event = new Event(
+                                                                EVENT_TYPE_MODIFY_CHANNEL_REQUEST,
+                                                                new ModifyChannelRequest(
+                                                                        1,
+                                                                        server_id_raw,
+                                                                        server_pubkey_raw,
+                                                                        channel_id,
+									name,
+									description,
+                                                                )
+                                                        );
+
+                                                        let buffer = event.serialize(event);
+                                                        sock.send(buffer);
+                                                };
+                                                channel_div.appendChild(mod_chan);
+
+						channel_div.appendChild(document.createElement('br'));
+					}
+					var add_chan = document.createElement('div');
+					var add_chan_link = document.createElement('a');
+					add_chan_link.innerHTML = 'add channel';
+					add_chan_link.onclick = function(evt) {
+						var name = document.forms['create_server']['server_name'].value;
+						var description = document.forms['create_server']['other'].value;
+                                                var event = new Event(
+                                                	EVENT_TYPE_ADD_CHANNEL_REQUEST,
+                                                	new AddChannelRequest(
+								1,
+                                                		server_id_raw,
+                                                		server_pubkey_raw,
+								name,
+								description,
+                                                	)
+                                                );
+
+                                                let buffer = event.serialize(event);
+                                                sock.send(buffer);
+					};
+					add_chan.appendChild(add_chan_link);
+					channel_div.appendChild(add_chan);
 				} else if(recv_event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
 					for(var i=0; i<recv_event.get_servers_response.value.servers.length; i++) {
 						var name = recv_event.get_servers_response.value.servers[i].name.value;
@@ -107,7 +207,6 @@ console.log('sending create server event: ' + create_server_buffer);
 						console.log('server_pubkey='+server_pubkey);
 						console.log(recv_event.get_servers_response.value.servers[i].icon);
 						var arr = recv_event.get_servers_response.value.servers[i].icon.value;
-						console.log(arr[0] + " " + arr[1] + " " +  arr[2]);
 						var base64icon = uint8ToBase64(arr);
 
 						var icon = document.createElement('img');
@@ -156,7 +255,13 @@ console.log('sending create server event: ' + create_server_buffer);
 						document.body.appendChild(document.createTextNode('     '));
 						document.body.appendChild(mod_server);
 						document.body.appendChild(document.createTextNode(' seqno='+seqno));
+						var channel_div = document.createElement('div');
+						channel_div.id = 'channel-' +
+							uint8arraytobase64string(server_id) + '-' +
+							uint8arraytobase64string(server_pubkey);
+						document.body.appendChild(channel_div);
 						document.body.appendChild(document.createElement('br'));
+						request_channels(server_id, server_pubkey);
 					}
 				}
 			}
