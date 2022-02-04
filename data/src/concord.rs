@@ -14,7 +14,7 @@
 
 use crate::lmdb::{Batch, Store};
 use crate::nioruntime_log;
-use crate::ser::serialize_default;
+use crate::ser::{chunk_read, chunk_write, serialize_default};
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
 use concorderror::{Error, ErrorKind};
 use nioruntime_log::*;
@@ -1382,10 +1382,10 @@ impl Writeable for ServerInfo {
 			writer.write_u8(name_bytes[i])?;
 		}
 
-		let icon_len: u32 = self.icon.len().try_into()?;
-		writer.write_u32(icon_len)?;
+		let icon_len: u64 = self.icon.len().try_into()?;
+		writer.write_u64(icon_len)?;
 
-		writer.write_fixed_bytes(&self.icon)?;
+		chunk_write(writer, &self.icon)?;
 
 		match self.joined {
 			false => writer.write_u8(0)?,
@@ -1413,8 +1413,8 @@ impl Readable for ServerInfo {
 			name.push(reader.read_u8()?);
 		}
 
-		let icon_len: usize = reader.read_u32()?.try_into()?;
-		let icon = reader.read_fixed_bytes(icon_len)?;
+		let icon_len: usize = reader.read_u64()?.try_into()?;
+		let icon = chunk_read(reader, icon_len)?;
 
 		let name = std::str::from_utf8(&name)?;
 		let name = name.to_string();

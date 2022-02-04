@@ -14,7 +14,7 @@
 
 use crate::librustlet::nioruntime_tor::ov3::OnionV3Address;
 use crate::librustlet::ConnData;
-use concorddata::ser::{Readable, Reader, Writeable, Writer};
+use concorddata::ser::{chunk_read, chunk_write, Readable, Reader, Writeable, Writer};
 use concorderror::{Error, ErrorKind};
 use concordutil::nioruntime_log;
 use nioruntime_log::*;
@@ -772,7 +772,7 @@ impl Writeable for Icon {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		let len = self.data.len();
 		writer.write_u64(len.try_into()?)?;
-		writer.write_fixed_bytes(&self.data)?;
+		chunk_write(writer, &self.data)?;
 
 		Ok(())
 	}
@@ -781,7 +781,7 @@ impl Writeable for Icon {
 impl Readable for Icon {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let len = reader.read_u64()?;
-		let data = reader.read_fixed_bytes(len.try_into()?)?;
+		let data = chunk_read(reader, len.try_into()?)?;
 
 		Ok(Self { data })
 	}

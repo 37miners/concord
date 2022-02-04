@@ -14,6 +14,12 @@ args:
         long: port
         value_name: port
         takes_value: true
+    - host:
+        help: http server host. The default is 127.0.0.1.
+        short: x
+        long: host
+        value_name: host
+        takes_value: true
     - tor_port:
         help: tor proxy port
         short: t

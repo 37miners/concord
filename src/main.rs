@@ -61,6 +61,13 @@ fn real_main() -> Result<(), Error> {
 		false => 8093,
 	};
 
+	let host = args.is_present("host");
+	let host = match host {
+		true => args.value_of("host").unwrap(),
+		false => "127.0.0.1",
+	}
+	.to_string();
+
 	let root_dir = args.is_present("root_dir");
 	let root_dir = match root_dir {
 		true => args.value_of("root_dir").unwrap().to_string(),
@@ -81,6 +88,7 @@ fn real_main() -> Result<(), Error> {
 		tor_port,
 		port,
 		root_dir,
+		host,
 		..Default::default()
 	};
 

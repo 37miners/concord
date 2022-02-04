@@ -60,6 +60,9 @@ pub enum ErrorKind {
 	/// Too large read error
 	#[fail(display = "Too large read Error: {}", _0)]
 	TooLargeReadErr(String),
+	/// Too large write error
+	#[fail(display = "Too large write Error: {}", _0)]
+	TooLargeWriteErr(String),
 	/// Count Error
 	#[fail(display = "Count Error: {}", _0)]
 	CountError(String),

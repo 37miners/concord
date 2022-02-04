@@ -20,6 +20,7 @@
 //! `serialize` or `deserialize` functions on them as appropriate.
 
 use crate::hash::{DefaultHashable, Hash, Hashed};
+use crate::nioruntime_log;
 use crate::secp::constants::{
 	AGG_SIGNATURE_SIZE, COMPRESSED_PUBLIC_KEY_SIZE, MAX_PROOF_SIZE, PEDERSEN_COMMITMENT_SIZE,
 };
@@ -30,12 +31,53 @@ use crate::secp::{ContextFlag, Secp256k1};
 use byteorder::{BigEndian, ByteOrder, ReadBytesExt};
 use bytes::Buf;
 use concorderror::{Error, ErrorKind};
+use nioruntime_log::*;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::io::{self, Read, Write};
 use std::{cmp, marker, string};
 
+debug!();
+
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion(1_000);
+
+pub fn chunk_read<R: Reader>(reader: &mut R, len: usize) -> Result<Vec<u8>, Error> {
+	let mut ret = vec![];
+	let mut start = 0;
+	loop {
+		let rlen = if len - start > 90_000 {
+			90_000
+		} else {
+			len - start
+		};
+		ret.append(&mut reader.read_fixed_bytes(rlen)?);
+		if len - start <= 90_000 {
+			break;
+		} else {
+			start += 90_000;
+		}
+	}
+	Ok(ret)
+}
+
+pub fn chunk_write<W: Writer>(writer: &mut W, bytes: &Vec<u8>) -> Result<(), Error> {
+	let len = bytes.len();
+	let mut start = 0;
+	loop {
+		let end = if len - start > 90_000 {
+			start + 90_000
+		} else {
+			len
+		};
+		writer.write_fixed_bytes(&bytes[start..end])?;
+		if len - start <= 90_000 {
+			break;
+		} else {
+			start += 90_000;
+		}
+	}
+	Ok(())
+}
 
 /*
 /// Possible errors deriving from serializing or deserializing.
@@ -347,6 +389,7 @@ where
 	// attempting to read huge amounts of data.
 	// Probably better than checking if count * size overflows a u64 though.
 	if count > 1_000_000 {
+		error!("Too large read count: {}", count);
 		return Err(ErrorKind::TooLargeReadErr("to large read".to_string()).into());
 	}
 
@@ -512,6 +555,11 @@ impl<'a, R: Read> Reader for BinReader<'a, R> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		// not reading more than 100k bytes in a single read
+		if len > 100_000 {
+			error!("too large read: {}", len);
+			return Err(ErrorKind::TooLargeReadErr("too large read".to_string()).into());
+		}
 		let mut buf = vec![0; len];
 		self.source.read_exact(&mut buf).map_err(map_io_err)?;
 		Ok(buf)
@@ -601,6 +649,10 @@ impl<'a> Reader for StreamingReader<'a> {
 
 	/// Read a fixed number of bytes.
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
+		if len > 100_000 {
+			error!("Too Large read: {}", len);
+			return Err(ErrorKind::TooLargeReadErr("too large read".to_string()).into());
+		}
 		let mut buf = vec![0u8; len];
 		self.stream.read_exact(&mut buf)?;
 		self.total_bytes_read += len as u64;
@@ -708,6 +760,7 @@ impl<'a, B: Buf> Reader for BufReader<'a, B> {
 	fn read_fixed_bytes(&mut self, len: usize) -> Result<Vec<u8>, Error> {
 		// not reading more than 100k bytes in a single read
 		if len > 100_000 {
+			error!("Too large read: {}", len);
 			return Err(ErrorKind::TooLargeReadErr("too large read".to_string()).into());
 		}
 		self.has_remaining(len)?;
@@ -894,6 +947,11 @@ impl<'a> Writer for BinWriter<'a> {
 	}
 
 	fn write_fixed_bytes<T: AsRef<[u8]>>(&mut self, bytes: T) -> Result<(), Error> {
+		let bytes_as_ref = bytes.as_ref();
+		// not writing more than 100k bytes in a single read
+		if bytes_as_ref.len() > 100_000 {
+			return Err(ErrorKind::TooLargeWriteErr("too large write".to_string()).into());
+		}
 		self.sink.write_all(bytes.as_ref())?;
 		Ok(())
 	}
