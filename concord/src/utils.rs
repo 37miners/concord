@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::types::Pubkey;
-use crate::types::ServerId;
+use concorddata::types::{Pubkey, ServerId};
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;

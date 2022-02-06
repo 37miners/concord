@@ -16,10 +16,11 @@ use crate::context::ConcordContext;
 use crate::types::{
 	AddChannelResponse, DeleteChannelResponse, GetChannelsResponse, ModifyChannelResponse,
 };
-use crate::types::{Channel, ConnectionInfo, Event, EventType, Pubkey, ServerId};
+use crate::types::{Channel, ConnectionInfo, Event, EventType};
 use crate::{member, send};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
+use concorddata::types::{Pubkey, ServerId};
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;

@@ -14,8 +14,6 @@
 
 use crate::context::ConcordContext;
 use crate::try2;
-use crate::types::Pubkey;
-use crate::types::ServerId;
 use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
 use crate::utils::extract_user_pubkey_from_query;
@@ -23,6 +21,8 @@ use concordconfig::ConcordConfig;
 use concorddata::concord::get_default_profile;
 use concorddata::concord::DSContext;
 use concorddata::concord::ProfileData;
+use concorddata::types::Pubkey;
+use concorddata::types::ServerId;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use concordutil::torclient;

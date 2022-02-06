@@ -15,6 +15,10 @@
 use crate::auth::ws_auth;
 use crate::channel::{add_channel, delete_channel, get_channels, modify_channel};
 use crate::context::ConcordContext;
+use crate::invite::{
+	accept_invite, create_invite, delete_invite, list_invites, modify_invite, view_invite,
+};
+use crate::members::get_members;
 use crate::server::{create_server, delete_server, get_servers, modify_server};
 use crate::types::*;
 use crate::{bin_event, close, send, try2};
@@ -61,6 +65,7 @@ fn process_binary(
 	handle: ConnData,
 	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
 	ds_context: &DSContext,
+	config: &ConcordConfig,
 ) -> Result<(), Error> {
 	let id = handle.get_connection_id();
 	let event = bin_event!();
@@ -101,7 +106,12 @@ fn process_binary(
 									}
 									EventType::CreateServerEvent => {
 										try2!(
-											create_server(connection_info, ds_context, &event),
+											create_server(
+												connection_info,
+												ds_context,
+												&event,
+												config
+											),
 											"create_server error"
 										)
 									}
@@ -113,7 +123,12 @@ fn process_binary(
 									}
 									EventType::ModifyServerEvent => {
 										try2!(
-											modify_server(connection_info, ds_context, &event),
+											modify_server(
+												connection_info,
+												ds_context,
+												&event,
+												config
+											),
 											"modify_server error"
 										)
 									}
@@ -139,6 +154,42 @@ fn process_binary(
 										try2!(
 											delete_channel(connection_info, ds_context, &event),
 											"delete channel error"
+										)
+									}
+									EventType::GetMembersRequest => {
+										try2!(
+											get_members(connection_info, ds_context, &event),
+											"get members error"
+										)
+									}
+									EventType::CreateInviteRequest => {
+										try2!(
+											create_invite(connection_info, ds_context, &event),
+											""
+										)
+									}
+									EventType::ListInvitesRequest => {
+										try2!(list_invites(connection_info, ds_context, &event), "")
+									}
+									EventType::ModifyInviteRequest => {
+										try2!(
+											modify_invite(connection_info, ds_context, &event),
+											""
+										)
+									}
+									EventType::DeleteInviteRequest => {
+										try2!(
+											delete_invite(connection_info, ds_context, &event),
+											""
+										)
+									}
+									EventType::ViewInviteRequest => {
+										try2!(view_invite(connection_info, ds_context, &event), "")
+									}
+									EventType::AcceptInviteRequest => {
+										try2!(
+											accept_invite(connection_info, ds_context, &event),
+											""
 										)
 									}
 									_ => {
@@ -168,7 +219,7 @@ fn process_binary(
 			}
 		}
 	}
-
+	error!("here");
 	Ok(())
 }
 
@@ -183,7 +234,7 @@ fn process_close(
 	Ok(())
 }
 
-pub fn init_ws(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
+pub fn init_ws(cconfig: ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	let conn_info = Arc::new(RwLock::new(HashMap::new()));
 
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
@@ -196,12 +247,17 @@ pub fn init_ws(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), 
 				process_open(handle, conn_info)?;
 			}
 			Socklet::Binary => {
-				process_binary(handle, conn_info, &ds_context)?;
+				process_binary(handle, conn_info, &ds_context, &cconfig)?;
 			}
 			Socklet::Close => {
 				process_close(handle, conn_info)?;
 			}
-			_ => {}
+			_ => {
+				warn!(
+					"unexpected request type on cid={}",
+					handle.get_connection_id()
+				);
+			}
 		}
 	});
 

@@ -13,12 +13,16 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
-use crate::types::Pubkey;
+use crate::send;
+use crate::types::ConnectionInfo;
+use crate::types::GetMembersResponse;
+use crate::types::{Event, EventType};
 use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::Member;
+use concorddata::types::Pubkey;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
@@ -27,6 +31,85 @@ use nioruntime_log::*;
 use nioruntime_tor::ov3::OnionV3Address;
 
 debug!(); // set log level to debug
+
+pub fn get_members(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (server_id, server_pubkey, batch_num) = match event.get_members_request.0.as_ref() {
+		Some(event) => (
+			event.server_id.clone(),
+			event.server_pubkey.clone(),
+			event.batch_num,
+		),
+		None => {
+			warn!(
+				"Malformed get_members_request event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
+
+	// TODO: online/offline and role ordering
+
+	let mut members = ds_context
+		.get_members(
+			server_pubkey.to_bytes(),
+			server_id.to_bytes(),
+			0,
+			true,
+			true,
+		)
+		.map_err(|e| {
+			let error: Error = ErrorKind::ApplicationError(format!(
+				"error accepting invite - members: {}",
+				e.to_string()
+			))
+			.into();
+			error
+		})?;
+
+	let mut other_members = ds_context
+		.get_members(
+			server_pubkey.to_bytes(),
+			server_id.to_bytes(),
+			0,
+			true,
+			false,
+		)
+		.map_err(|e| {
+			let error: Error = ErrorKind::ApplicationError(format!(
+				"error accepting invite - members: {}",
+				e.to_string()
+			))
+			.into();
+			error
+		})?;
+	members.append(&mut other_members);
+
+	let mut types_members: Vec<crate::types::Member> = vec![];
+	for member in members {
+		types_members.push(member.into());
+	}
+
+	let event = Event {
+		event_type: EventType::GetMembersResponse,
+		get_members_response: Some(GetMembersResponse {
+			batch_num,
+			server_id,
+			server_pubkey,
+			members: types_members,
+		})
+		.into(),
+		..Default::default()
+	};
+
+	send!(conn_info.handle, event);
+
+	Ok(false)
+}
 
 #[derive(Serialize)]
 struct MemberJson {
@@ -60,7 +143,7 @@ impl From<&Member> for MemberJson {
 			user_name,
 			user_bio,
 			user_pubkey_urlencoded,
-			user_type: if member.auth_flags == 3 { 1u8 } else { 0u8 },
+			user_type: if member.roles == 3 { 1u8 } else { 0u8 },
 		}
 	}
 }

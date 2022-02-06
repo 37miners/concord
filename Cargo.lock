@@ -431,6 +431,7 @@ name = "concordlib"
 version = "1.0.0"
 dependencies = [
  "base64 0.13.0",
+ "bs58",
  "concordconfig",
  "concorddata",
  "concorderror",
@@ -444,6 +445,8 @@ dependencies = [
  "serde",
  "serde_derive",
  "serde_json",
+ "socks",
+ "tor-stream",
  "url 2.2.2",
  "urlencoding",
  "webbrowser",
@@ -1162,7 +1165,6 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/rustlet?branch=master#ba4644a255c463088f429318102aa33dec0267ca"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -1296,7 +1298,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_err"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "backtrace",
  "base64 0.13.0",
@@ -1317,7 +1318,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_evh"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "backtrace",
  "errno",
@@ -1341,7 +1341,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_http"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "backtrace",
  "base64 0.13.0",
@@ -1367,7 +1366,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_log"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "chrono",
  "failure",
@@ -1383,7 +1381,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_tor"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "backtrace",
  "chrono",
@@ -1418,7 +1415,6 @@ dependencies = [
 [[package]]
 name = "nioruntime_util"
 version = "0.0.3-beta1"
-source = "git+http://github.com/37miners/nioruntime?branch=master#b206986afa87c20c077ecc5d05e8ba597d0665b0"
 dependencies = [
  "backtrace",
  "byteorder",

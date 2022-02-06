@@ -13,6 +13,7 @@
 // limitations under the License.
 
 /// Main configuration for concord
+#[derive(Clone)]
 pub struct ConcordConfig {
 	pub tor_port: u16,
 	pub port: u16,

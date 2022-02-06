@@ -2,6 +2,10 @@
 		<title>Welcome to NIO Runtime Httpd Server!</title>
         	<script>
 			var sock;
+var alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+var to_b58 = function(B,A){var d=[],s="",i,j,c,n;for(i in B){j=0,c=B[i];s+=c||s.length^i?"":1;while(j in d||c){n=d[j];n=n?n*256+c:c;c=n/58|0;d[j]=n%58;j++}}while(j--)s+=A[d[j]];return s};
+var from_b58 = function(S,A){var d=[],b=[],i,j,c,n;for(i in S){j=0,c=A.indexOf(S[i]);if(c<0)return undefined;c||b.length^i?i:b.push(0);while(j in d||c){n=d[j];n=n?n*58+c:c;c=n>>8;d[j]=n%256;j++}}while(j--)b.push(d[j]);return new Uint8Array(b)};
+
 
 function uint8arraytobase64string(arr) {
 	return btoa(String.fromCharCode.apply(null, arr))
@@ -37,6 +41,19 @@ function convertBinaryStringToUint8Array(bStr) {
 				};
 				reader.readAsBinaryString(file);
 			}
+
+			function request_members(server_id, server_pubkey) {
+                                var event = new Event(
+                                        EVENT_TYPE_GET_MEMBERS_REQUEST,
+                                        new GetMembersRequest(
+                                                new ServerId(server_id),
+                                                new Pubkey(server_pubkey),
+						0,
+                                        )
+                                );
+                                let buffer = event.serialize(event);
+                                sock.send(buffer);
+			}
 			
 			function request_channels(server_id, server_pubkey) {
 				var event = new Event(
@@ -51,6 +68,8 @@ function convertBinaryStringToUint8Array(bStr) {
 			}
         	</script>
 	</head>
+	<script src='/js/jsbn.js'></script>
+	<script src='/js/jsbn2.js'></script>
 	<script src='/js/ser.js'></script>
 	<body>
 		<form name="create_server">
@@ -76,8 +95,7 @@ function convertBinaryStringToUint8Array(bStr) {
 				return "";
 			}
 
-			//var token = BigInt(getCookie("auth"));
-			var token = BigInt("69241461829396105165786280638602626877");
+			var token = new BigInteger("36957908268706457755023707386106434466", 10);
 			sock = new WebSocket("ws://localhost:8093/ws");
 			window.sock = sock;
 			sock.binaryType = "arraybuffer";
@@ -138,7 +156,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                                 	1,
                                                                 	server_id_raw,
                                                                 	server_pubkey_raw,
-									this.channel_id,
+								this.channel_id,
                                                         	)
                                                 	);
 
@@ -195,24 +213,34 @@ function convertBinaryStringToUint8Array(bStr) {
 					};
 					add_chan.appendChild(add_chan_link);
 					channel_div.appendChild(add_chan);
+				} else if(recv_event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
+					for(var i=0; i<recv_event.get_members_response.value.members.length; i++) {
+						var member = recv_event.get_members_response.value.members[i];
+						document.body.appendChild(document.createTextNode(
+							'[' + member.user_pubkey.data + '], ' +
+							'\'' + member.user_name.value + '\''
+						));
+						document.body.appendChild(document.createElement('br'));
+					}
 				} else if(recv_event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
 					for(var i=0; i<recv_event.get_servers_response.value.servers.length; i++) {
 						var name = recv_event.get_servers_response.value.servers[i].name.value;
 						var server_id = recv_event.get_servers_response.value.servers[i].server_id.data;
 						var server_pubkey = recv_event.get_servers_response.value.servers[i].server_pubkey.data;
+						var server_id_b58 = to_b58(server_id, alphabet);
+						var server_pubkey_b58 = to_b58(server_pubkey, alphabet);
+console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						var seqno = recv_event.get_servers_response.value.servers[i].seqno.value;
 						console.log('name='+name);
 						console.log(recv_event.get_servers_response.value.servers[i].description);
 						console.log('server_id='+server_id);
 						console.log('server_pubkey='+server_pubkey);
-						console.log(recv_event.get_servers_response.value.servers[i].icon);
-						var arr = recv_event.get_servers_response.value.servers[i].icon.value;
-						var base64icon = uint8ToBase64(arr);
-
 						var icon = document.createElement('img');
 						icon.style.height = '15px';
 						icon.style.width = '15px';
-						icon.src = "data:image;base64," + base64icon;
+						icon.src = '/images/user_images/' + server_id_b58+'-'+server_pubkey_b58;
+						//icon.src = "data:image;base64," + base64icon;
+						//icon.src = '/images/user1.png';
 						icon.title = recv_event.get_servers_response.value.servers[i].name.value;
 						document.body.appendChild(icon);
 						var del_server = document.createElement('a');
@@ -262,6 +290,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						document.body.appendChild(channel_div);
 						document.body.appendChild(document.createElement('br'));
 						request_channels(server_id, server_pubkey);
+						request_members(server_id, server_pubkey);
 					}
 				}
 			}

@@ -13,6 +13,11 @@
 // limitations under the License.
 
 use crate::context::ConcordContext;
+use crate::send;
+use crate::types::{
+	ConnectionInfo, CreateInviteResponse, DeleteInviteResponse, Event, EventType,
+	ListInvitesResponse,
+};
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
 use concorddata::concord::DSContext;
@@ -36,7 +41,199 @@ use url::Url;
 const ACCEPT_INVITE_FAIL: &str = "{\"success\": false}";
 const SUCCESS: &str = "{\"success\": true}";
 
-nioruntime_log::debug!(); // set log level to debug
+debug!(); // set log level to debug
+
+pub fn create_invite(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (request_id, server_id, server_pubkey, count, expiration) =
+		match event.create_invite_request.0.as_ref() {
+			Some(event) => (
+				event.request_id,
+				event.server_id.to_bytes(),
+				event.server_pubkey.to_bytes(),
+				event.count,
+				event.expiration,
+			),
+			None => {
+				warn!(
+					"Malformed create invite event. No event present: {:?}",
+					event
+				);
+				return Ok(true);
+			}
+		};
+
+	let user_pubkey = match &conn_info.pubkey {
+		Some(user_pubkey) => user_pubkey,
+		None => {
+			warn!("expected a user pubkey at this point. Event = {:?}", event);
+			return Ok(true);
+		}
+	};
+
+	if server_pubkey == pubkey!() {
+		let invite_id =
+			ds_context.create_invite(user_pubkey.to_bytes(), server_id, expiration, count)?;
+
+		let event = Event {
+			event_type: EventType::CreateInviteResponse,
+			create_invite_response: Some(CreateInviteResponse {
+				request_id,
+				invite_id,
+				success: true,
+			})
+			.into(),
+			..Default::default()
+		};
+		send!(conn_info.handle, event);
+	} else {
+		// TODO: implement remote invites
+		warn!("remote invites not implemented yet.");
+	}
+
+	Ok(false)
+}
+
+pub fn list_invites(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (request_id, server_id, server_pubkey) = match event.list_invites_request.0.as_ref() {
+		Some(event) => (
+			event.request_id,
+			event.server_id.to_bytes(),
+			event.server_pubkey.to_bytes(),
+		),
+		None => {
+			warn!(
+				"Malformed list invites event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
+	error!("server_pubkey={:?}", server_pubkey);
+	error!("server_id={:?}", server_id);
+	error!("our pubkey={:?}", pubkey!());
+	if server_pubkey == pubkey!() {
+		let user_pubkey = match &conn_info.pubkey {
+			Some(user_pubkey) => user_pubkey,
+			None => {
+				warn!("expected pubkey at this point. Event: {:?}", event);
+				return Ok(true);
+			}
+		};
+		let invites = ds_context.get_invites(Some(user_pubkey.to_bytes()), server_id)?;
+
+		let event = Event {
+			event_type: EventType::ListInvitesResponse,
+			list_invites_response: Some(ListInvitesResponse {
+				request_id,
+				invites,
+			})
+			.into(),
+			..Default::default()
+		};
+		send!(conn_info.handle, event);
+	} else {
+		// TODO: implement remote invites
+		warn!("remote invites not implemented yet.");
+	}
+	Ok(false)
+}
+
+pub fn modify_invite(
+	_conn_info: &ConnectionInfo,
+	_ds_context: &DSContext,
+	_event: &Event,
+) -> Result<bool, ConcordError> {
+	/*
+			let (request_id, invite_id, max, expiration) =
+					match event.modify_invite_request.0.as_ref() {
+							Some(event) => (
+									event.request_id,
+									event.invite_id,
+									event.max,
+									event.expiration,
+							),
+							None => {
+									warn!("Malformed modify invite event. No event present: {:?}", event);
+									return Ok(true);
+							}
+					};
+	*/
+	warn!("modify not implemented");
+	Ok(false)
+}
+
+pub fn delete_invite(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (request_id, invite_id) = match event.delete_invite_request.0.as_ref() {
+		Some(event) => (event.request_id, event.invite_id),
+		None => {
+			warn!(
+				"Malformed delete invite event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
+	info!("delete invite: {}", invite_id);
+	ds_context.delete_invite(invite_id)?;
+
+	let event = Event {
+		event_type: EventType::DeleteInviteResponse,
+		delete_invite_response: Some(DeleteInviteResponse {
+			request_id,
+			success: true,
+		})
+		.into(),
+		..Default::default()
+	};
+	send!(conn_info.handle, event);
+
+	Ok(false)
+}
+
+pub fn view_invite(
+	_conn_info: &ConnectionInfo,
+	_ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (_request_id, _invite_url) = match event.view_invite_request.0.as_ref() {
+		Some(event) => (event.request_id, event.invite_url.to_string()),
+		None => {
+			warn!("Malformed view invite event. No event present: {:?}", event);
+			return Ok(true);
+		}
+	};
+	Ok(false)
+}
+
+pub fn accept_invite(
+	_conn_info: &ConnectionInfo,
+	_ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (_request_id, _invite_id) = match event.accept_invite_request.0.as_ref() {
+		Some(event) => (event.request_id, event.invite_id),
+		None => {
+			warn!(
+				"Malformed accept invite event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
+	Ok(false)
+}
 
 #[derive(Serialize)]
 struct InviteResponse {
@@ -84,8 +281,11 @@ impl From<ServerInfoReply> for ServerInfoSerde {
 		let server_id = base64::encode(si.server_id);
 		let server_id = urlencoding::encode(&server_id).to_string();
 		let name = si.name;
+		/*
 		let icon = base64::encode(&si.icon[..]);
 		let icon = urlencoding::encode(&icon).to_string();
+		*/
+		let icon = "".to_string();
 		ServerInfoSerde {
 			pubkey,
 			server_id,
@@ -142,7 +342,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		};
 
 		let id = ds_context
-			.create_invite(inviter, server_id, expiry, count)
+			.create_invite(inviter, server_id, expiry.try_into().unwrap_or(0), count)
 			.map_err(|e| {
 				let error: Error = ErrorKind::ApplicationError(format!(
 					"error creating invite: {}",
@@ -421,39 +621,40 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 			None
 		};
 
-		let invites = ds_context.get_invites(inviter, server_id).map_err(|e| {
+		let _invites = ds_context.get_invites(inviter, server_id).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("error listing invite: {}", e.to_string()))
 					.into();
 			error
 		})?;
 
-		let mut invites_serde = vec![];
-		let pubkey = pubkey!();
-		let onion = OnionV3Address::from_bytes(pubkey);
-		for invite in invites {
-			let id = base64::encode(invite.id.to_be_bytes());
-			let id = urlencoding::encode(&id);
+		/*
+				//let mut invites_serde = vec![];
+				let pubkey = pubkey!();
+				let onion = OnionV3Address::from_bytes(pubkey);
+				for invite in invites {
+					let id = base64::encode(invite.id.to_be_bytes());
+					let id = urlencoding::encode(&id);
 
-			let url = format!("http://{}.onion/i?id={}", onion, id);
+					let url = format!("http://{}.onion/i?id={}", onion, id);
+					invites_serde.push(InviteSerde {
+						inviter: invite.inviter,
+						server_id: invite.server_id,
+						url,
+						expiry: invite.expiry,
+						cur: invite.cur,
+						max: invite.max,
+						id: invite.id.to_string(),
+					});
+				}
 
-			invites_serde.push(InviteSerde {
-				inviter: invite.inviter,
-				server_id: invite.server_id,
-				url,
-				expiry: invite.expiry,
-				cur: invite.cur,
-				max: invite.max,
-				id: invite.id.to_string(),
-			});
-		}
-
-		let json = serde_json::to_string(&invites_serde).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string())).into();
-			error
-		})?;
-		response!("{}", json);
+				let json = serde_json::to_string(&invites_serde).map_err(|e| {
+					let error: Error =
+						ErrorKind::ApplicationError(format!("Json Error: {}", e.to_string())).into();
+					error
+				})?;
+				response!("{}", json);
+		*/
 	});
 	rustlet_mapping!("/list_invites", "list_invites");
 
@@ -496,7 +697,6 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 						let server_info = ServerInfo {
 							pubkey: jri.server_pubkey,
 							name: jri.name.clone(),
-							icon: jri.icon,
 							joined: false,
 							seqno: 1, // TODO: this is just to get this to compile.
 							          // when join is revisited need to get the seqno from
@@ -689,12 +889,11 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 							None => "",
 						};
 						let icon = urlencoding::decode(icon)?.to_string();
-						let icon = base64::decode(icon)?;
+						let _icon = base64::decode(icon)?;
 
 						let server_info = ServerInfo {
 							pubkey: pubkey,
 							name,
-							icon,
 							joined: true,
 							seqno: 1, // TODO: need to revisit this. Just making it compile now.
 						};

@@ -23,20 +23,72 @@ use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
+use std::fs::File;
+use std::io::Read;
+use std::io::Write;
 
-use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, Pubkey, ServerInfo};
+use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, ServerInfo};
 use crate::{owner, send};
+use concorddata::types::{Pubkey, ServerId};
 
 const NOT_AUTHORIZED: &str = "{\"error\": \"not authorized\"}";
 const MAIN_LOG: &str = "mainlog";
 
-info!(); // set log level to debug
+info!();
 
 #[derive(Serialize, Deserialize)]
 struct ServerInfoMin {
 	name: String,
 	server_pubkey: String,
 	id: String,
+}
+
+fn _get_icon(
+	server_id: [u8; 8],
+	pubkey: [u8; 32],
+	root_dir: String,
+) -> Result<Vec<u8>, ConcordError> {
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
+	let file_name = format!(
+		"{}/www/images/user_images/{}-{}",
+		root_dir, server_id, pubkey
+	);
+	error!("start read: {}", file_name);
+	let start = std::time::Instant::now();
+	let mut f = File::open(&file_name)?;
+	let metadata = std::fs::metadata(&file_name)?;
+	let mut data = vec![0; metadata.len() as usize];
+	f.read(&mut data)?;
+	error!(
+		"end read of {} bytes, time = {}",
+		metadata.len(),
+		start.elapsed().as_nanos()
+	);
+
+	Ok(data)
+}
+
+fn set_icon(
+	root_dir: String,
+	server_id: [u8; 8],
+	pubkey: [u8; 32],
+	icon: Vec<u8>,
+) -> Result<(), ConcordError> {
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
+	let file_name = format!(
+		"{}/www/images/user_images/{}-{}",
+		root_dir, server_id, pubkey
+	);
+
+	let mut file = std::fs::OpenOptions::new()
+		.write(true)
+		.create_new(true)
+		.truncate(true)
+		.open(file_name)?;
+	file.write_all(&icon)?;
+	Ok(())
 }
 
 pub fn get_servers(
@@ -47,23 +99,31 @@ pub fn get_servers(
 
 	let mut servers = vec![];
 	let data = ds_context.get_servers()?;
+
+	let now = std::time::Instant::now();
 	for d in data {
 		servers.push(ServerInfo {
 			name: d.name.into(),
 			description: "none".into(),
+			//icon: get_icon(d.server_id, d.pubkey)?.into(),
 			server_id: d.server_id.into(),
 			server_pubkey: Pubkey::from_bytes(d.pubkey),
-			icon: d.icon.into(),
 			seqno: d.seqno,
 		});
 	}
+	error!(
+		"end of adding ServerInfo, time = {}",
+		now.elapsed().as_nanos()
+	);
 
 	let event = Event {
 		event_type: EventType::GetServersResponse,
 		get_servers_response: Some(GetServersResponse { servers }).into(),
 		..Default::default()
 	};
+	error!("end of building event, time = {}", now.elapsed().as_nanos());
 	send!(conn_info.handle, event);
+	error!("end of sending event, time = {}", now.elapsed().as_nanos());
 
 	Ok(false)
 }
@@ -72,6 +132,7 @@ pub fn create_server(
 	conn_info: &ConnectionInfo,
 	ds_context: &DSContext,
 	event: &Event,
+	config: &ConcordConfig,
 ) -> Result<bool, ConcordError> {
 	owner!(conn_info);
 
@@ -91,15 +152,17 @@ pub fn create_server(
 		}
 	};
 
+	let pubkey = pubkey!();
 	let data_server_info = DataServerInfo {
-		pubkey: pubkey!(),
+		pubkey,
 		name,
-		icon,
 		joined: true,
 		seqno: 1,
 	};
 
-	ds_context.add_server(data_server_info, None, None, false)?;
+	let server_id = ds_context.add_server(data_server_info, None, None, false)?;
+
+	set_icon(config.root_dir.clone(), server_id, pubkey, icon)?;
 
 	info!("create server complete");
 
@@ -133,6 +196,7 @@ pub fn modify_server(
 	conn_info: &ConnectionInfo,
 	ds_context: &DSContext,
 	event: &Event,
+	config: &ConcordConfig,
 ) -> Result<bool, ConcordError> {
 	owner!(conn_info);
 
@@ -152,17 +216,17 @@ pub fn modify_server(
 		}
 	};
 
-	let name = match name.0 {
-		Some(name) => Some(name.data),
-		None => None,
-	};
+	match icon.0 {
+		Some(icon) => {
+			set_icon(config.root_dir.clone(), server_id, server_pubkey, icon.data)?;
+		}
+		None => {}
+	}
 
-	let icon = match icon.0 {
-		Some(icon) => Some(icon.data),
-		None => None,
-	};
-
-	ds_context.modify_server(server_id, server_pubkey, name, icon)?;
+	match name.0 {
+		Some(name) => ds_context.modify_server(server_id, server_pubkey, name.to_string())?,
+		None => {}
+	}
 
 	Ok(false)
 }

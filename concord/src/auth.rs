@@ -14,12 +14,12 @@
 
 use crate::context::ConcordContext;
 use crate::types::ConnectionInfo;
-use crate::types::Pubkey;
 use crate::types::{AuthResponse, Event, EventType};
 use crate::{send, try2};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::{AUTH_FLAG_MEMBER, AUTH_FLAG_OWNER, TOKEN_EXPIRATION};
+use concorddata::types::Pubkey;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
@@ -138,7 +138,7 @@ pub fn ws_auth(
 
 // check whether a session is authorized. We assume that we are in the rustlet context
 // here.
-pub fn check_auth(ds_context: &DSContext, auth_flag: u64) -> Result<(), ConcordError> {
+pub fn check_auth(ds_context: &DSContext, auth_flag: u128) -> Result<(), ConcordError> {
 	let token = match cookie!("auth") {
 		Some(auth) => auth,
 		None => query!("token").unwrap_or("".to_string()),

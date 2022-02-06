@@ -16,3 +16,4 @@ pub mod torclient;
 
 pub use concorderror::librustlet;
 pub use librustlet::nioruntime_log;
+pub use librustlet::nioruntime_tor;

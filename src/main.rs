@@ -107,6 +107,6 @@ fn real_main() -> Result<(), Error> {
 	});
 
 	// init concord
-	concord_init(&config)?; // init concord
+	concord_init(config)?; // init concord
 	Ok(())
 }

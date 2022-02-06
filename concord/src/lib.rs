@@ -27,6 +27,7 @@ mod profile;
 mod server;
 mod types;
 mod ws;
+//mod client;
 
 #[macro_use]
 mod utils;

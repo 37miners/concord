@@ -14,8 +14,9 @@
 
 use crate::lmdb::{Batch, Store};
 use crate::nioruntime_log;
-use crate::ser::{chunk_read, chunk_write, serialize_default};
+use crate::ser::serialize_default;
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
+use crate::types::Invite;
 use concorderror::{Error, ErrorKind};
 use nioruntime_log::*;
 
@@ -331,62 +332,6 @@ impl Readable for Challenge {
 	}
 }
 
-#[derive(Serialize, Debug)]
-pub struct Invite {
-	pub inviter: [u8; 32],
-	pub server_id: [u8; 8],
-	pub expiry: u64,
-	pub cur: u64,
-	pub max: u64,
-	pub id: u128,
-}
-
-impl Writeable for Invite {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.inviter[i])?;
-		}
-		writer.write_u64(self.expiry)?;
-		writer.write_u64(self.cur)?;
-		writer.write_u64(self.max)?;
-		writer.write_u128(self.id)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for Invite {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut inviter = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-
-		for i in 0..32 {
-			inviter[i] = reader.read_u8()?;
-		}
-
-		let expiry = reader.read_u64()?;
-		let cur = reader.read_u64()?;
-		let max = reader.read_u64()?;
-		let id = reader.read_u128()?;
-
-		Ok(Invite {
-			server_id,
-			inviter,
-			expiry,
-			cur,
-			max,
-			id,
-		})
-	}
-}
-
 pub struct InviteKey {
 	server_id: [u8; 8],
 	inviter: [u8; 32],
@@ -439,7 +384,7 @@ pub struct Member {
 	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
 	pub profile: Option<Profile>,
-	pub auth_flags: u64,
+	pub roles: u128,
 	pub batch_num: u64,
 	pub join_time: u64,
 	pub modified_time: u64,
@@ -458,7 +403,7 @@ impl Writeable for Member {
 		for i in 0..32 {
 			writer.write_u8(self.user_pubkey[i])?;
 		}
-		writer.write_u64(self.auth_flags)?;
+		writer.write_u128(self.roles)?;
 		writer.write_u64(self.modified_time)?;
 
 		match &self.profile {
@@ -490,7 +435,7 @@ impl Readable for Member {
 		for i in 0..32 {
 			user_pubkey[i] = reader.read_u8()?;
 		}
-		let auth_flags = reader.read_u64()?;
+		let roles = reader.read_u128()?;
 		let modified_time = reader.read_u64()?;
 
 		let profile = match reader.read_u8()? {
@@ -504,7 +449,7 @@ impl Readable for Member {
 			batch_num,
 			join_time,
 			user_pubkey,
-			auth_flags,
+			roles,
 			modified_time,
 			profile,
 		})
@@ -587,7 +532,7 @@ struct MemberKeyHashImpl {
 struct MemberKeyAuthImpl {
 	server_pubkey: [u8; 32],
 	server_id: [u8; 8],
-	auth_flags: u64,
+	roles: u128,
 	batch_num: u64,
 	join_time: u64,
 	user_pubkey: [u8; 32],
@@ -608,7 +553,7 @@ struct AuthBatchLookupKeyImpl {
 }
 
 struct MemberValueImpl {
-	auth_flags: u64,
+	roles: u128,
 	join_time: u64,
 	modified_time: u64,
 	batch_num: u64,
@@ -859,7 +804,7 @@ impl From<&Member> for MemberKeyAuthImpl {
 		Self {
 			server_pubkey: member.server_pubkey,
 			server_id: member.server_id,
-			auth_flags: member.auth_flags,
+			roles: member.roles,
 			batch_num: member.batch_num,
 			join_time: member.join_time,
 			user_pubkey: member.user_pubkey,
@@ -878,7 +823,7 @@ impl Writeable for MemberKeyAuthImpl {
 		}
 
 		writer.write_u64(self.batch_num)?;
-		writer.write_u64(self.auth_flags)?;
+		writer.write_u128(self.roles)?;
 		writer.write_u64(self.join_time)?;
 
 		for i in 0..32 {
@@ -905,7 +850,7 @@ impl Readable for MemberKeyAuthImpl {
 		}
 
 		let batch_num = reader.read_u64()?;
-		let auth_flags = reader.read_u64()?;
+		let roles = reader.read_u128()?;
 		let join_time = reader.read_u64()?;
 
 		for i in 0..32 {
@@ -915,7 +860,7 @@ impl Readable for MemberKeyAuthImpl {
 		Ok(Self {
 			server_pubkey,
 			server_id,
-			auth_flags,
+			roles,
 			batch_num,
 			join_time,
 			user_pubkey,
@@ -926,7 +871,7 @@ impl Readable for MemberKeyAuthImpl {
 impl From<&Member> for MemberValueImpl {
 	fn from(member: &Member) -> MemberValueImpl {
 		Self {
-			auth_flags: member.auth_flags,
+			roles: member.roles,
 			join_time: member.join_time,
 			modified_time: member.modified_time,
 			batch_num: member.batch_num,
@@ -936,7 +881,7 @@ impl From<&Member> for MemberValueImpl {
 
 impl Writeable for MemberValueImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u64(self.auth_flags)?;
+		writer.write_u128(self.roles)?;
 		writer.write_u64(self.join_time)?;
 		writer.write_u64(self.modified_time)?;
 		writer.write_u64(self.batch_num)?;
@@ -946,13 +891,13 @@ impl Writeable for MemberValueImpl {
 
 impl Readable for MemberValueImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let auth_flags = reader.read_u64()?;
+		let roles = reader.read_u128()?;
 		let join_time = reader.read_u64()?;
 		let modified_time = reader.read_u64()?;
 		let batch_num = reader.read_u64()?;
 
 		Ok(MemberValueImpl {
-			auth_flags,
+			roles,
 			join_time,
 			modified_time,
 			batch_num,
@@ -963,7 +908,7 @@ impl Readable for MemberValueImpl {
 /*
 struct MinMember {
 	user_pubkey: [u8; 32],
-	auth_flags: u64,
+	roles: u128,
 }
 
 impl Writeable for MinMember {
@@ -971,7 +916,7 @@ impl Writeable for MinMember {
 		for i in 0..32 {
 			writer.write_u8(self.user_pubkey[i])?;
 		}
-		writer.write_u64(self.auth_flags)?;
+		writer.write_u128(self.roles)?;
 
 		Ok(())
 	}
@@ -984,11 +929,11 @@ impl Readable for MinMember {
 		for i in 0..32 {
 			user_pubkey[i] = reader.read_u8()?;
 		}
-		let auth_flags = reader.read_u64()?;
+		let roles = reader.read_u128()?;
 
 		Ok(MinMember {
 			user_pubkey,
-			auth_flags,
+			roles,
 		})
 	}
 }
@@ -1024,7 +969,7 @@ impl MemberList {
 						server_id,
 						user_pubkey: next.user_pubkey,
 					},
-					next.auth_flags,
+					next.roles,
 				)),
 				Err(_) => {
 					break;
@@ -1044,11 +989,11 @@ impl MemberList {
 		member_data.append(&mut server_pubkey.to_vec());
 		member_data.append(&mut server_id.to_vec());
 
-		for (member, auth_flags) in member_list {
+		for (member, roles) in member_list {
 			let mut buffer = vec![];
 			let min_member = MinMember {
 				user_pubkey: member.user_pubkey,
-				auth_flags,
+				roles,
 			};
 			serialize_default(&mut buffer, &min_member)?;
 			member_data.append(&mut buffer);
@@ -1345,7 +1290,6 @@ pub struct JoinInfoReply {
 	pub server_pubkey: [u8; 32],
 	pub server_id: [u8; 8],
 	pub name: String,
-	pub icon: Vec<u8>,
 	pub inviter_pubkey: [u8; 32],
 }
 
@@ -1354,7 +1298,6 @@ pub struct JoinInfoReply {
 pub struct ServerInfo {
 	pub pubkey: [u8; 32],
 	pub name: String,
-	pub icon: Vec<u8>,
 	pub joined: bool,
 	pub seqno: u64,
 }
@@ -1364,7 +1307,6 @@ pub struct ServerInfoReply {
 	pub pubkey: [u8; 32],
 	pub server_id: [u8; 8],
 	pub name: String,
-	pub icon: Vec<u8>,
 	pub seqno: u64,
 }
 
@@ -1381,11 +1323,6 @@ impl Writeable for ServerInfo {
 		for i in 0..name_len {
 			writer.write_u8(name_bytes[i])?;
 		}
-
-		let icon_len: u64 = self.icon.len().try_into()?;
-		writer.write_u64(icon_len)?;
-
-		chunk_write(writer, &self.icon)?;
 
 		match self.joined {
 			false => writer.write_u8(0)?,
@@ -1413,9 +1350,6 @@ impl Readable for ServerInfo {
 			name.push(reader.read_u8()?);
 		}
 
-		let icon_len: usize = reader.read_u64()?.try_into()?;
-		let icon = chunk_read(reader, icon_len)?;
-
 		let name = std::str::from_utf8(&name)?;
 		let name = name.to_string();
 
@@ -1426,7 +1360,6 @@ impl Readable for ServerInfo {
 		Ok(ServerInfo {
 			pubkey,
 			name,
-			icon,
 			joined,
 			seqno,
 		})
@@ -1603,8 +1536,8 @@ const MEMBER_AUTH_PREFIX: u8 = 13;
 const WS_AUTH_TOKEN: u8 = 14;
 
 // auth levels
-pub const AUTH_FLAG_OWNER: u64 = 1;
-pub const AUTH_FLAG_MEMBER: u64 = 1 << 1;
+pub const AUTH_FLAG_OWNER: u128 = 1;
+pub const AUTH_FLAG_MEMBER: u128 = 1 << 1;
 
 impl DSContext {
 	// get a list of servers in the local database
@@ -1630,7 +1563,6 @@ impl DSContext {
 							server_id,
 							name: server.name,
 							pubkey: server.pubkey,
-							icon: server.icon,
 							seqno: server.seqno,
 						});
 					}
@@ -1656,7 +1588,6 @@ impl DSContext {
 			None => Ok(None),
 			Some(ret) => Ok(Some(ServerInfoReply {
 				server_id,
-				icon: ret.icon,
 				pubkey: ret.pubkey,
 				name: ret.name,
 				seqno: ret.seqno,
@@ -1668,8 +1599,7 @@ impl DSContext {
 		&self,
 		server_id: [u8; 8],
 		server_pubkey: [u8; 32],
-		name: Option<String>,
-		icon: Option<Vec<u8>>,
+		name: String,
 	) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![SERVER_PREFIX];
@@ -1680,15 +1610,7 @@ impl DSContext {
 		let server_info = match server_info {
 			None => return Ok(()), // shouldn't happen, but deal with it in client
 			Some(mut server_info) => {
-				match name {
-					Some(name) => server_info.name = name,
-					None => {}
-				}
-
-				match icon {
-					Some(icon) => server_info.icon = icon,
-					None => {}
-				}
+				server_info.name = name;
 				server_info.seqno = server_info.seqno + 1;
 				server_info
 			}
@@ -1722,7 +1644,7 @@ impl DSContext {
 			None => server_info.pubkey,
 		};
 
-		let auth_flags = if remote {
+		let roles = if remote {
 			AUTH_FLAG_MEMBER
 		} else {
 			AUTH_FLAG_OWNER | AUTH_FLAG_MEMBER
@@ -1743,7 +1665,7 @@ impl DSContext {
 			user_pubkey,
 			server_id,
 			server_info.pubkey,
-			auth_flags,
+			roles,
 			profile,
 			None,
 			None,
@@ -1811,7 +1733,7 @@ impl DSContext {
 					member.user_pubkey,
 					server_id,
 					server_info.pubkey,
-					member.auth_flags,
+					member.roles,
 					member.profile,
 					Some(member.modified_time),
 					Some(member.join_time),
@@ -2108,7 +2030,7 @@ impl DSContext {
 		&self,
 		inviter: [u8; 32],
 		server_id: [u8; 8],
-		expiry: u64,
+		expiry: u128,
 		count: u64,
 	) -> Result<u128, Error> {
 		let batch = self.store.batch()?;
@@ -2234,7 +2156,6 @@ impl DSContext {
 						match ret {
 							Some(ret) => Ok(Some(JoinInfoReply {
 								server_pubkey: ret.pubkey,
-								icon: ret.icon,
 								name: ret.name,
 								server_id: invite.server_id,
 								inviter_pubkey: invite.inviter,
@@ -2306,7 +2227,6 @@ impl DSContext {
 					match ret {
 						Some(ret) => Ok(Some(ServerInfoReply {
 							pubkey: ret.pubkey,
-							icon: ret.icon,
 							name: ret.name,
 							server_id: invite.server_id,
 							seqno: ret.seqno,
@@ -2350,7 +2270,7 @@ impl DSContext {
 				server_pubkey,
 				server_id,
 				user_pubkey,
-				auth_flags: m.auth_flags,
+				roles: m.roles,
 				join_time: m.join_time,
 				modified_time: m.modified_time,
 				batch_num: m.batch_num,
@@ -2360,12 +2280,12 @@ impl DSContext {
 		}
 	}
 
-	fn update_auth_flags(
+	fn update_roles(
 		&self,
 		user_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		server_pubkey: [u8; 32],
-		auth_flags: u64,
+		roles: u128,
 		batch: &Batch,
 	) -> Result<(), Error> {
 		match self.get_member(user_pubkey, server_id, server_pubkey, false, batch)? {
@@ -2374,7 +2294,7 @@ impl DSContext {
 					user_pubkey,
 					server_id,
 					server_pubkey,
-					auth_flags,
+					roles,
 					None,
 					Some(member.modified_time),
 					Some(member.join_time),
@@ -2386,7 +2306,7 @@ impl DSContext {
 					user_pubkey,
 					server_id,
 					server_pubkey,
-					auth_flags,
+					roles,
 					None,
 					None,
 					None,
@@ -2403,7 +2323,7 @@ impl DSContext {
 		user_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		server_pubkey: [u8; 32],
-		auth_flags: u64,
+		roles: u128,
 		profile: Option<Profile>,
 		modified_time: Option<u64>,
 		join_time: Option<u64>,
@@ -2433,7 +2353,7 @@ impl DSContext {
 					None => {}
 				}
 				member.modified_time = time_now;
-				member.auth_flags = auth_flags;
+				member.roles = roles;
 				member
 			}
 			None => {
@@ -2478,7 +2398,7 @@ impl DSContext {
 					server_pubkey,
 					server_id,
 					profile,
-					auth_flags,
+					roles,
 					batch_num,
 					join_time: join_time.unwrap_or(time_now),
 					modified_time: modified_time.unwrap_or(time_now),
@@ -2514,9 +2434,9 @@ impl DSContext {
 		batch.put_ser(&member_key_hash_buffer, &member_value)?;
 
 		// only want to add the user to one of the two tables
-		// for now auth_flags == 0 is member, anything else is auth table
+		// for now roles == 0 is member, anything else is auth table
 		// meaning it will be listed first
-		match member.auth_flags == 0 {
+		match member.roles == 0 {
 			true => {
 				batch.put_ser(&member_key_itt_buffer, &member_value)?;
 				// have to remove incase of auth changes
@@ -2575,7 +2495,7 @@ impl DSContext {
 						server_id: member_key.server_id,
 						batch_num: member_key.batch_num,
 						profile: None,
-						auth_flags: member_value.auth_flags,
+						roles: member_value.roles,
 						join_time: member_value.join_time,
 						modified_time: member_value.modified_time,
 					};
@@ -2617,7 +2537,7 @@ impl DSContext {
 						server_id: member_key.server_id,
 						batch_num: member_key.batch_num,
 						profile: None,
-						auth_flags: member_value.auth_flags,
+						roles: member_value.roles,
 						join_time: member_value.join_time,
 						modified_time: member_value.modified_time,
 					};
@@ -2670,7 +2590,7 @@ impl DSContext {
 		server_pubkey: [u8; 32],
 		challenge: [u8; 8],
 		expiration_millis: u128,
-		auth_flags: u64,
+		roles: u128,
 	) -> Result<Option<String>, Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![CHALLENGE_PREFIX];
@@ -2702,14 +2622,8 @@ impl DSContext {
 				batch.put_ser(&auth_key, &auth_info)?;
 
 				// needed for local access
-				if (auth_flags & AUTH_FLAG_OWNER) != 0 {
-					self.update_auth_flags(
-						user_pubkey,
-						[0u8; 8],
-						server_pubkey,
-						auth_flags,
-						&batch,
-					)?;
+				if (roles & AUTH_FLAG_OWNER) != 0 {
+					self.update_roles(user_pubkey, [0u8; 8], server_pubkey, roles, &batch)?;
 				}
 
 				batch.commit()?;
@@ -2727,7 +2641,7 @@ impl DSContext {
 		server_pubkey: [u8; 32],
 		token: u128,
 		server_id: [u8; 8],
-		requested_auth_flag: u64,
+		requested_roles: u128,
 	) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 
@@ -2750,19 +2664,19 @@ impl DSContext {
 
 					match member {
 						Some(member) => {
-							if (member.auth_flags & requested_auth_flag) != 0 {
+							if (member.roles & requested_roles) != 0 {
 								Ok(())
 							} else {
 								Err(ErrorKind::NotAuthorized(format!(
 									"not authorized. requested = {}, actual = {}",
-									requested_auth_flag, member.auth_flags
+									requested_roles, member.roles,
 								))
 								.into())
 							}
 						}
 						None => Err(ErrorKind::NotAuthorized(format!(
 							"not authorized. requested = {}, level = {}",
-							requested_auth_flag, 0
+							requested_roles, 0
 						))
 						.into()),
 					}

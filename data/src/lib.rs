@@ -24,6 +24,8 @@ pub mod hash;
 pub mod hex;
 pub mod lmdb;
 pub mod ser;
+pub mod types;
 pub use crate::hex::*;
 
 pub use concordutil::nioruntime_log;
+pub use concordutil::nioruntime_tor;

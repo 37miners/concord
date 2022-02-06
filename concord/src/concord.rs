@@ -46,12 +46,14 @@ fn init_webroot(config: &ConcordConfig) {
 	let js_dir = format!("{}/www/js", config.root_dir.clone());
 	let css_dir = format!("{}/www/css", config.root_dir.clone());
 	let images_dir = format!("{}/www/images", config.root_dir.clone());
+	let user_images = format!("{}/www/images/user_images", config.root_dir.clone());
 
 	// if the js dir doesn't exist it means we're going to init things
 	if !Path::new(&js_dir).exists() {
 		fsutils::mkdir(&js_dir);
 		fsutils::mkdir(&css_dir);
 		fsutils::mkdir(&images_dir);
+		fsutils::mkdir(&user_images);
 		let bytes = include_bytes!("resources/jquery-3.6.0.min.js");
 		match create_file_from_bytes(
 			"js/jquery-3.6.0.min.js".to_string(),
@@ -91,6 +93,32 @@ fn init_webroot(config: &ConcordConfig) {
 			config.root_dir.clone(),
 			bytes,
 		) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
+		let bytes = include_bytes!("resources/jsbn.js");
+		match create_file_from_bytes("js/jsbn.js".to_string(), config.root_dir.clone(), bytes) {
+			Ok(_) => {}
+			Err(e) => {
+				log_multi!(
+					ERROR,
+					MAIN_LOG,
+					"Creating file resulted in error: {}",
+					e.to_string()
+				);
+			}
+		}
+
+		let bytes = include_bytes!("resources/jsbn2.js");
+		match create_file_from_bytes("js/jsbn2.js".to_string(), config.root_dir.clone(), bytes) {
 			Ok(_) => {}
 			Err(e) => {
 				log_multi!(
@@ -404,19 +432,19 @@ fn init_webroot(config: &ConcordConfig) {
 }
 
 // We initialize concord here.
-pub fn concord_init(config: &ConcordConfig) -> Result<(), ConcordError> {
+pub fn concord_init(config: ConcordConfig) -> Result<(), ConcordError> {
 	let context = ConcordContext::new();
 
-	init_webroot(config); // setup webroot
-	crate::auth::init_auth(config, context.clone())?; // auth module
-	crate::server::init_server(config, context.clone())?; // server module
-	crate::message::init_message(config, context.clone())?; // message module
-	crate::channel::init_channels(config, context.clone())?; // channel module
-	crate::invite::init_invite(config, context.clone())?; // invite module
-	crate::members::init_members(config, context.clone())?; // members module
-	crate::persistence::init_persistence(config, context.clone())?; // persistence module
+	init_webroot(&config); // setup webroot
+	crate::auth::init_auth(&config, context.clone())?; // auth module
+	crate::server::init_server(&config, context.clone())?; // server module
+	crate::message::init_message(&config, context.clone())?; // message module
+	crate::channel::init_channels(&config, context.clone())?; // channel module
+	crate::invite::init_invite(&config, context.clone())?; // invite module
+	crate::members::init_members(&config, context.clone())?; // members module
+	crate::persistence::init_persistence(&config, context.clone())?; // persistence module
+	crate::profile::init_profile(&config, context.clone())?; // profile module
 	crate::ws::init_ws(config, context.clone())?; // websocket module
-	crate::profile::init_profile(config, context.clone())?; // profile module
 
 	Ok(())
 }

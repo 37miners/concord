@@ -9,41 +9,60 @@ function uint8ToBase64( bytes ) {
 
 var EVENT_VERSION = 1;
 
-// u128
-BigInt.prototype.serialize = function(bint) {
-        var buffer = new ArrayBuffer(16);
-	var buffer = new Uint8Array(buffer);
-        for(var i=0; i<16; i++) buffer[i] = 0;
-        var str16 = bint.toString(16);
-        var len = str16.length;
-        if(len % 2 != 0) {
-                str16 = '0' + str16;
-                len++;
+class U128 {
+        constructor(big_int) {
+                this.value = big_int;
         }
 
+        serialize(bint) {
+                var buffer = new ArrayBuffer(16);
+                var buffer = new Uint8Array(buffer);
 
-        var itt = 15;
-        for(var i=len-2; i>=0; i-=2) {
-                var hex = str16.substring(i, i+2);
-                var num = parseInt(hex, 16);
-                buffer[itt] = num;
-                itt--;
+                for(var i=0; i<16; i++) {
+                        buffer[i] = 0;
+                }
+
+                var str16 = bint.toString(16);
+                var len = str16.length;
+                if(len % 2 != 0) {
+                        str16 = '0' + str16;
+                        len++;
+                }
+                var itt = 15;
+                for(var i=len-2; i>=0; i-=2) {
+                        var hex = str16.substring(i, i+2);
+                        var num = parseInt(hex, 16);
+                        buffer[itt] = num;
+                        itt--;
+                }
+
+                return buffer;
         }
-        return buffer;
-};
 
-
-// u128
-BigInt.prototype.deserialize = function(buffer, offset) {
-	var num = BigInt(0);
-	var itt = 0;
-	for(var i=15+offset; i>=offset; i--) {
-		num += BigInt(buffer[i]) << (BigInt(itt) * 8n);
-		itt++;
-	}
-	BigInt.prototype.offset = offset + 16;
-	return num;
-};
+        deserialize(buffer, offset) {
+                var num = BigInteger.ZERO;
+                var itt = 0;
+                for(var i=15+offset; i>=offset; i--) {
+			num = num.add(
+				new BigInteger(
+					String(buffer[i]),
+					10
+				).shiftLeft(
+					new BigInteger(
+						String(itt),
+						10
+					).multiply(
+						new BigInteger("8", 10)
+					)
+				)
+			);
+                        itt++;
+                }
+                var ret = new U128(num);
+                ret.offset = offset + 16;
+                return ret;
+        }
+}
 
 class U64 {
 	constructor(big_int) {
@@ -76,11 +95,23 @@ class U64 {
 	}
 
 	deserialize(buffer, offset) {
-        	var num = BigInt(0);
-        	var itt = 0;
-        	for(var i=7+offset; i>=offset; i--) {
-                	num += BigInt(buffer[i]) << (BigInt(itt) * 8n);
-                	itt++;
+		var num = BigInteger.ZERO;
+		var itt = 0;
+		for(var i=7+offset; i>=offset; i--) {
+			num = num.add(
+				new BigInteger(
+					String(buffer[i]),
+					10
+				).shiftLeft(
+					new BigInteger(
+						String(itt), 
+						10
+					).multiply(
+						new BigInteger("8", 10)
+					)
+				)
+			);
+			itt++;
         	}
 		var ret = new U64(num);
         	ret.offset = offset + 8;
@@ -290,6 +321,109 @@ const EVENT_TYPE_MODIFY_CHANNEL_REQUEST  = 12;
 const EVENT_TYPE_ADD_CHANNEL_RESPONSE    = 13;
 const EVENT_TYPE_DELETE_CHANNEL_RESPONSE = 14;
 const EVENT_TYPE_MODIFY_CHANNEL_RESPONSE = 15;
+const EVENT_TYPE_GET_MEMBERS_REQUEST     = 16;
+const EVENT_TYPE_GET_MEMBERS_RESPONSE    = 17;
+
+class Member {
+	constructor() {
+
+	}
+
+	serialize() {
+		throw "TODO: implement Member.serialize";
+	}
+
+	deserialize(buffer, offset) {
+		var ret = new Member();
+		ret.user_pubkey = Pubkey.prototype.deserialize(buffer, offset);
+		offset += 32;
+		ret.user_name = SerString.prototype.deserialize(buffer, offset);
+		offset = ret.user_name.offset;
+		ret.user_bio = SerString.prototype.deserialize(buffer, offset);
+		offset = ret.user_bio.offset;
+		ret.roles = U128.prototype.deserialize(buffer, offset);
+		offset += 16;
+		ret.profile_seqno = U64.prototype.deserialize(buffer, offset);
+		offset += 8;
+		ret.online_status = buffer[offset] == 0;
+		offset += 1;
+		
+
+		ret.offset = offset;
+		return ret;
+	}
+}
+
+class GetMembersResponse {
+	constuctor(members, server_id, server_pubkey, batch_num) {
+		this.members = members;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.batch_num = batch_num;
+	}
+
+	serialize() {
+		throw "TODO: implement GetMembersResponse.serialize";
+	}
+
+	deserialize(buffer, offset) {
+		var member_len = U64.prototype.deserialize(buffer, offset);
+		offset += 8;
+		var members = [];
+		for(var i=0; i<member_len.value; i++) {
+			var member = Member.prototype.deserialize(buffer, offset);
+			members.push(member);
+			offset = member.offset;
+		}
+		var ret = new GetMembersResponse();
+		ret.members = members;
+		ret.server_id = ServerId.prototype.deserialize(buffer, offset);
+		offset += 8;
+		ret.server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
+		offset += 32;
+		ret.batch_num = U64.prototype.deserialize(buffer, offset);
+		offset += 8;
+		ret.offset = offset;
+		return ret;
+/*
+                var channel_id = U64.prototype.deserialize(buffer, offset);
+                offset += 8;
+                var name = SerString.prototype.deserialize(buffer, offset);
+                offset = name.offset;
+                var description = SerString.prototype.deserialize(buffer, offset);
+                offset = description.offset;
+                var ret = new Channel(channel_id, name, description);
+                ret.offset = offset;
+                return ret;
+*/
+	}
+}
+
+class GetMembersRequest {
+	constructor(server_id, server_pubkey, batch_num) {
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.batch_num = batch_num;
+	}
+
+	serialize(get_members_request) {
+		var x = ServerId.prototype.serialize(get_members_request.server_id, ServerId.prototype);
+		var y = Pubkey.prototype.serialize(get_members_request.server_pubkey, Pubkey.prototype);
+		var z = U64.prototype.serialize(get_members_request.batch_num);
+		var ret = new Uint8Array(new ArrayBuffer(x.length + y.length + z.length));
+		for(var i=0; i<x.length; i++)
+			ret[i] = x[i];
+		for(var i=0; i<y.length; i++)
+			ret[i+x.length] = y[i];
+		for(var i=0; i<z.length; i++)
+			ret[i+x.length+y.length] = z[i];
+		return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement GetMembersRequest.deserialize";
+	}
+}
 
 class ModifyChannelRequest {
 	constructor(request_id, server_id, server_pubkey, channel_id, name, description) {
@@ -306,7 +440,7 @@ class ModifyChannelRequest {
                 var y = SerString.prototype.serialize(modify_channel_request.name);
                 var z = SerString.prototype.serialize(modify_channel_request.description);
                 var ret = new Uint8Array(new ArrayBuffer(64 + y.length + z.length));
-                var request_id = BigInt.prototype.serialize(modify_channel_request.request_id);
+                var request_id = U128.prototype.serialize(modify_channel_request.request_id);
                 for(var i=0; i<16; i++)
                         ret[i] = request_id[i];
                 for(var i=0; i<8; i++)
@@ -338,7 +472,7 @@ class DeleteChannelRequest {
 
 	serialize(delete_channel_request) {
                 var ret = new Uint8Array(new ArrayBuffer(64));
-                var request_id = BigInt.prototype.serialize(delete_channel_request.request_id);
+                var request_id = U128.prototype.serialize(delete_channel_request.request_id);
                 for(var i=0; i<16; i++)
                         ret[i] = request_id[i];
                 for(var i=0; i<8; i++)
@@ -369,7 +503,7 @@ class AddChannelRequest {
 		var x = SerString.prototype.serialize(add_channel_request.name);
 		var y = SerString.prototype.serialize(add_channel_request.description);
                 var ret = new Uint8Array(new ArrayBuffer(56 + x.length + y.length));
-		var request_id = BigInt.prototype.serialize(add_channel_request.request_id);
+		var request_id = U128.prototype.serialize(add_channel_request.request_id);
                 for(var i=0; i<16; i++)
                         ret[i] = request_id[i];
 		for(var i=0; i<8; i++)
@@ -569,7 +703,7 @@ class ChallengeEvent {
 
 	deserialize(buffer, offset) {
 		var challenge_event = new ChallengeEvent();
-		challenge_event.challenge = BigInt.prototype.deserialize(buffer, offset);
+		challenge_event.challenge = U128.prototype.deserialize(buffer, offset);
 		challenge_event.offset = offset + 16;
 		return challenge_event;
 	}
@@ -609,7 +743,7 @@ class AuthEvent {
 
 	serialize(auth_event) {
 		var x = auth_event.signature.serialize(auth_event.signature, Signature.prototype);
-		var y = auth_event.token.serialize(auth_event.token, BigInt.prototype);
+		var y = auth_event.token.serialize(auth_event.token, U128.prototype);
 		var z = auth_event.pubkey.serialize(auth_event.pubkey, Pubkey.prototype);
 		var ret = new ArrayBuffer(x.length + y.length + z.length);
 		var ret = new Uint8Array(ret);
@@ -634,7 +768,7 @@ class AuthEvent {
 		var auth_event = new AuthEvent();
 		auth_event.signature = SerOption.prototype.deserialize(buffer, offset, Signature.prototype);
 		var offset = auth_event.signature.offset;
-		auth_event.token = SerOption.prototype.deserialize(buffer, offset, BigInt.prototype);
+		auth_event.token = SerOption.prototype.deserialize(buffer, offset, U128.prototype);
 		var offset = auth_event.token.offset;
 		auth_event.pubkey = SerOption.prototype.deserialize(buffer, offset, Pubkey.prototype);
 
@@ -643,12 +777,11 @@ class AuthEvent {
 }
 
 class ServerInfo {
-	constructor(name, description, server_id, server_pubkey, icon, seqno) {
+	constructor(name, description, server_id, server_pubkey, seqno) {
 		this.name = name;
 		this.description = description;
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
-		this.icon = icon;
 		this.seqno = seqno;
 	}
 }
@@ -672,8 +805,6 @@ class GetServersResponse {
 			offset = offset + 8;
 			var server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
 			offset = offset + 32;
-			var icon = Icon.prototype.deserialize(buffer, offset);
-			offset = icon.offset;
 			var seqno = U64.prototype.deserialize(buffer, offset);
 			offset = seqno.offset;
 			servers_response.servers.push(
@@ -682,7 +813,6 @@ class GetServersResponse {
 					description,
 					server_id,
 					server_pubkey,
-					icon,
 					seqno,
 				)
 			);
@@ -723,6 +853,10 @@ class Event {
 				this.delete_channel_request = new SerOption(event_data);
 			} else if(this.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
 				this.modify_channel_request = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
+				this.get_members_request = new SerOption(event_data);
+			} else if(this.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
+				this.get_members_response = new SerOption(event_data);
 			} else {
 				throw "Unknown event in Event.constructor type = " + event_type;
 			}
@@ -754,6 +888,10 @@ class Event {
 			x = event.delete_channel_request.serialize(event.delete_channel_request, DeleteChannelRequest.prototype);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
 			x = event.modify_channel_request.serialize(event.modify_channel_request, ModifyChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
+			x = event.get_members_request.serialize(event.get_members_request, GetMembersRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
+			x = event.get_members_response.serialize(event.get_members_response, GetMembersResponse.prototype);
 		} else {
 			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
@@ -761,7 +899,7 @@ class Event {
 		var ret = new ArrayBuffer(x.length + 19);
 		var ret = new Uint8Array(ret);
 		ret[0] = event.version;
-		var t = BigInt.prototype.serialize(event.timestamp);
+		var t = U128.prototype.serialize(event.timestamp);
 		for(var i=0; i<16; i++) {
 			ret[i+1] = t[i];
 		}
@@ -776,7 +914,7 @@ class Event {
 	deserialize(buffer) {
 		var event = new Event();
 		event.version = buffer[0];
-		event.timestamp = BigInt.prototype.deserialize(buffer, 1);
+		event.timestamp = U128.prototype.deserialize(buffer, 1);
 		event.event_type = buffer[18];
 		if(event.event_type == EVENT_TYPE_AUTH) {
 			event.auth_event = SerOption
@@ -830,6 +968,14 @@ class Event {
 			event.modify_channel_request = SerOption
 				.prototype
 				.deserialize(buffer, 19, ModifyChannelRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
+			event.get_members_request = SerOption
+				.prototype
+				.deserialize(buffer, 19, GetMembersRequest.prototype);
+		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
+			event.get_members_response = SerOption
+				.prototype
+				.deserialize(buffer, 19, GetMembersResponse.prototype);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_MODIFY_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_DELETE_CHANNEL_RESPONSE){
