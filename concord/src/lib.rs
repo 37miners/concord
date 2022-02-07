@@ -15,6 +15,9 @@
 #[macro_use]
 extern crate serde_derive;
 
+pub mod client;
+pub mod types;
+
 mod auth;
 mod channel;
 mod concord;
@@ -25,9 +28,7 @@ mod message;
 mod persistence;
 mod profile;
 mod server;
-mod types;
 mod ws;
-//mod client;
 
 #[macro_use]
 mod utils;

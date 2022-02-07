@@ -1325,7 +1325,6 @@ impl Writeable for Event {
 
 impl Readable for Event {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let now = std::time::Instant::now();
 		let mut auth_event = None.into();
 		let mut challenge_event = None.into();
 		let mut auth_response = None.into();
@@ -1400,7 +1399,6 @@ impl Readable for Event {
 			EventType::AcceptInviteResponse => accept_invite_response = SerOption::read(reader)?,
 		};
 
-		info!("event ser = {}", now.elapsed().as_nanos());
 		Ok(Self {
 			version,
 			event_type,

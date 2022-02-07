@@ -138,6 +138,15 @@ pub enum ErrorKind {
 	/// IllegalArgument
 	#[fail(display = "Illegal argument: {}", _0)]
 	IllegalArgument(String),
+	/// MpscError
+	#[fail(display = "MpscError: {}", _0)]
+	MpscError(String),
+	/// Not Initialized
+	#[fail(display = "Not Initialized Error: {}", _0)]
+	NotInitialized(String),
+	/// Socket disconnect error
+	#[fail(display = "Socket Disconnect: {}", _0)]
+	Disconnect(String),
 }
 
 impl Display for Error {
@@ -297,6 +306,22 @@ impl From<OnionV3Error> for Error {
 	fn from(e: OnionV3Error) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::OnionV3Error(format!("{}", e))),
+		}
+	}
+}
+
+impl From<std::sync::mpsc::RecvError> for Error {
+	fn from(e: std::sync::mpsc::RecvError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::MpscError(format!("{}", e))),
+		}
+	}
+}
+
+impl<T> From<std::sync::mpsc::SendError<T>> for Error {
+	fn from(e: std::sync::mpsc::SendError<T>) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::MpscError(format!("{}", e))),
 		}
 	}
 }

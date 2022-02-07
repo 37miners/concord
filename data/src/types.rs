@@ -19,7 +19,7 @@ use concorderror::Error;
 use nioruntime_log::*;
 use std::convert::TryInto;
 
-debug!();
+info!();
 
 #[derive(Debug, Clone)]
 pub struct SerString {
@@ -113,11 +113,11 @@ impl Readable for Signature {
 #[derive(Debug, Clone)]
 pub struct SerOption<T>(pub Option<T>);
 
-impl<T: Writeable> Writeable for SerOption<T> {
+impl<T: Writeable + std::fmt::Debug> Writeable for SerOption<T> {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		match &self.0 {
 			Some(writeable) => {
-				debug!("ser option is some");
+				debug!("ser option is some: {:?}", writeable);
 				writer.write_u8(1)?;
 				Writeable::write(&writeable, writer)
 			}
