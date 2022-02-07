@@ -1,0 +1,27 @@
+[package]
+name = "testclient"
+version = "1.0.0"
+edition = "2018"
+description = "Utility to test websocket listener client"
+license = "Apache-2.0"
+repository = "https://github.com/37miners/concord"
+keywords = [ "socklet", "nioruntime", "rustlet" ]
+readme = "README.md"
+
+[[bin]]
+name = "testclient"
+path = "src/bin/testclient.rs"
+
+[dependencies]
+concordlib = { path = "../../concord" }
+concorderror = { path = "../../error" }
+concorddata = { path = "../../data" }
+concordutil = { path = "../../util" }
+concordconfig = { path = "../../config" }
+
+chrono = "0.4.11"
+failure = "0.1"
+rand = "0.6"
+clap = { version = "2.33", features = ["yaml"] }
+colored = "2.0.0"
+num-format = "0.4.0"
