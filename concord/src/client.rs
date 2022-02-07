@@ -16,9 +16,12 @@ use crate::librustlet::nioruntime_http::{build_messages, WebSocketMessageType};
 use crate::librustlet::WebSocketMessage;
 use crate::types::{AuthEvent, Event, EventType};
 use concorddata::ser::serialize_default;
-use concorddata::types::U128;
+use concorddata::types::{Pubkey, Signature, U128};
 use concorderror::{Error, ErrorKind};
 use concordutil::nioruntime_log;
+use ed25519_dalek::ExpandedSecretKey;
+use ed25519_dalek::PublicKey;
+use ed25519_dalek::SecretKey;
 use nioruntime_log::*;
 use std::io::prelude::*;
 use std::net::*;
@@ -58,6 +61,12 @@ impl WSListenerClientWriter {
 	}
 }
 
+#[derive(Clone)]
+pub enum AuthParams {
+	Token(String),
+	Secret([u8; 32]),
+}
+
 /// Websocket listener client for concord. This struct can be used to communicate with
 /// A concord server.
 ///
@@ -66,7 +75,7 @@ impl WSListenerClientWriter {
 /// use concorderror::Error;
 /// use concordutil::nioruntime_log as nioruntime_log;
 /// use nioruntime_log::*;
-/// use concordlib::client::WSListenerClient;
+/// use concordlib::client::{WSListenerClient,AuthParams};
 /// use concordlib::types::{Event,EventType,GetServersEvent};
 /// use std::sync::{RwLock,Arc};
 ///
@@ -78,7 +87,7 @@ impl WSListenerClientWriter {
 ///        let mut client = WSListenerClient::new(
 ///                "shvl2mrbmd7lbbunvulsfom3d6kfvvgmkczev4qnymbojswtofbqrdad.onion".to_string(),
 ///                11998,
-///                Some("325980786977777586718199287994764265498".to_string()),
+///                AuthParams::Token("325980786977777586718199287994764265498".to_string()),
 ///        );
 ///
 ///        let time_now = std::time::Instant::now();
@@ -143,7 +152,7 @@ pub struct WSListenerClient<Callback, ErrHandler> {
 	onion: String,
 	tor_proxy_port: u16,
 	sender: Option<SyncSender<Option<Event>>>,
-	token: Option<String>,
+	auth_params: AuthParams,
 }
 
 impl<Callback, ErrHandler> WSListenerClient<Callback, ErrHandler>
@@ -158,15 +167,15 @@ where
 {
 	/// Create a new WSListenerClient connection to the onion address specified using the specified
 	/// tor_proxy_port.
-	/// Optional token is specified. TODO: implement optional private key for the other method of authentication.
-	pub fn new(onion: String, tor_proxy_port: u16, token: Option<String>) -> Self {
+	/// AuthParams are either the secret_bytes to use for auth or the token from the concord server startup.
+	pub fn new(onion: String, tor_proxy_port: u16, auth_params: AuthParams) -> Self {
 		Self {
 			callback: None,
 			error: None,
 			onion,
 			tor_proxy_port,
 			sender: None,
-			token,
+			auth_params,
 		}
 	}
 
@@ -184,13 +193,7 @@ where
 
 	/// Start the WSListenerClient. See [`WSListenerClient`] for an example.
 	pub fn start(&mut self) -> Result<(), Error> {
-		let sec_value: [u8; 4] = rand::random();
-		let tor_proxy_port = self.tor_proxy_port;
-		let onion = self.onion.clone();
-
-		let (sender, receiver) = sync_channel(2);
-		self.sender = Some(sender.clone());
-
+		let auth_params = self.auth_params.clone();
 		let callback = match self.callback.as_ref() {
 			Some(callback) => callback,
 			None => {
@@ -215,9 +218,16 @@ where
 		}
 		.clone();
 
-		let error_clone = error.clone();
+		let sec_value: [u8; 4] = rand::random();
+		let tor_proxy_port = self.tor_proxy_port;
+		let onion = self.onion.clone();
 
-		let token = self.token.clone();
+		let (sender, receiver) = sync_channel(2);
+		self.sender = Some(sender.clone());
+
+		let error_clone = error.clone();
+		let error_clone2 = error.clone();
+		let error_clone3 = error.clone();
 
 		let sec_value_base64 = base64::encode(sec_value);
 		let proxy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tor_proxy_port);
@@ -236,33 +246,87 @@ Sec-WebSocket-Key: {}\
 		)?;
 
 		let stream = stream.into_inner();
-		let stream_clone = stream.try_clone().unwrap();
+		let stream_clone = match stream.try_clone() {
+			Ok(stream) => stream,
+			Err(e) => {
+				return Err(e.into());
+			}
+		};
 
 		// start read thread
 		std::thread::spawn(move || {
-			let stream = stream.try_clone().unwrap();
-			match Self::do_proxy_read_loop(stream, callback, token.clone(), sender) {
-				Ok(_) => {}
-				Err(e) => match (error)(e) {
-					Ok(_) => {}
-					Err(e) => {
-						error!("error occurred in error callback: {}", e);
+			let stream = match stream.try_clone() {
+				Ok(stream) => stream,
+				Err(e) => {
+					// do error callback
+					match (error_clone2)(e.into()) {
+						Ok(_) => {}
+						Err(e) => {
+							error!("error occurred in error callback: {}", e);
+						}
 					}
-				},
+					return;
+				}
+			};
+			let shutdown_stream = match stream.try_clone() {
+				Ok(stream) => stream,
+				Err(e) => {
+					// do error callback
+					match (error_clone2)(e.into()) {
+						Ok(_) => {}
+						Err(e) => {
+							error!("error occurred in error callback: {}", e);
+						}
+					}
+					return;
+				}
+			};
+			match Self::do_proxy_read_loop(stream, callback, auth_params.clone(), sender) {
+				Ok(_) => {}
+				Err(e) => {
+					// also ensure we close the stream so writer thread ends
+					let _ = shutdown_stream.shutdown(std::net::Shutdown::Both);
+
+					// do error callback
+					match (error_clone3)(e) {
+						Ok(_) => {}
+						Err(e) => {
+							error!("error occurred in error callback: {}", e);
+						}
+					}
+				}
 			}
 		});
 
 		// start write thread
 		std::thread::spawn(move || {
-			let stream = stream_clone.try_clone().unwrap();
+			let stream = match stream_clone.try_clone() {
+				Ok(stream) => stream,
+				Err(e) => {
+					// do error callback
+					match (error)(e.into()) {
+						Ok(_) => {}
+						Err(e) => {
+							error!("error occurred in error callback: {}", e);
+						}
+					}
+					return;
+				}
+			};
 			match Self::do_proxy_write_loop(&stream, receiver, &error_clone) {
 				Ok(_) => {}
-				Err(e) => match (error_clone)(e) {
-					Ok(_) => {}
-					Err(e) => {
-						error!("error occurred in error callback: {}", e);
+				Err(e) => {
+					// also ensure we close the stream so read thread ends
+					let _ = stream.shutdown(std::net::Shutdown::Both);
+
+					// do error callback
+					match (error_clone)(e) {
+						Ok(_) => {}
+						Err(e) => {
+							error!("error occurred in error callback: {}", e);
+						}
 					}
-				},
+				}
 			}
 		});
 
@@ -330,7 +394,7 @@ Sec-WebSocket-Key: {}\
 	fn do_proxy_read_loop(
 		mut stream: TcpStream,
 		callback: Pin<Box<Callback>>,
-		token: Option<String>,
+		auth_params: AuthParams,
 		sender: SyncSender<Option<Event>>,
 	) -> Result<(), Error> {
 		let mut buf = Self::skip_headers(&mut stream)?;
@@ -339,7 +403,7 @@ Sec-WebSocket-Key: {}\
 		let mut writer = WSListenerClientWriter::new(sender, stream);
 
 		loop {
-			Self::process_buffer(&mut buf, &token, &callback, &writer)?;
+			Self::process_buffer(&mut buf, &auth_params, &callback, &writer)?;
 			let len = writer.stream.read(&mut rbuf)?;
 			if len == 0 {
 				break;
@@ -354,7 +418,7 @@ Sec-WebSocket-Key: {}\
 
 	fn process_buffer(
 		buf: &mut Vec<u8>,
-		token: &Option<String>,
+		auth_params: &AuthParams,
 		callback: &Pin<Box<Callback>>,
 		writer: &WSListenerClientWriter,
 	) -> Result<(), Error> {
@@ -375,16 +439,42 @@ Sec-WebSocket-Key: {}\
 
 					match event.event_type {
 						EventType::ChallengeEvent => {
-							// for now we only implement token auth
-							let token = match token {
-								Some(ref token) => Some(U128(token.parse()?)).into(),
-								None => None.into(),
+							let token = match auth_params {
+								AuthParams::Token(token) => Some(U128(token.parse()?)).into(),
+								_ => None.into(),
 							};
+
+							let (pubkey, signature) = match auth_params {
+								AuthParams::Secret(secret_bytes) => {
+									let secret_key = SecretKey::from_bytes(&secret_bytes[..])?;
+									let secret_key: ExpandedSecretKey = (&secret_key).into();
+									let pubkey: PublicKey = (&secret_key).into();
+
+									let challenge_value = match event.challenge_event.0 {
+										Some(challenge_event) => challenge_event.challenge,
+										None => {
+											warn!("malformed challenge: {:?}", event);
+											0
+										}
+									};
+									let message = format!("{}", challenge_value);
+									let message = message.as_bytes();
+									let signature = secret_key.sign(message, &pubkey);
+
+									let pubkey = Pubkey::from_bytes(*pubkey.as_bytes());
+
+									let signature_bytes = signature.to_bytes();
+									let signature = Signature(signature_bytes);
+									(Some(pubkey).into(), Some(signature).into())
+								}
+								_ => (None.into(), None.into()),
+							};
+
 							let auth_event = Event {
 								event_type: EventType::AuthEvent,
 								auth_event: Some(AuthEvent {
-									pubkey: None.into(),
-									signature: None.into(),
+									pubkey,
+									signature,
 									token,
 								})
 								.into(),

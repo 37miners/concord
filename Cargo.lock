@@ -416,6 +416,7 @@ dependencies = [
  "byteorder",
  "bytes",
  "chrono",
+ "ed25519-dalek",
  "failure",
  "failure_derive",
  "futures",
@@ -427,6 +428,7 @@ dependencies = [
  "rustls",
  "serde",
  "serde_json",
+ "url 2.2.2",
 ]
 
 [[package]]
@@ -439,6 +441,7 @@ dependencies = [
  "concorddata",
  "concorderror",
  "concordutil",
+ "ed25519-dalek",
  "fsutils",
  "hyper",
  "mime_multipart",
@@ -449,6 +452,7 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "socks",
+ "substring",
  "tor-stream",
  "url 2.2.2",
  "urlencoding",
@@ -2193,6 +2197,15 @@ name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
+
+[[package]]
+name = "substring"
+version = "1.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "42ee6433ecef213b2e72f587ef64a2f5943e7cd16fbd82dbe8bc07486c534c86"
+dependencies = [
+ "autocfg 1.0.1",
+]
 
 [[package]]
 name = "subtle"

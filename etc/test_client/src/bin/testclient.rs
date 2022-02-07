@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use concorddata::types::SerString;
 use concorderror::Error;
-use concordlib::client::WSListenerClient;
-use concordlib::types::{Event, EventType, GetServersEvent};
+use concordlib::client::{AuthParams, WSListenerClient};
+use concordlib::types::{Event, EventType, GetServersEvent, ViewInviteRequest};
 use concordutil::nioruntime_log;
 use nioruntime_log::*;
 use std::sync::{Arc, RwLock};
@@ -22,10 +23,12 @@ use std::sync::{Arc, RwLock};
 debug!();
 
 fn main() -> Result<(), Error> {
+	let secret = [0u8; 32];
+
 	let mut client = WSListenerClient::new(
 		"bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion".to_string(),
 		11990,
-		Some("325980726909577586712199253994964265498".to_string()),
+		AuthParams::Secret(secret),
 	);
 
 	let time_now = std::time::Instant::now();
@@ -47,14 +50,13 @@ fn main() -> Result<(), Error> {
 
 		match event.event_type {
 			EventType::AuthResponse => {
+				info!("Processing auth message: {:?}", event);
 				let event = Event {
-					event_type: EventType::GetServersEvent,
-					get_servers_event: Some(GetServersEvent {}).into(),
+					event_type: EventType::ViewInviteRequest,
+					view_invite_request: Some(ViewInviteRequest { request_id: 1, invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/193941213129671565297558941931929350994".into()}).into(),
 					..Default::default()
 				};
-
 				writer.send(event)?;
-				info!("Processing auth message");
 			}
 			EventType::GetServersResponse => {
 				info!("Got a servers response: {:?}", event);
@@ -67,13 +69,46 @@ fn main() -> Result<(), Error> {
 
 		Ok(())
 	})?;
+
 	client.set_error(move |e| {
 		error!("got an error: {}", e);
 		Ok(())
 	})?;
 
 	client.start()?;
+	/*
+		let mut client2 = WSListenerClient::new(
+					"bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion".to_string(),
+					11990,
+					AuthParams::Token("315673539131917711960422798728697383638".to_string()),
+			);
+		client2.set_callback(move |event, writer| {
+			info!("event on client2: {:?}", event);
+			match event.event_type {
+							EventType::AuthResponse => {
+									let event = Event {
+											event_type: EventType::GetServersEvent,
+											get_servers_event: Some(GetServersEvent {}).into(),
+											..Default::default()
+									};
+									writer.send(event)?;
+							}
+				_ => {
+					error!("Unexpected event type on 2: {:?}", event);
+					writer.close()?;
+				},
+			}
+			Ok(())
+		})?;
 
+		client2.set_error(move |e| {
+			error!("client 2 error: {}", e);
+			Ok(())
+		})?;
+
+
+		client2.start()?;
+	*/
 	std::thread::park();
 	Ok(())
 }

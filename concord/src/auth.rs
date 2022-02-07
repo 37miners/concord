@@ -64,7 +64,7 @@ pub fn ws_auth(
 				Some(token) => {
 					let token = token.0;
 					success = ds_context.check_ws_auth_token(token)?;
-					debug!("success={}", success);
+					info!("success={}", success);
 					send!(
 						handle,
 						Event {
@@ -105,7 +105,25 @@ pub fn ws_auth(
 
 					success =
 						verify!(message, spec_pubkey.to_bytes(), signature.0).unwrap_or(false);
-
+					info!("success w/sig={}", success);
+					info!(
+						"message={:?},spec_pubkey={:?},signature={:?}",
+						message,
+						spec_pubkey.to_bytes(),
+						signature.0
+					);
+					send!(
+						handle,
+						Event {
+							event_type: EventType::AuthResponse,
+							auth_response: Some(AuthResponse {
+								redirect: None.into(),
+								success,
+							})
+							.into(),
+							..Default::default()
+						}
+					);
 					if success {
 						pubkey = Some((*spec_pubkey).clone());
 					} else {

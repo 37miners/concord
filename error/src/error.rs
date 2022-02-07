@@ -147,6 +147,12 @@ pub enum ErrorKind {
 	/// Socket disconnect error
 	#[fail(display = "Socket Disconnect: {}", _0)]
 	Disconnect(String),
+	/// DalekError
+	#[fail(display = "DalekError: {}", _0)]
+	DalekError(String),
+	/// Url parse error
+	#[fail(display = "Parse Error: {}", _0)]
+	ParseError(String),
 }
 
 impl Display for Error {
@@ -322,6 +328,22 @@ impl<T> From<std::sync::mpsc::SendError<T>> for Error {
 	fn from(e: std::sync::mpsc::SendError<T>) -> Error {
 		Error {
 			inner: Context::new(ErrorKind::MpscError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<ed25519_dalek::ed25519::Error> for Error {
+	fn from(e: ed25519_dalek::ed25519::Error) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::DalekError(format!("{}", e))),
+		}
+	}
+}
+
+impl From<url::ParseError> for Error {
+	fn from(e: url::ParseError) -> Error {
+		Error {
+			inner: Context::new(ErrorKind::ParseError(format!("{}", e))),
 		}
 	}
 }

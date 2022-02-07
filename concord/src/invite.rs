@@ -15,8 +15,8 @@
 use crate::context::ConcordContext;
 use crate::send;
 use crate::types::{
-	ConnectionInfo, CreateInviteResponse, DeleteInviteResponse, Event, EventType,
-	ListInvitesResponse,
+	ConnectionInfo, CreateInviteResponse, DeleteInviteResponse, Event, EventType, Image,
+	ListInvitesResponse, ViewInviteResponse,
 };
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
@@ -26,6 +26,7 @@ use concorddata::concord::MemberList;
 use concorddata::concord::Profile;
 use concorddata::concord::ServerInfo;
 use concorddata::concord::ServerInfoReply;
+use concorddata::types::Pubkey;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use concordutil::torclient;
@@ -35,6 +36,7 @@ use nioruntime_log::*;
 use nioruntime_tor::ov3::OnionV3Address;
 use serde_json::Value;
 use std::convert::TryInto;
+use substring::Substring;
 use url::Host::Domain;
 use url::Url;
 
@@ -203,17 +205,78 @@ pub fn delete_invite(
 }
 
 pub fn view_invite(
-	_conn_info: &ConnectionInfo,
-	_ds_context: &DSContext,
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (_request_id, _invite_url) = match event.view_invite_request.0.as_ref() {
+	let (request_id, invite_url) = match event.view_invite_request.0.as_ref() {
 		Some(event) => (event.request_id, event.invite_url.to_string()),
 		None => {
 			warn!("Malformed view invite event. No event present: {:?}", event);
 			return Ok(true);
 		}
 	};
+
+	let url = url::Url::parse(&invite_url)?;
+	let onion = url.host();
+
+	let onion = match onion {
+		Some(onion) => onion,
+		None => {
+			warn!("Invalid link address in check_invite. No host.");
+			return Ok(true);
+		}
+	}
+	.to_string();
+
+	let path = url.path();
+	error!("path pattern match = {:?}", path.find("/i/"));
+	if path.find("/i/") != Some(0) {
+		return Ok(true);
+	}
+	error!("sub={}", path.substring(3, path.len()));
+	let id: u128 = (path.substring(3, path.len())).parse()?;
+	let pubkey = Pubkey::from_onion(&onion)?.to_bytes();
+
+	if pubkey == pubkey!() {
+		// this is our host, we can process directly
+		let jri = ds_context.check_invite(id, pubkey)?;
+		info!("jri={:?}", jri);
+		match jri {
+			Some(jri) => {
+				let event = Event {
+					event_type: EventType::ViewInviteResponse,
+					view_invite_response: Some(ViewInviteResponse {
+						request_id,
+						inviter_name: "".into(),
+						inviter_icon: Image { data: vec![] },
+						server_icon: Image { data: vec![] },
+						server_name: jri.name.into(),
+						current_members: 0,
+						online_members: 0,
+					})
+					.into(),
+					..Default::default()
+				};
+
+				send!(conn_info.handle, event);
+			}
+			None => {
+				info!("no jri!");
+			}
+		}
+	} else {
+		// this is a remote host, we need to forward the request
+	}
+
+	error!(
+		"onion={:?},path={:?},id={},ourpubkey={:?}, invite_pubkey={:?}",
+		onion,
+		path,
+		id,
+		pubkey!(),
+		pubkey
+	);
 	Ok(false)
 }
 
@@ -229,6 +292,21 @@ pub fn accept_invite(
 				"Malformed accept invite event. No event present: {:?}",
 				event
 			);
+			return Ok(true);
+		}
+	};
+	Ok(false)
+}
+
+pub fn join_server(
+	_conn_info: &ConnectionInfo,
+	_ds_context: &DSContext,
+	event: &Event,
+) -> Result<bool, ConcordError> {
+	let (_request_id, _invite_url) = match event.join_server_request.0.as_ref() {
+		Some(event) => (event.request_id, event.invite_url.to_string()),
+		None => {
+			warn!("Malformed join invite event. No event present: {:?}", event);
 			return Ok(true);
 		}
 	};
@@ -379,7 +457,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
 		let invite_id = u128::from_be_bytes(invite_id);
 
-		let join_info_reply = ds_context.check_invite(invite_id).map_err(|e| {
+		let join_info_reply = ds_context.check_invite(invite_id, pubkey!()).map_err(|e| {
 			let error: Error =
 				ErrorKind::ApplicationError(format!("error checking invite: {}", e)).into();
 			error
@@ -414,7 +492,7 @@ pub fn init_invite(config: &ConcordConfig, _context: ConcordContext) -> Result<(
 		let invite_id: [u8; 16] = invite_id.as_slice().try_into()?;
 		let invite_id = u128::from_be_bytes(invite_id);
 		if view_only {
-			let join_info_reply = ds_context.check_invite(invite_id).map_err(|e| {
+			let join_info_reply = ds_context.check_invite(invite_id, pubkey!()).map_err(|e| {
 				let error: Error =
 					ErrorKind::ApplicationError(format!("error checking invite: {}", e)).into();
 				error

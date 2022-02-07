@@ -2139,19 +2139,35 @@ impl DSContext {
 		Ok(())
 	}
 
-	pub fn check_invite(&self, invite_id: u128) -> Result<Option<JoinInfoReply>, Error> {
+	pub fn check_invite(
+		&self,
+		invite_id: u128,
+		server_pubkey: [u8; 32],
+	) -> Result<Option<JoinInfoReply>, Error> {
+		error!(
+			"checking id={}, be={:?}",
+			invite_id,
+			invite_id.to_be_bytes().to_vec()
+		);
+
 		let batch = self.store.batch()?;
 		let mut key = vec![INVITE_ID_PREFIX];
 		key.append(&mut invite_id.to_be_bytes().to_vec());
 		let invite: Option<Invite> = batch.get_ser(&key)?;
 		match invite {
 			Some(invite) => {
+				info!("found a match = {:?}", invite);
 				match invite.cur >= invite.max {
 					true => Ok(None), // accepted too many times
 					false => {
 						let mut key = vec![SERVER_PREFIX];
 						key.append(&mut invite.server_id.to_vec());
+						key.append(&mut server_pubkey.to_vec());
 						let ret: Option<ServerInfo> = batch.get_ser(&key)?;
+						info!(
+							"ret on server info was {:?}, server_id={:?}",
+							ret, invite.server_id
+						);
 
 						match ret {
 							Some(ret) => Ok(Some(JoinInfoReply {

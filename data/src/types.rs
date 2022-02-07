@@ -242,7 +242,7 @@ impl Pubkey {
 		Ok(data)
 	}
 
-	pub fn _from_onion(onion_address: &str) -> Result<Self, Error> {
+	pub fn from_onion(onion_address: &str) -> Result<Self, Error> {
 		let onion_address: OnionV3Address = onion_address.try_into()?;
 		Ok(Self {
 			data: *onion_address.as_bytes(),
@@ -328,7 +328,7 @@ impl Readable for Invite {
 		let cur = reader.read_u64()?;
 		let max = reader.read_u64()?;
 		let id = reader.read_u128()?;
-
+		info!("read invite id={}", id);
 		Ok(Invite {
 			server_id,
 			inviter,

@@ -16,7 +16,8 @@ use crate::auth::ws_auth;
 use crate::channel::{add_channel, delete_channel, get_channels, modify_channel};
 use crate::context::ConcordContext;
 use crate::invite::{
-	accept_invite, create_invite, delete_invite, list_invites, modify_invite, view_invite,
+	accept_invite, create_invite, delete_invite, join_server, list_invites, modify_invite,
+	view_invite,
 };
 use crate::members::get_members;
 use crate::server::{create_server, delete_server, get_servers, modify_server};
@@ -165,31 +166,43 @@ fn process_binary(
 									EventType::CreateInviteRequest => {
 										try2!(
 											create_invite(connection_info, ds_context, &event),
-											""
+											"create invite request error"
 										)
 									}
 									EventType::ListInvitesRequest => {
-										try2!(list_invites(connection_info, ds_context, &event), "")
+										try2!(
+											list_invites(connection_info, ds_context, &event),
+											"list invites request error"
+										)
 									}
 									EventType::ModifyInviteRequest => {
 										try2!(
 											modify_invite(connection_info, ds_context, &event),
-											""
+											"modify invite error"
 										)
 									}
 									EventType::DeleteInviteRequest => {
 										try2!(
 											delete_invite(connection_info, ds_context, &event),
-											""
+											"delete invite request error"
 										)
 									}
 									EventType::ViewInviteRequest => {
-										try2!(view_invite(connection_info, ds_context, &event), "")
+										try2!(
+											view_invite(connection_info, ds_context, &event),
+											"view invite request error"
+										)
 									}
 									EventType::AcceptInviteRequest => {
 										try2!(
 											accept_invite(connection_info, ds_context, &event),
-											""
+											"accept invite request error"
+										)
+									}
+									EventType::JoinServerRequest => {
+										try2!(
+											join_server(connection_info, ds_context, &event),
+											"join server request error"
 										)
 									}
 									_ => {
@@ -200,16 +213,10 @@ fn process_binary(
 									}
 								}
 							}
-							None => {
-								//close!(handle, conn_info);
-								true
-							}
+							None => true,
 						}
 					}
-					None => {
-						//close!(handle, conn_info);
-						true
-					}
+					None => true,
 				};
 			}
 
@@ -219,7 +226,6 @@ fn process_binary(
 			}
 		}
 	}
-	error!("here");
 	Ok(())
 }
 

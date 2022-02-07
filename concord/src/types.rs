@@ -681,6 +681,63 @@ impl Readable for DeleteInviteResponse {
 }
 
 #[derive(Debug)]
+pub struct JoinServerRequest {
+	pub request_id: u128,
+	pub invite_url: SerString,
+}
+
+impl Writeable for JoinServerRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		Writeable::write(&self.invite_url, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for JoinServerRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let invite_url = SerString::read(reader)?;
+
+		Ok(Self {
+			request_id,
+			invite_url,
+		})
+	}
+}
+
+#[derive(Debug)]
+pub struct JoinServerResponse {
+	pub request_id: u128,
+	pub success: bool,
+}
+
+impl Writeable for JoinServerResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		writer.write_u128(self.request_id)?;
+		match self.success {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		Ok(())
+	}
+}
+
+impl Readable for JoinServerResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let request_id = reader.read_u128()?;
+		let success = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		Ok(Self {
+			request_id,
+			success,
+		})
+	}
+}
+
+#[derive(Debug)]
 pub struct ViewInviteRequest {
 	pub request_id: u128,
 	pub invite_url: SerString,
@@ -712,6 +769,7 @@ pub struct ViewInviteResponse {
 	pub inviter_name: SerString,
 	pub inviter_icon: Image,
 	pub server_icon: Image,
+	pub server_name: SerString,
 	pub current_members: u64,
 	pub online_members: u64,
 }
@@ -724,6 +782,7 @@ impl Writeable for ViewInviteResponse {
 		Writeable::write(&self.server_icon, writer)?;
 		writer.write_u64(self.current_members)?;
 		writer.write_u64(self.online_members)?;
+		Writeable::write(&self.server_name, writer)?;
 		Ok(())
 	}
 }
@@ -736,6 +795,7 @@ impl Readable for ViewInviteResponse {
 		let server_icon = Image::read(reader)?;
 		let current_members = reader.read_u64()?;
 		let online_members = reader.read_u64()?;
+		let server_name = SerString::read(reader)?;
 		Ok(Self {
 			request_id,
 			inviter_name,
@@ -743,6 +803,7 @@ impl Readable for ViewInviteResponse {
 			server_icon,
 			current_members,
 			online_members,
+			server_name,
 		})
 	}
 }
@@ -1185,6 +1246,8 @@ pub enum EventType {
 	ViewInviteResponse,
 	AcceptInviteRequest,
 	AcceptInviteResponse,
+	JoinServerRequest,
+	JoinServerResponse,
 }
 
 #[derive(Debug)]
@@ -1220,6 +1283,8 @@ pub struct Event {
 	pub view_invite_response: SerOption<ViewInviteResponse>,
 	pub accept_invite_request: SerOption<AcceptInviteRequest>,
 	pub accept_invite_response: SerOption<AcceptInviteResponse>,
+	pub join_server_request: SerOption<JoinServerRequest>,
+	pub join_server_response: SerOption<JoinServerResponse>,
 	pub version: u8,
 	pub timestamp: u128,
 }
@@ -1258,6 +1323,8 @@ impl Default for Event {
 			view_invite_response: None.into(),
 			accept_invite_request: None.into(),
 			accept_invite_response: None.into(),
+			join_server_request: None.into(),
+			join_server_response: None.into(),
 			version: PROTOCOL_VERSION,
 			timestamp: std::time::SystemTime::now()
 				.duration_since(std::time::UNIX_EPOCH)
@@ -1319,6 +1386,8 @@ impl Writeable for Event {
 			EventType::AcceptInviteResponse => {
 				Writeable::write(&self.accept_invite_response, writer)
 			}
+			EventType::JoinServerRequest => Writeable::write(&self.join_server_request, writer),
+			EventType::JoinServerResponse => Writeable::write(&self.join_server_response, writer),
 		}
 	}
 }
@@ -1355,6 +1424,8 @@ impl Readable for Event {
 		let mut view_invite_response = None.into();
 		let mut accept_invite_request = None.into();
 		let mut accept_invite_response = None.into();
+		let mut join_server_request = None.into();
+		let mut join_server_response = None.into();
 
 		let version = reader.read_u8()?;
 		let timestamp = reader.read_u128()?;
@@ -1397,6 +1468,8 @@ impl Readable for Event {
 			EventType::ViewInviteResponse => view_invite_response = SerOption::read(reader)?,
 			EventType::AcceptInviteRequest => accept_invite_request = SerOption::read(reader)?,
 			EventType::AcceptInviteResponse => accept_invite_response = SerOption::read(reader)?,
+			EventType::JoinServerRequest => join_server_request = SerOption::read(reader)?,
+			EventType::JoinServerResponse => join_server_response = SerOption::read(reader)?,
 		};
 
 		Ok(Self {
@@ -1432,6 +1505,8 @@ impl Readable for Event {
 			view_invite_response,
 			accept_invite_request,
 			accept_invite_response,
+			join_server_request,
+			join_server_response,
 			timestamp,
 		})
 	}

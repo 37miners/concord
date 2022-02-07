@@ -142,6 +142,7 @@ macro_rules! owner {
 			Some(pubkey) => {
 				let server_pubkey = pubkey!();
 				if pubkey.to_bytes() != server_pubkey {
+					info!("not the owner!");
 					return Ok(true);
 				}
 			}
