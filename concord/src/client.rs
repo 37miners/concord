@@ -156,6 +156,9 @@ where
 		+ Unpin,
 	ErrHandler: Fn(Error) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin,
 {
+	/// Create a new WSListenerClient connection to the onion address specified using the specified
+	/// tor_proxy_port.
+	/// Optional token is specified. TODO: implement optional private key for the other method of authentication.
 	pub fn new(onion: String, tor_proxy_port: u16, token: Option<String>) -> Self {
 		Self {
 			callback: None,
@@ -167,16 +170,19 @@ where
 		}
 	}
 
+	/// Set the callback for this WSListenerClient. See [`WSListenerClient`] for an example.
 	pub fn set_callback(&mut self, callback: Callback) -> Result<(), Error> {
 		self.callback = Some(Box::pin(callback));
 		Ok(())
 	}
 
+	/// Set the error handler for this WSListenerClient. See [`WSListenerClient`] for an example.
 	pub fn set_error(&mut self, error: ErrHandler) -> Result<(), Error> {
 		self.error = Some(Box::pin(error));
 		Ok(())
 	}
 
+	/// Start the WSListenerClient. See [`WSListenerClient`] for an example.
 	pub fn start(&mut self) -> Result<(), Error> {
 		let sec_value: [u8; 4] = rand::random();
 		let tor_proxy_port = self.tor_proxy_port;
@@ -263,6 +269,7 @@ Sec-WebSocket-Key: {}\
 		Ok(())
 	}
 
+	/// Send an event to the server from this WSListenerClient.
 	pub fn send(&self, event: Event) -> Result<(), Error> {
 		match self.sender.as_ref() {
 			Some(sender) => {
@@ -276,6 +283,7 @@ Sec-WebSocket-Key: {}\
 		}
 	}
 
+	/// Close the WSListenerClient freeing all it's resources.
 	pub fn close(&self) -> Result<(), Error> {
 		Ok(())
 	}
@@ -308,6 +316,8 @@ Sec-WebSocket-Key: {}\
 			stream.write(&bin_data)?;
 		}
 
+		// if we get here we were disconnected. Send an error event to the error
+		// handler callback.
 		match (error)(ErrorKind::Disconnect("Socket disconnect".to_string()).into()) {
 			Ok(_) => {}
 			Err(e) => {
@@ -348,6 +358,7 @@ Sec-WebSocket-Key: {}\
 		callback: &Pin<Box<Callback>>,
 		writer: &WSListenerClientWriter,
 	) -> Result<(), Error> {
+		// try to build as many messages as we can.
 		let messages = build_messages(buf)?;
 
 		for message in messages {
@@ -392,6 +403,8 @@ Sec-WebSocket-Key: {}\
 		Ok(())
 	}
 
+	// skip over the headers returned by the server and return any additional
+	// data.
 	fn skip_headers(stream: &mut TcpStream) -> Result<Vec<u8>, Error> {
 		let mut buf = [0u8; 4096]; // headers less than 4096 bytes
 		let mut offset = 0;

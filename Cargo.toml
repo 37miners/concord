@@ -4,6 +4,10 @@ version = "1.0.0"
 edition = "2018"
 build = "src/build/build.rs"
 
+[workspace]
+members = ["concord", "data", "util", "error", "config"]
+exclude = ["etc/test_client"]
+
 [dependencies]
 
 concordlib = { path = "./concord" }
