@@ -115,6 +115,7 @@ function convertBinaryStringToUint8Array(bStr) {
 					sock.send(challenge);
 				}
 				else if(recv_event.event_type == EVENT_TYPE_CHALLENGE) {
+console.log("got a challenge");
 					var event = new Event(
 						EVENT_TYPE_AUTH,
 						new AuthEvent(
@@ -125,17 +126,17 @@ function convertBinaryStringToUint8Array(bStr) {
 							new SerOption(),
 						)
 					);
-
+console.log("sending auth");
 					let resp_buffer = event.serialize(event);
 					sock.send(resp_buffer);
 				} else if(recv_event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
-					var channels = recv_event.get_channels_response.value.channels;
+					var channels = recv_event.get_channels_response.channels;
 					var len = channels.length;
 					var full_text = '';
-					var server_id_raw = recv_event.get_channels_response.value.server_id.data;
-					var server_pubkey_raw = recv_event.get_channels_response.value.server_pubkey.data;
-					var server_id = recv_event.get_channels_response.value.server_id.data;
-					var server_pubkey = recv_event.get_channels_response.value.server_pubkey.data;
+					var server_id_raw = recv_event.get_channels_response.server_id.data;
+					var server_pubkey_raw = recv_event.get_channels_response.server_pubkey.data;
+					var server_id = recv_event.get_channels_response.server_id.data;
+					var server_pubkey = recv_event.get_channels_response.server_pubkey.data;
 					var server_id = uint8arraytobase64string(server_id);
 					var server_pubkey = uint8arraytobase64string(server_pubkey);
 					var channel_div = document.getElementById('channel-'+server_id+'-'+server_pubkey);
@@ -213,9 +214,45 @@ function convertBinaryStringToUint8Array(bStr) {
 					};
 					add_chan.appendChild(add_chan_link);
 					channel_div.appendChild(add_chan);
+				} else if(recv_event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
+					var rid = recv_event.list_invites_response.request_id;
+					var invite_div = document.getElementById('invites-'+rid);
+					invite_div.innerHTML = '';
+					for(var i=0; i<recv_event.list_invites_response.invites.length; i++) {
+						var invite = recv_event.list_invites_response.invites[i];
+						invite_div.appendChild(
+							document.createTextNode(
+								'i=' + i + ', ' +
+								'invite_id=' + invite.invite_id.value + ', ' +
+									'max='+invite.max.value + ', ' +
+									'cur='+invite.current.value + ', ' +
+									'exp='+invite.expiration.value + ', ' +
+									'inviter='+invite.inviter.data +
+								']'
+							)
+						);
+						invite_div.appendChild(document.createTextNode(' '));
+						var del_invite = document.createElement('a');
+						del_invite.innerHTML = 'del';
+						del_invite.invite_id = invite.invite_id.value;
+						del_invite.onclick = function() {
+                                                	var event = new Event(
+                                                        	EVENT_TYPE_DELETE_INVITE_REQUEST,
+                                                        	new DeleteInviteRequest(
+                                                                	1,
+									this.invite_id
+                                                        	)
+                                                	);
+
+                                                	let buffer = Event.prototype.serialize(event);
+                                                	sock.send(buffer);
+						};
+						invite_div.appendChild(del_invite);
+						invite_div.appendChild(document.createElement('br'));
+					}
 				} else if(recv_event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
-					for(var i=0; i<recv_event.get_members_response.value.members.length; i++) {
-						var member = recv_event.get_members_response.value.members[i];
+					for(var i=0; i<recv_event.get_members_response.members.length; i++) {
+						var member = recv_event.get_members_response.members[i];
 						document.body.appendChild(document.createTextNode(
 							'[' + member.user_pubkey.data + '], ' +
 							'\'' + member.user_name.value + '\''
@@ -223,16 +260,17 @@ function convertBinaryStringToUint8Array(bStr) {
 						document.body.appendChild(document.createElement('br'));
 					}
 				} else if(recv_event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
-					for(var i=0; i<recv_event.get_servers_response.value.servers.length; i++) {
-						var name = recv_event.get_servers_response.value.servers[i].name.value;
-						var server_id = recv_event.get_servers_response.value.servers[i].server_id.data;
-						var server_pubkey = recv_event.get_servers_response.value.servers[i].server_pubkey.data;
+					var servers = recv_event.get_servers_response.servers;
+					for(var i=0; i<servers.length; i++) {
+						var name = servers[i].name.value;
+						var server_id = servers[i].server_id.data;
+						var server_pubkey = servers[i].server_pubkey.data;
 						var server_id_b58 = to_b58(server_id, alphabet);
 						var server_pubkey_b58 = to_b58(server_pubkey, alphabet);
 console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
-						var seqno = recv_event.get_servers_response.value.servers[i].seqno.value;
+						var seqno = servers[i].seqno.value;
 						console.log('name='+name);
-						console.log(recv_event.get_servers_response.value.servers[i].description);
+						console.log(servers[i].description);
 						console.log('server_id='+server_id);
 						console.log('server_pubkey='+server_pubkey);
 						var icon = document.createElement('img');
@@ -241,7 +279,7 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						icon.src = '/images/user_images/' + server_id_b58+'-'+server_pubkey_b58;
 						//icon.src = "data:image;base64," + base64icon;
 						//icon.src = '/images/user1.png';
-						icon.title = recv_event.get_servers_response.value.servers[i].name.value;
+						icon.title = servers[i].name.value;
 						document.body.appendChild(icon);
 						var del_server = document.createElement('a');
 						del_server.innerHTML = 'delete ' + server_id + ' (' + name + ')';
@@ -291,6 +329,45 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						document.body.appendChild(document.createElement('br'));
 						request_channels(server_id, server_pubkey);
 						request_members(server_id, server_pubkey);
+
+						var add_invites = document.createElement('a');
+						add_invites.innerHTML = 'add invites';
+						add_invites.server_id = server_id;
+						add_invites.server_pubkey = server_pubkey;
+						add_invites.onclick = function(evt) {
+							var count = Number(document.forms['create_server']['server_name'].value);
+							var expiration = Number(document.forms['create_server']['other'].value);
+
+							var event = new Event(
+								EVENT_TYPE_CREATE_INVITE_REQUEST,
+								new CreateInviteRequest(
+									1,
+									this.server_id,
+									this.server_pubkey,
+									count,
+									expiration,
+								)
+							);
+							sock.send(Event.prototype.serialize(event));
+						};
+						document.body.appendChild(add_invites);
+						var invites = document.createElement('div');
+						var rid = Math.round(Math.random() * 1000000000000);
+						invites.id = 'invites-' + rid;
+						invites.innerHTML = 'invites for ' + name + ': ';
+						document.body.appendChild(invites);
+
+						var event = new Event(
+							EVENT_TYPE_LIST_INVITES_REQUEST,
+							new ListInvitesRequest(
+								rid,
+								server_id,
+								server_pubkey,
+							)
+						);
+
+						let buffer = Event.prototype.serialize(event);
+						sock.send(buffer);
 					}
 				}
 			}

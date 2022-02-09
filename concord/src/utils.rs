@@ -91,12 +91,13 @@ macro_rules! try2 {
 #[macro_export]
 macro_rules! send {
 	($handle:expr,$event:expr) => {{
-		debug!("send event {:?}", $event);
+		error!("send event {:?}", $event);
 		let mut buffer = vec![];
 		crate::try2!(
 			concorddata::ser::serialize_default(&mut buffer, &$event,),
 			"serialize event error"
 		);
+		info!("bin={:?}", buffer);
 		binary!($handle, buffer);
 	}};
 }
@@ -105,7 +106,7 @@ macro_rules! send {
 macro_rules! bin_event {
 	() => {{
 		let bin = binary!()?;
-		debug!("bindata={:?}", bin);
+		info!("bindata={:?}", bin);
 		let mut cursor = std::io::Cursor::new(bin);
 		cursor.set_position(0);
 		let mut reader = concorddata::ser::BinReader::new(

@@ -200,7 +200,6 @@ class Icon {
 
         serialize(data) {
                 var len = new U64(data.length);
-                // len + bytes for storing len
                 var ret = new ArrayBuffer(data.length + 8);
                 var ret = new Uint8Array(ret);
 
@@ -323,6 +322,156 @@ const EVENT_TYPE_DELETE_CHANNEL_RESPONSE = 14;
 const EVENT_TYPE_MODIFY_CHANNEL_RESPONSE = 15;
 const EVENT_TYPE_GET_MEMBERS_REQUEST     = 16;
 const EVENT_TYPE_GET_MEMBERS_RESPONSE    = 17;
+const EVENT_TYPE_CREATE_INVITE_REQUEST   = 18;
+const EVENT_TYPE_CREATE_INVITE_RESPONSE  = 19;
+const EVENT_TYPE_LIST_INVITES_REQUEST    = 20;
+const EVENT_TYPE_LIST_INVITES_RESPONSE   = 21;
+const EVENT_TYPE_MODIFY_INVITE_REQUEST   = 22;
+const EVENT_TYPE_MODIFY_INVITE_RESPONSE  = 23;
+const EVENT_TYPE_DELETE_INVITE_REQUEST   = 24;
+const EVENT_TYPE_DELETE_INVITE_RESPONSE  = 25;
+
+class Invite {
+	constructor(invite_id, max, current, expiration, server_id, inviter) {
+		this.invite_id = invite_id;
+		this.max = max;
+		this.current = current;
+		this.expiration = expiration;
+		this.server_id = server_id;
+		this.inviter = inviter;
+	}
+
+	serialize() {
+		throw "TODO: implement Invite.serialize";
+	}
+
+	deserialize(buffer, offset) {
+                var server_id = ServerId.prototype.deserialize(buffer, offset);
+                offset += 8;
+		var inviter = Pubkey.prototype.deserialize(buffer, offset);
+		offset += 32;
+		var expiration = U128.prototype.deserialize(buffer, offset);
+		offset += 16;
+                var current = U64.prototype.deserialize(buffer, offset);
+                offset += 8;
+                var max = U64.prototype.deserialize(buffer, offset);
+                offset += 8;
+		var invite_id = U128.prototype.deserialize(buffer, offset);
+		offset += 16;	
+                var ret = new Invite(invite_id, max, current, expiration, server_id, inviter);
+                ret.offset = offset;
+                return ret;
+	}
+}
+
+class ListInvitesResponse {
+	constructor(request_id, invites) {
+		this.request_id = request_id;
+		this.invites = invites;
+	}
+
+	serialize() {
+		throw "TODO: implement ListInvitesResponse.serialize";
+	}
+
+	deserialize(buffer, offset) {
+ 		var request_id = U128.prototype.deserialize(buffer, offset);
+                offset += 16;
+		var invite_count = U64.prototype.deserialize(buffer, offset);
+console.log('rid='+request_id.value+',invite_count='+invite_count.value);
+		offset += 8;
+		var invites = [];
+		for(var i=0; i<invite_count.value; i++) {
+			var invite = Invite.prototype.deserialize(buffer, offset);
+			offset = invite.offset;
+console.log('pushing invite with id = ' + invite.invite_id.value);
+			invites.push(invite);
+		}
+                var ret = new ListInvitesResponse(request_id.value, invites);
+                ret.offset = offset;
+                return ret;
+	}
+}
+
+class DeleteInviteRequest {
+	constructor(request_id, invite_id) {
+		this.request_id = request_id;
+		this.invite_id = invite_id;
+	}
+
+	serialize(delete_invite_request) {
+		var ret = new Uint8Array(new ArrayBuffer(32));
+		var request_id = U128.prototype.serialize(delete_invite_request.request_id);
+		var invite_id = U128.prototype.serialize(delete_invite_request.invite_id);
+		for(var i=0; i<16; i++)
+			ret[i] = request_id[i];
+		for(var i=0; i<16; i++)
+			ret[i+16] = invite_id[i];
+		return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement DeleteInviteRequest.deserialize";
+	}
+}
+
+class CreateInviteRequest {
+	constructor(request_id, server_id, server_pubkey, count, expiration) {
+		this.request_id = request_id;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+		this.count = count;
+		this.expiration = expiration;
+	}
+
+	serialize(create_invite_request) {
+                var ret = new Uint8Array(new ArrayBuffer(80));
+                var request_id = U128.prototype.serialize(create_invite_request.request_id);
+                for(var i=0; i<16; i++)
+                        ret[i] = request_id[i];
+                for(var i=0; i<8; i++)
+                        ret[i+16] = create_invite_request.server_id[i];
+                for(var i=0; i<32; i++)
+                        ret[i+24] = create_invite_request.server_pubkey[i];
+		var count = U64.prototype.serialize(create_invite_request.count);
+		var expiration = U128.prototype.serialize(create_invite_request.expiration);
+		for(var i=0; i<8; i++)
+			ret[i+56] = count[i];
+		for(var i=0; i<16; i++)
+			ret[i+64] = expiration[i];
+                return ret;	
+	}
+
+        deserialize() {
+                throw "TODO: implement CreateInviteRequest.deserialize";
+        }
+}
+
+class ListInvitesRequest {
+	constructor(request_id, server_id, server_pubkey) {
+		this.request_id = request_id;
+		this.server_id = server_id;
+		this.server_pubkey = server_pubkey;
+	}
+
+	serialize(list_invites_request) {
+                var ret = new Uint8Array(new ArrayBuffer(56));
+		var request_id = U128.prototype.serialize(list_invites_request.request_id);
+                for(var i=0; i<16; i++)
+                        ret[i] = request_id[i];
+
+                for(var i=0; i<8; i++)
+                        ret[i+16] = list_invites_request.server_id[i];
+                for(var i=0; i<32; i++)
+                        ret[i+24] = list_invites_request.server_pubkey[i];
+
+                return ret;
+	}
+
+	deserialize() {
+		throw "TODO: implement ListInvitesRequest.deserialize";
+	}
+}
 
 class Member {
 	constructor() {
@@ -385,17 +534,6 @@ class GetMembersResponse {
 		offset += 8;
 		ret.offset = offset;
 		return ret;
-/*
-                var channel_id = U64.prototype.deserialize(buffer, offset);
-                offset += 8;
-                var name = SerString.prototype.deserialize(buffer, offset);
-                offset = name.offset;
-                var description = SerString.prototype.deserialize(buffer, offset);
-                offset = description.offset;
-                var ret = new Channel(channel_id, name, description);
-                ret.offset = offset;
-                return ret;
-*/
 	}
 }
 
@@ -408,16 +546,16 @@ class GetMembersRequest {
 
 	serialize(get_members_request) {
 		var x = ServerId.prototype.serialize(get_members_request.server_id, ServerId.prototype);
-		var y = Pubkey.prototype.serialize(get_members_request.server_pubkey, Pubkey.prototype);
-		var z = U64.prototype.serialize(get_members_request.batch_num);
-		var ret = new Uint8Array(new ArrayBuffer(x.length + y.length + z.length));
-		for(var i=0; i<x.length; i++)
-			ret[i] = x[i];
-		for(var i=0; i<y.length; i++)
-			ret[i+x.length] = y[i];
-		for(var i=0; i<z.length; i++)
-			ret[i+x.length+y.length] = z[i];
-		return ret;
+ 		var y = Pubkey.prototype.serialize(get_members_request.server_pubkey, Pubkey.prototype);
+ 		var z = U64.prototype.serialize(get_members_request.batch_num);
+ 		var ret = new Uint8Array(new ArrayBuffer(x.length + y.length + z.length));
+ 		for(var i=0; i<x.length; i++)
+ 			ret[i] = x[i];
+ 		for(var i=0; i<y.length; i++)
+ 			ret[i+x.length] = y[i];
+ 		for(var i=0; i<z.length; i++)
+ 			ret[i+x.length+y.length] = z[i];
+ 		return ret;
 	}
 
 	deserialize() {
@@ -830,33 +968,41 @@ class Event {
 			this.timestamp = Date.now();
 			this.event_type = event_type;
 			if(this.event_type == EVENT_TYPE_AUTH) {
-				this.auth_event = new SerOption(event_data);
+				this.auth_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_CHALLENGE) {
-				this.challenge_event = new SerOption(event_data);
+				this.challenge_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_AUTH_RESP) {
-				this.auth_resp = new SerOption(event_data);
+				this.auth_resp = event_data;
 			} else if(this.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
-				this.get_servers_event = new SerOption(new GetServersEvent());
+				this.get_servers_event = new GetServersEvent();
 			} else if(this.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
-				this.create_server_event = new SerOption(event_data);
+				this.create_server_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
-				this.delete_server_event = new SerOption(event_data);
+				this.delete_server_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
-				this.modify_server_event = new SerOption(event_data);
+				this.modify_server_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
-				this.get_channels_request = new SerOption(event_data);
+				this.get_channels_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
-				this.get_channels_response = new SerOption(event_data);
+				this.get_channels_response = event_data;
 			} else if(this.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
-				this.add_channel_request = new SerOption(event_data);
+				this.add_channel_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
-				this.delete_channel_request = new SerOption(event_data);
+				this.delete_channel_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
-				this.modify_channel_request = new SerOption(event_data);
+				this.modify_channel_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
-				this.get_members_request = new SerOption(event_data);
+				this.get_members_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
-				this.get_members_response = new SerOption(event_data);
+				this.get_members_response = event_data;
+			} else if(this.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
+				this.list_invites_request = event_data;
+			} else if(this.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
+				this.create_invite_request = event_data;
+			} else if(this.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
+				this.list_invites_response = event_data;
+			} else if(this.event_type == EVENT_TYPE_DELETE_INVITE_REQUEST) {
+				this.delete_invite_request = event_data;
 			} else {
 				throw "Unknown event in Event.constructor type = " + event_type;
 			}
@@ -866,46 +1012,56 @@ class Event {
 	serialize(event) {
 		var x;
 		if(event.event_type == EVENT_TYPE_AUTH) {
-			x = event.auth_event.serialize(event.auth_event, AuthEvent.prototype);
+			x = event.auth_event.serialize(event.auth_event);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
-			x = event.challenge_event.serialize(event.challenge_event, ChallengeEvent.prototype);
+			x = event.challenge_event.serialize(event.challenge_event);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
-			x = event.auth_resp.serialize(event.auth_resp, AuthResp.prototype);
+			x = event.auth_resp.serialize(event.auth_resp);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
-			x = new Uint8Array(1);
-			x[0] = 1;
+			x = new Uint8Array(0);
 		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
-			x = event.create_server_event.serialize(event.create_server_event, CreateServerEvent.prototype);
+			x = event.create_server_event.serialize(event.create_server_event);
 		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
-			x = event.delete_server_event.serialize(event.delete_server_event, DeleteServerEvent.prototype);
+			x = event.delete_server_event.serialize(event.delete_server_event);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
-			x = event.modify_server_event.serialize(event.modify_server_event, ModifyServerEvent.prototype);
+			x = event.modify_server_event.serialize(event.modify_server_event);
 		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
-			x = event.get_channels_request.serialize(event.get_channels_request, GetChannelsRequest.prototype);
+			x = event.get_channels_request.serialize(event.get_channels_request);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
-			x = event.add_channel_request.serialize(event.add_channel_request, AddChannelRequest.prototype);
+			x = event.add_channel_request.serialize(event.add_channel_request);
 		} else if(event.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
-			x = event.delete_channel_request.serialize(event.delete_channel_request, DeleteChannelRequest.prototype);
+			x = event.delete_channel_request.serialize(event.delete_channel_request);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
-			x = event.modify_channel_request.serialize(event.modify_channel_request, ModifyChannelRequest.prototype);
+			x = event.modify_channel_request.serialize(event.modify_channel_request);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
-			x = event.get_members_request.serialize(event.get_members_request, GetMembersRequest.prototype);
+			x = event.get_members_request.serialize(event.get_members_request);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
-			x = event.get_members_response.serialize(event.get_members_response, GetMembersResponse.prototype);
+			x = event.get_members_response.serialize(event.get_members_response);
+		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
+			x = event.list_invites_request.serialize(event.list_invites_request);
+		} else if(event.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
+			x = event.create_invite_request.serialize(event.create_invite_request);
+		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
+			x = event.list_invites_response.serialize(event.list_invites_response);
+		} else if(event.event_type == EVENT_TYPE_DELETE_INVITE_REQUEST) {
+			x = event.delete_invite_request.serialize(event.delete_invite_request);
 		} else {
 			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
 
-		var ret = new ArrayBuffer(x.length + 19);
+		var ret = new ArrayBuffer(x.length + 35);
 		var ret = new Uint8Array(ret);
 		ret[0] = event.version;
 		var t = U128.prototype.serialize(event.timestamp);
 		for(var i=0; i<16; i++) {
 			ret[i+1] = t[i];
 		}
-		ret[18] = event.event_type;
+		for(var i=0; i<16; i++) {
+			ret[i+17] = Math.floor(Math.random() * 256);
+		}
+		ret[34] = event.event_type;
 		for(var i=0; i<x.length; i++) {
-			ret[i+19] = x[i];
+			ret[i+35] = x[i];
 		}
 		return ret;
 
@@ -915,67 +1071,83 @@ class Event {
 		var event = new Event();
 		event.version = buffer[0];
 		event.timestamp = U128.prototype.deserialize(buffer, 1);
-		event.event_type = buffer[18];
+		event.event_type = buffer[34];
 		if(event.event_type == EVENT_TYPE_AUTH) {
-			event.auth_event = SerOption
+			event.auth_event = AuthEvent
 				.prototype
-				.deserialize(buffer, 19, AuthEvent.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
-			event.challenge_event = SerOption
+			event.challenge_event = ChallengeEvent
 				.prototype
-				.deserialize(buffer, 19, ChallengeEvent.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
-			event.auth_resp = SerOption
+			event.auth_resp = AuthResp
 				.prototype
-				.deserialize(buffer, 19, AuthResp.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
-			event.get_servers = SerOption
+			event.get_servers = GetServersEvent
 				.prototype
-				.deserialize(buffer, 19, GetServers.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
-			event.get_servers_response = SerOption
+			event.get_servers_response = GetServersResponse
 				.prototype
-				.deserialize(buffer, 19, GetServersResponse.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
-			event.create_server_event = SerOption
+			event.create_server_event = CreateServerEvent
 				.prototype
-				.deserialize(buffer, 19, CreateServerEvent.prototype);	
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
-			event.delete_server_event = SerOption
+			event.delete_server_event = DeleteServerEvent
 				.prototype
-				.deserialize(buffer, 19, DeleteServerEvent.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
-			event.modify_server_event = SerOption
+			event.modify_server_event = ModifyServerEvent
 				.prototype
-				.deserialize(buffer, 19, ModifyServerEvent.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
-			event.get_channels_request = SerOption
+			event.get_channels_request = GetChannelsRequest
 				.prototype
-				.deserialize(buffer, 19, GetChannelsRequest.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
-			event.get_channels_response = SerOption
+			event.get_channels_response = GetChannelsResponse
 				.prototype
-				.deserialize(buffer, 19, GetChannelsResponse.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
-			event.add_channel_response = SerOption
+			event.add_channel_response = AddChannelRequest
 				.prototype
-				.deserialize(buffer, 19, AddChannelRequest.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
-			event.delete_channel_request = SerOption
+			event.delete_channel_request = DeleteChannelRequest
 				.prototype
-				.deserialize(buffer, 19, DeleteChannelRequest.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
-			event.modify_channel_request = SerOption
+			event.modify_channel_request = ModifyChannelRequest
 				.prototype
-				.deserialize(buffer, 19, ModifyChannelRequest.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
-			event.get_members_request = SerOption
+			event.get_members_request = GetMembersRequest
 				.prototype
-				.deserialize(buffer, 19, GetMembersRequest.prototype);
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
-			event.get_members_response = SerOption
+			event.get_members_response = GetMembersResponse
 				.prototype
-				.deserialize(buffer, 19, GetMembersResponse.prototype);
+				.deserialize(buffer, 35);
+		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
+			event.list_invites_request = ListInvitesRequest
+				.prototype
+				.deserialize(buffer, 35);
+		} else if(event.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
+			event.create_invite_request = CreateInviteRequest
+				.prototype
+				.deserialize(buffer, 35);
+		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
+			event.list_invites_response = ListInvitesResponse
+				.prototype
+				.deserialize(buffer, 35);
+		} else if(event.event_type == EVENT_TYPE_DELETE_INVITE_REQUEST) {
+			event.delete_invite_request = DeleteInviteRequest
+				.prototype
+				.deserialize(buffer, 35);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_MODIFY_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_DELETE_CHANNEL_RESPONSE){

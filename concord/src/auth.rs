@@ -14,7 +14,7 @@
 
 use crate::context::ConcordContext;
 use crate::types::ConnectionInfo;
-use crate::types::{AuthResponse, Event, EventType};
+use crate::types::{AuthResponse, Event, EventBody};
 use crate::{send, try2};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
@@ -55,86 +55,77 @@ pub fn ws_auth(
 	let id = handle.get_connection_id();
 	let pubkey: Option<Pubkey>;
 
-	if event.event_type != EventType::AuthEvent {
-		warn!("invalid auth event. Type not AuthEvent: {:?}", event);
-		return Ok(true);
-	} else {
-		match &event.auth_event.0 {
-			Some(auth_event) => match &auth_event.token.0 {
-				Some(token) => {
-					let token = token.0;
-					success = ds_context.check_ws_auth_token(token)?;
-					info!("success={}", success);
-					send!(
-						handle,
-						Event {
-							event_type: EventType::AuthResponse,
-							auth_response: Some(AuthResponse {
-								redirect: None.into(),
-								success,
-							})
-							.into(),
-							..Default::default()
-						}
-					);
-					if success {
-						pubkey = Some(Pubkey::from_bytes(pubkey!()));
-					} else {
-						debug!("return true");
-						return Ok(true);
+	match &event.body {
+		EventBody::AuthEvent(auth_event) => match &auth_event.token.0 {
+			Some(token) => {
+				let token = token.0;
+				success = ds_context.check_ws_auth_token(token)?;
+				info!("success={}", success);
+				send!(
+					handle,
+					Event {
+						body: EventBody::AuthResponse(AuthResponse {
+							redirect: None.into(),
+							success,
+						})
+						.into(),
+						..Default::default()
 					}
+				);
+				if success {
+					pubkey = Some(Pubkey::from_bytes(pubkey!()));
+				} else {
+					debug!("return true");
+					return Ok(true);
 				}
-				None => {
-					let message = format!("{}", handle.get_connection_id());
-					let message = message.as_bytes();
-					let spec_pubkey = match &auth_event.pubkey.0 {
-						Some(pubkey) => pubkey,
-						None => {
-							warn!("malformed event: no pubkey: {:?}", event);
-							return Ok(true);
-						}
-					};
-
-					let signature = match &auth_event.signature.0 {
-						Some(signature) => signature,
-						None => {
-							warn!("malformed event: no signature: {:?}", event);
-							return Ok(true);
-						}
-					};
-
-					success =
-						verify!(message, spec_pubkey.to_bytes(), signature.0).unwrap_or(false);
-					info!("success w/sig={}", success);
-					info!(
-						"message={:?},spec_pubkey={:?},signature={:?}",
-						message,
-						spec_pubkey.to_bytes(),
-						signature.0
-					);
-					send!(
-						handle,
-						Event {
-							event_type: EventType::AuthResponse,
-							auth_response: Some(AuthResponse {
-								redirect: None.into(),
-								success,
-							})
-							.into(),
-							..Default::default()
-						}
-					);
-					if success {
-						pubkey = Some((*spec_pubkey).clone());
-					} else {
-						return Ok(true);
-					}
-				}
-			},
-			None => {
-				warn!("malformed event. No auth_event: {:?}", event);
-				return Ok(true);
 			}
+			None => {
+				let message = format!("{}", handle.get_connection_id());
+				let message = message.as_bytes();
+				let spec_pubkey = match &auth_event.pubkey.0 {
+					Some(pubkey) => pubkey,
+					None => {
+						warn!("malformed event: no pubkey: {:?}", event);
+						return Ok(true);
+					}
+				};
+
+				let signature = match &auth_event.signature.0 {
+					Some(signature) => signature,
+					None => {
+						warn!("malformed event: no signature: {:?}", event);
+						return Ok(true);
+					}
+				};
+
+				success = verify!(message, spec_pubkey.to_bytes(), signature.0).unwrap_or(false);
+				info!("success w/sig={}", success);
+				info!(
+					"message={:?},spec_pubkey={:?},signature={:?}",
+					message,
+					spec_pubkey.to_bytes(),
+					signature.0
+				);
+				send!(
+					handle,
+					Event {
+						body: EventBody::AuthResponse(AuthResponse {
+							redirect: None.into(),
+							success,
+						}),
+						..Default::default()
+					}
+				);
+				if success {
+					pubkey = Some((*spec_pubkey).clone());
+				} else {
+					return Ok(true);
+				}
+			}
+		},
+		_ => {
+			warn!("invalid auth event. Type not AuthEvent: {:?}", event);
+			return Ok(true);
 		}
 	}
 

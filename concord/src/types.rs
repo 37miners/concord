@@ -153,7 +153,6 @@ impl Readable for Channel {
 
 #[derive(Debug)]
 pub struct AddChannelRequest {
-	pub request_id: u128,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
 	pub name: SerString,
@@ -162,7 +161,6 @@ pub struct AddChannelRequest {
 
 impl Writeable for AddChannelRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		Writeable::write(&self.name, writer)?;
@@ -173,13 +171,11 @@ impl Writeable for AddChannelRequest {
 
 impl Readable for AddChannelRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let name = SerString::read(reader)?;
 		let description = SerString::read(reader)?;
 		Ok(Self {
-			request_id,
 			server_id,
 			server_pubkey,
 			name,
@@ -190,14 +186,12 @@ impl Readable for AddChannelRequest {
 
 #[derive(Debug)]
 pub struct AddChannelResponse {
-	pub request_id: u128,
 	pub channel_id: u64,
 	pub success: bool,
 }
 
 impl Writeable for AddChannelResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -209,14 +203,12 @@ impl Writeable for AddChannelResponse {
 
 impl Readable for AddChannelResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
 		let channel_id = reader.read_u64()?;
 		Ok(Self {
-			request_id,
 			success,
 			channel_id,
 		})
@@ -225,7 +217,6 @@ impl Readable for AddChannelResponse {
 
 #[derive(Debug)]
 pub struct ModifyChannelRequest {
-	pub request_id: u128,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
 	pub channel_id: u64,
@@ -235,7 +226,6 @@ pub struct ModifyChannelRequest {
 
 impl Writeable for ModifyChannelRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		writer.write_u64(self.channel_id)?;
@@ -247,14 +237,12 @@ impl Writeable for ModifyChannelRequest {
 
 impl Readable for ModifyChannelRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let channel_id = reader.read_u64()?;
 		let name = SerString::read(reader)?;
 		let description = SerString::read(reader)?;
 		Ok(Self {
-			request_id,
 			channel_id,
 			server_id,
 			server_pubkey,
@@ -266,13 +254,11 @@ impl Readable for ModifyChannelRequest {
 
 #[derive(Debug)]
 pub struct ModifyChannelResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for ModifyChannelResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -283,21 +269,16 @@ impl Writeable for ModifyChannelResponse {
 
 impl Readable for ModifyChannelResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
 #[derive(Debug)]
 pub struct DeleteChannelRequest {
-	pub request_id: u128,
 	pub channel_id: u64,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -305,7 +286,6 @@ pub struct DeleteChannelRequest {
 
 impl Writeable for DeleteChannelRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		writer.write_u64(self.channel_id)?;
@@ -315,12 +295,10 @@ impl Writeable for DeleteChannelRequest {
 
 impl Readable for DeleteChannelRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let channel_id = reader.read_u64()?;
 		Ok(Self {
-			request_id,
 			channel_id,
 			server_id,
 			server_pubkey,
@@ -330,13 +308,11 @@ impl Readable for DeleteChannelRequest {
 
 #[derive(Debug)]
 pub struct DeleteChannelResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for DeleteChannelResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -347,15 +323,11 @@ impl Writeable for DeleteChannelResponse {
 
 impl Readable for DeleteChannelResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
@@ -423,7 +395,6 @@ impl Readable for GetChannelsRequest {
 
 #[derive(Debug)]
 pub struct CreateInviteRequest {
-	pub request_id: u128,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
 	pub count: u64,
@@ -432,7 +403,6 @@ pub struct CreateInviteRequest {
 
 impl Writeable for CreateInviteRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		writer.write_u64(self.count)?;
@@ -443,13 +413,11 @@ impl Writeable for CreateInviteRequest {
 
 impl Readable for CreateInviteRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let count = reader.read_u64()?;
 		let expiration = reader.read_u128()?;
 		Ok(Self {
-			request_id,
 			server_id,
 			server_pubkey,
 			count,
@@ -460,14 +428,12 @@ impl Readable for CreateInviteRequest {
 
 #[derive(Debug)]
 pub struct CreateInviteResponse {
-	pub request_id: u128,
 	pub success: bool,
 	pub invite_id: u128,
 }
 
 impl Writeable for CreateInviteResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -481,31 +447,24 @@ impl Writeable for CreateInviteResponse {
 
 impl Readable for CreateInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
 		let invite_id = reader.read_u128()?;
 
-		Ok(Self {
-			request_id,
-			success,
-			invite_id,
-		})
+		Ok(Self { success, invite_id })
 	}
 }
 
 #[derive(Debug)]
 pub struct ListInvitesRequest {
-	pub request_id: u128,
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
 }
 
 impl Writeable for ListInvitesRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.server_pubkey, writer)?;
 		Ok(())
@@ -514,11 +473,9 @@ impl Writeable for ListInvitesRequest {
 
 impl Readable for ListInvitesRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let server_id = ServerId::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		Ok(Self {
-			request_id,
 			server_id,
 			server_pubkey,
 		})
@@ -527,13 +484,11 @@ impl Readable for ListInvitesRequest {
 
 #[derive(Debug)]
 pub struct ListInvitesResponse {
-	pub request_id: u128,
 	pub invites: Vec<Invite>,
 }
 
 impl Writeable for ListInvitesResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		writer.write_u64(self.invites.len().try_into()?)?;
 		for invite in &self.invites {
 			Writeable::write(invite, writer)?;
@@ -544,23 +499,18 @@ impl Writeable for ListInvitesResponse {
 
 impl Readable for ListInvitesResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let len = reader.read_u64()?;
 		let mut invites = vec![];
 		for _ in 0..len {
 			invites.push(Invite::read(reader)?);
 		}
 
-		Ok(Self {
-			request_id,
-			invites,
-		})
+		Ok(Self { invites })
 	}
 }
 
 #[derive(Debug)]
 pub struct ModifyInviteRequest {
-	pub request_id: u128,
 	pub invite_id: u128,
 	pub max: u64,
 	pub expiration: u128,
@@ -568,7 +518,6 @@ pub struct ModifyInviteRequest {
 
 impl Writeable for ModifyInviteRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		writer.write_u128(self.invite_id)?;
 		writer.write_u64(self.max)?;
 		writer.write_u128(self.expiration)?;
@@ -578,13 +527,11 @@ impl Writeable for ModifyInviteRequest {
 
 impl Readable for ModifyInviteRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let invite_id = reader.read_u128()?;
 		let max = reader.read_u64()?;
 		let expiration = reader.read_u128()?;
 
 		Ok(Self {
-			request_id,
 			invite_id,
 			max,
 			expiration,
@@ -594,13 +541,11 @@ impl Readable for ModifyInviteRequest {
 
 #[derive(Debug)]
 pub struct ModifyInviteResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for ModifyInviteResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -611,27 +556,21 @@ impl Writeable for ModifyInviteResponse {
 
 impl Readable for ModifyInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
 #[derive(Debug)]
 pub struct DeleteInviteRequest {
-	pub request_id: u128,
 	pub invite_id: u128,
 }
 
 impl Writeable for DeleteInviteRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		writer.write_u128(self.invite_id)?;
 		Ok(())
 	}
@@ -639,25 +578,19 @@ impl Writeable for DeleteInviteRequest {
 
 impl Readable for DeleteInviteRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let invite_id = reader.read_u128()?;
 
-		Ok(Self {
-			request_id,
-			invite_id,
-		})
+		Ok(Self { invite_id })
 	}
 }
 
 #[derive(Debug)]
 pub struct DeleteInviteResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for DeleteInviteResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -668,27 +601,21 @@ impl Writeable for DeleteInviteResponse {
 
 impl Readable for DeleteInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
 #[derive(Debug)]
 pub struct JoinServerRequest {
-	pub request_id: u128,
 	pub invite_url: SerString,
 }
 
 impl Writeable for JoinServerRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.invite_url, writer)?;
 		Ok(())
 	}
@@ -696,25 +623,19 @@ impl Writeable for JoinServerRequest {
 
 impl Readable for JoinServerRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let invite_url = SerString::read(reader)?;
 
-		Ok(Self {
-			request_id,
-			invite_url,
-		})
+		Ok(Self { invite_url })
 	}
 }
 
 #[derive(Debug)]
 pub struct JoinServerResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for JoinServerResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -725,27 +646,21 @@ impl Writeable for JoinServerResponse {
 
 impl Readable for JoinServerResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
 #[derive(Debug)]
 pub struct ViewInviteRequest {
-	pub request_id: u128,
 	pub invite_url: SerString,
 }
 
 impl Writeable for ViewInviteRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		Writeable::write(&self.invite_url, writer)?;
 		Ok(())
 	}
@@ -753,19 +668,14 @@ impl Writeable for ViewInviteRequest {
 
 impl Readable for ViewInviteRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let invite_url = SerString::read(reader)?;
 
-		Ok(Self {
-			request_id,
-			invite_url,
-		})
+		Ok(Self { invite_url })
 	}
 }
 
 #[derive(Debug)]
-pub struct ViewInviteResponse {
-	pub request_id: u128,
+pub struct InviteResponseInfo {
 	pub inviter_name: SerString,
 	pub inviter_icon: Image,
 	pub server_icon: Image,
@@ -774,75 +684,115 @@ pub struct ViewInviteResponse {
 	pub online_members: u64,
 }
 
+#[derive(Debug)]
+pub struct ViewInviteResponse {
+	pub response_info: Option<InviteResponseInfo>,
+}
+
 impl Writeable for ViewInviteResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
-		Writeable::write(&self.inviter_name, writer)?;
-		Writeable::write(&self.inviter_icon, writer)?;
-		Writeable::write(&self.server_icon, writer)?;
-		writer.write_u64(self.current_members)?;
-		writer.write_u64(self.online_members)?;
-		Writeable::write(&self.server_name, writer)?;
+		match &self.response_info {
+			Some(rinfo) => {
+				writer.write_u8(1)?;
+				Writeable::write(&rinfo.inviter_name, writer)?;
+				Writeable::write(&rinfo.inviter_icon, writer)?;
+				Writeable::write(&rinfo.server_icon, writer)?;
+				writer.write_u64(rinfo.current_members)?;
+				writer.write_u64(rinfo.online_members)?;
+				Writeable::write(&rinfo.server_name, writer)?;
+			}
+			None => writer.write_u8(0)?,
+		}
 		Ok(())
 	}
 }
 
 impl Readable for ViewInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
-		let inviter_name = SerString::read(reader)?;
-		let inviter_icon = Image::read(reader)?;
-		let server_icon = Image::read(reader)?;
-		let current_members = reader.read_u64()?;
-		let online_members = reader.read_u64()?;
-		let server_name = SerString::read(reader)?;
-		Ok(Self {
-			request_id,
-			inviter_name,
-			inviter_icon,
-			server_icon,
-			current_members,
-			online_members,
-			server_name,
-		})
+		let response_info = match reader.read_u8()? {
+			0 => None,
+			_ => {
+				let inviter_name = SerString::read(reader)?;
+				let inviter_icon = Image::read(reader)?;
+				let server_icon = Image::read(reader)?;
+				let current_members = reader.read_u64()?;
+				let online_members = reader.read_u64()?;
+				let server_name = SerString::read(reader)?;
+
+				let rinfo = InviteResponseInfo {
+					inviter_name,
+					inviter_icon,
+					server_icon,
+					current_members,
+					online_members,
+					server_name,
+				};
+				Some(rinfo)
+			}
+		};
+		Ok(Self { response_info })
 	}
 }
 
 #[derive(Debug)]
 pub struct AcceptInviteRequest {
-	pub request_id: u128,
 	pub invite_id: u128,
+	pub user_pubkey: [u8; 32],
+	pub server_pubkey: [u8; 32],
+	pub user_name: SerString,
+	pub user_bio: SerString,
+	pub avatar: Image,
 }
 
 impl Writeable for AcceptInviteRequest {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		writer.write_u128(self.invite_id)?;
+		for i in 0..32 {
+			writer.write_u8(self.user_pubkey[i])?;
+		}
+		for i in 0..32 {
+			writer.write_u8(self.server_pubkey[i])?;
+		}
+		Writeable::write(&self.user_name, writer)?;
+		Writeable::write(&self.user_bio, writer)?;
+		Writeable::write(&self.avatar, writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for AcceptInviteRequest {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let invite_id = reader.read_u128()?;
+		let mut user_pubkey = [0u8; 32];
+		let mut server_pubkey = [0u8; 32];
+		for i in 0..32 {
+			user_pubkey[i] = reader.read_u8()?;
+		}
+		for i in 0..32 {
+			server_pubkey[i] = reader.read_u8()?;
+		}
+		let user_name = SerString::read(reader)?;
+		let user_bio = SerString::read(reader)?;
+		let avatar = Image::read(reader)?;
 
 		Ok(Self {
-			request_id,
 			invite_id,
+			user_pubkey,
+			server_pubkey,
+			user_name,
+			user_bio,
+			avatar,
 		})
 	}
 }
 
 #[derive(Debug)]
 pub struct AcceptInviteResponse {
-	pub request_id: u128,
 	pub success: bool,
 }
 
 impl Writeable for AcceptInviteResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u128(self.request_id)?;
 		match self.success {
 			true => writer.write_u8(1)?,
 			false => writer.write_u8(0)?,
@@ -853,15 +803,11 @@ impl Writeable for AcceptInviteResponse {
 
 impl Readable for AcceptInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let request_id = reader.read_u128()?;
 		let success = match reader.read_u8()? {
 			0 => false,
 			_ => true,
 		};
-		Ok(Self {
-			request_id,
-			success,
-		})
+		Ok(Self { success })
 	}
 }
 
@@ -1251,263 +1197,318 @@ pub enum EventType {
 }
 
 #[derive(Debug)]
+pub enum EventBody {
+	AuthEvent(AuthEvent),
+	ChallengeEvent(ChallengeEvent),
+	AuthResponse(AuthResponse),
+	GetServersEvent(GetServersEvent),
+	GetServersResponse(GetServersResponse),
+	CreateServerEvent(CreateServerEvent),
+	DeleteServerEvent(DeleteServerEvent),
+	ModifyServerEvent(ModifyServerEvent),
+	GetChannelsRequest(GetChannelsRequest),
+	GetChannelsResponse(GetChannelsResponse),
+	AddChannelRequest(AddChannelRequest),
+	DeleteChannelRequest(DeleteChannelRequest),
+	ModifyChannelRequest(ModifyChannelRequest),
+	AddChannelResponse(AddChannelResponse),
+	DeleteChannelResponse(DeleteChannelResponse),
+	ModifyChannelResponse(ModifyChannelResponse),
+	GetMembersRequest(GetMembersRequest),
+	GetMembersResponse(GetMembersResponse),
+	CreateInviteRequest(CreateInviteRequest),
+	CreateInviteResponse(CreateInviteResponse),
+	ListInvitesRequest(ListInvitesRequest),
+	ListInvitesResponse(ListInvitesResponse),
+	ModifyInviteRequest(ModifyInviteRequest),
+	ModifyInviteResponse(ModifyInviteResponse),
+	DeleteInviteRequest(DeleteInviteRequest),
+	DeleteInviteResponse(DeleteInviteResponse),
+	ViewInviteRequest(ViewInviteRequest),
+	ViewInviteResponse(ViewInviteResponse),
+	AcceptInviteRequest(AcceptInviteRequest),
+	AcceptInviteResponse(AcceptInviteResponse),
+	JoinServerRequest(JoinServerRequest),
+	JoinServerResponse(JoinServerResponse),
+}
+
+impl Writeable for EventBody {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		match self {
+			EventBody::AuthEvent(e) => {
+				writer.write_u16(0)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ChallengeEvent(e) => {
+				writer.write_u16(1)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::AuthResponse(e) => {
+				writer.write_u16(2)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetServersEvent(e) => {
+				writer.write_u16(3)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetServersResponse(e) => {
+				writer.write_u16(4)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::CreateServerEvent(e) => {
+				writer.write_u16(5)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::DeleteServerEvent(e) => {
+				writer.write_u16(6)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ModifyServerEvent(e) => {
+				writer.write_u16(7)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetChannelsRequest(e) => {
+				writer.write_u16(8)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetChannelsResponse(e) => {
+				writer.write_u16(9)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::DeleteChannelRequest(e) => {
+				writer.write_u16(10)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::DeleteChannelResponse(e) => {
+				writer.write_u16(11)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ModifyChannelRequest(e) => {
+				writer.write_u16(12)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ModifyChannelResponse(e) => {
+				writer.write_u16(13)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::AddChannelRequest(e) => {
+				writer.write_u16(14)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::AddChannelResponse(e) => {
+				writer.write_u16(15)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetMembersRequest(e) => {
+				writer.write_u16(16)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetMembersResponse(e) => {
+				writer.write_u16(17)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::CreateInviteRequest(e) => {
+				writer.write_u16(18)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::CreateInviteResponse(e) => {
+				writer.write_u16(19)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ListInvitesRequest(e) => {
+				writer.write_u16(20)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ListInvitesResponse(e) => {
+				writer.write_u16(21)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ModifyInviteRequest(e) => {
+				writer.write_u16(22)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ModifyInviteResponse(e) => {
+				writer.write_u16(23)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::DeleteInviteRequest(e) => {
+				writer.write_u16(24)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::DeleteInviteResponse(e) => {
+				writer.write_u16(25)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ViewInviteRequest(e) => {
+				writer.write_u16(26)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::ViewInviteResponse(e) => {
+				writer.write_u16(27)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::AcceptInviteRequest(e) => {
+				writer.write_u16(28)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::AcceptInviteResponse(e) => {
+				writer.write_u16(29)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::JoinServerRequest(e) => {
+				writer.write_u16(30)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::JoinServerResponse(e) => {
+				writer.write_u16(31)?;
+				Writeable::write(e, writer)?;
+			}
+		}
+		Ok(())
+	}
+}
+
+impl Readable for EventBody {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let body_type = reader.read_u16()?;
+		match body_type {
+			0 => Ok(EventBody::AuthEvent(AuthEvent::read(reader)?)),
+			1 => Ok(EventBody::ChallengeEvent(ChallengeEvent::read(reader)?)),
+			2 => Ok(EventBody::AuthResponse(AuthResponse::read(reader)?)),
+			3 => Ok(EventBody::GetServersEvent(GetServersEvent::read(reader)?)),
+			4 => Ok(EventBody::GetServersResponse(GetServersResponse::read(
+				reader,
+			)?)),
+			5 => Ok(EventBody::CreateServerEvent(CreateServerEvent::read(
+				reader,
+			)?)),
+			6 => Ok(EventBody::DeleteServerEvent(DeleteServerEvent::read(
+				reader,
+			)?)),
+			7 => Ok(EventBody::ModifyServerEvent(ModifyServerEvent::read(
+				reader,
+			)?)),
+			8 => Ok(EventBody::GetChannelsRequest(GetChannelsRequest::read(
+				reader,
+			)?)),
+			9 => Ok(EventBody::GetChannelsResponse(GetChannelsResponse::read(
+				reader,
+			)?)),
+			10 => Ok(EventBody::DeleteChannelRequest(DeleteChannelRequest::read(
+				reader,
+			)?)),
+			11 => Ok(EventBody::DeleteChannelResponse(
+				DeleteChannelResponse::read(reader)?,
+			)),
+			12 => Ok(EventBody::ModifyChannelRequest(ModifyChannelRequest::read(
+				reader,
+			)?)),
+			13 => Ok(EventBody::ModifyChannelResponse(
+				ModifyChannelResponse::read(reader)?,
+			)),
+			14 => Ok(EventBody::AddChannelRequest(AddChannelRequest::read(
+				reader,
+			)?)),
+			15 => Ok(EventBody::AddChannelResponse(AddChannelResponse::read(
+				reader,
+			)?)),
+			16 => Ok(EventBody::GetMembersRequest(GetMembersRequest::read(
+				reader,
+			)?)),
+			17 => Ok(EventBody::GetMembersResponse(GetMembersResponse::read(
+				reader,
+			)?)),
+			18 => Ok(EventBody::CreateInviteRequest(CreateInviteRequest::read(
+				reader,
+			)?)),
+			19 => Ok(EventBody::CreateInviteResponse(CreateInviteResponse::read(
+				reader,
+			)?)),
+			20 => Ok(EventBody::ListInvitesRequest(ListInvitesRequest::read(
+				reader,
+			)?)),
+			21 => Ok(EventBody::ListInvitesResponse(ListInvitesResponse::read(
+				reader,
+			)?)),
+			22 => Ok(EventBody::ModifyInviteRequest(ModifyInviteRequest::read(
+				reader,
+			)?)),
+			23 => Ok(EventBody::ModifyInviteResponse(ModifyInviteResponse::read(
+				reader,
+			)?)),
+			24 => Ok(EventBody::DeleteInviteRequest(DeleteInviteRequest::read(
+				reader,
+			)?)),
+			25 => Ok(EventBody::DeleteInviteResponse(DeleteInviteResponse::read(
+				reader,
+			)?)),
+			26 => Ok(EventBody::ViewInviteRequest(ViewInviteRequest::read(
+				reader,
+			)?)),
+			27 => Ok(EventBody::ViewInviteResponse(ViewInviteResponse::read(
+				reader,
+			)?)),
+			28 => Ok(EventBody::AcceptInviteRequest(AcceptInviteRequest::read(
+				reader,
+			)?)),
+			29 => Ok(EventBody::AcceptInviteResponse(AcceptInviteResponse::read(
+				reader,
+			)?)),
+			30 => Ok(EventBody::JoinServerRequest(JoinServerRequest::read(
+				reader,
+			)?)),
+			31 => Ok(EventBody::JoinServerResponse(JoinServerResponse::read(
+				reader,
+			)?)),
+			_ => Err(ErrorKind::CorruptedData("corrupted data in EventBody".to_string()).into()),
+		}
+	}
+}
+
+#[derive(Debug)]
 pub struct Event {
-	pub event_type: EventType,
-	pub auth_event: SerOption<AuthEvent>,
-	pub challenge_event: SerOption<ChallengeEvent>,
-	pub auth_response: SerOption<AuthResponse>,
-	pub get_servers_event: SerOption<GetServersEvent>,
-	pub get_servers_response: SerOption<GetServersResponse>,
-	pub create_server_event: SerOption<CreateServerEvent>,
-	pub delete_server_event: SerOption<DeleteServerEvent>,
-	pub modify_server_event: SerOption<ModifyServerEvent>,
-	pub get_channels_request: SerOption<GetChannelsRequest>,
-	pub get_channels_response: SerOption<GetChannelsResponse>,
-	pub delete_channel_request: SerOption<DeleteChannelRequest>,
-	pub delete_channel_response: SerOption<DeleteChannelResponse>,
-	pub modify_channel_request: SerOption<ModifyChannelRequest>,
-	pub modify_channel_response: SerOption<ModifyChannelResponse>,
-	pub add_channel_request: SerOption<AddChannelRequest>,
-	pub add_channel_response: SerOption<AddChannelResponse>,
-	pub get_members_request: SerOption<GetMembersRequest>,
-	pub get_members_response: SerOption<GetMembersResponse>,
-	pub create_invite_request: SerOption<CreateInviteRequest>,
-	pub create_invite_response: SerOption<CreateInviteResponse>,
-	pub list_invites_request: SerOption<ListInvitesRequest>,
-	pub list_invites_response: SerOption<ListInvitesResponse>,
-	pub modify_invite_request: SerOption<ModifyInviteRequest>,
-	pub modify_invite_response: SerOption<ModifyInviteResponse>,
-	pub delete_invite_request: SerOption<DeleteInviteRequest>,
-	pub delete_invite_response: SerOption<DeleteInviteResponse>,
-	pub view_invite_request: SerOption<ViewInviteRequest>,
-	pub view_invite_response: SerOption<ViewInviteResponse>,
-	pub accept_invite_request: SerOption<AcceptInviteRequest>,
-	pub accept_invite_response: SerOption<AcceptInviteResponse>,
-	pub join_server_request: SerOption<JoinServerRequest>,
-	pub join_server_response: SerOption<JoinServerResponse>,
+	pub body: EventBody,
 	pub version: u8,
 	pub timestamp: u128,
+	pub request_id: u32,
 }
 
 impl Default for Event {
 	fn default() -> Self {
 		Self {
-			event_type: EventType::ChallengeEvent,
-			auth_event: None.into(),
-			auth_response: None.into(),
-			challenge_event: None.into(),
-			get_servers_event: None.into(),
-			get_servers_response: None.into(),
-			create_server_event: None.into(),
-			delete_server_event: None.into(),
-			modify_server_event: None.into(),
-			get_channels_request: None.into(),
-			get_channels_response: None.into(),
-			delete_channel_request: None.into(),
-			delete_channel_response: None.into(),
-			modify_channel_request: None.into(),
-			modify_channel_response: None.into(),
-			add_channel_request: None.into(),
-			add_channel_response: None.into(),
-			get_members_request: None.into(),
-			get_members_response: None.into(),
-			create_invite_request: None.into(),
-			create_invite_response: None.into(),
-			list_invites_request: None.into(),
-			list_invites_response: None.into(),
-			modify_invite_request: None.into(),
-			modify_invite_response: None.into(),
-			delete_invite_request: None.into(),
-			delete_invite_response: None.into(),
-			view_invite_request: None.into(),
-			view_invite_response: None.into(),
-			accept_invite_request: None.into(),
-			accept_invite_response: None.into(),
-			join_server_request: None.into(),
-			join_server_response: None.into(),
 			version: PROTOCOL_VERSION,
 			timestamp: std::time::SystemTime::now()
 				.duration_since(std::time::UNIX_EPOCH)
 				.unwrap_or(std::time::Duration::from_millis(0))
 				.as_millis(),
+			body: EventBody::GetServersEvent(GetServersEvent {}), // always replace
+			request_id: rand::random(),
 		}
 	}
 }
 
 impl Writeable for Event {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		info!("writing event {:?}", self);
 		writer.write_u8(self.version)?;
 		writer.write_u128(self.timestamp)?;
-		writer.write_u16(self.event_type.clone().into())?;
-		match &self.event_type {
-			EventType::AuthEvent => Writeable::write(&self.auth_event, writer),
-			EventType::ChallengeEvent => Writeable::write(&self.challenge_event, writer),
-			EventType::AuthResponse => Writeable::write(&self.auth_response, writer),
-			EventType::GetServersEvent => Writeable::write(&self.get_servers_event, writer),
-			EventType::GetServersResponse => Writeable::write(&self.get_servers_response, writer),
-			EventType::CreateServerEvent => Writeable::write(&self.create_server_event, writer),
-			EventType::DeleteServerEvent => Writeable::write(&self.delete_server_event, writer),
-			EventType::ModifyServerEvent => Writeable::write(&self.modify_server_event, writer),
-			EventType::GetChannelsRequest => Writeable::write(&self.get_channels_request, writer),
-			EventType::GetChannelsResponse => Writeable::write(&self.get_channels_response, writer),
-			EventType::AddChannelResponse => Writeable::write(&self.add_channel_response, writer),
-			EventType::ModifyChannelResponse => {
-				Writeable::write(&self.modify_channel_response, writer)
-			}
-			EventType::DeleteChannelResponse => {
-				Writeable::write(&self.delete_channel_response, writer)
-			}
-			EventType::AddChannelRequest => Writeable::write(&self.add_channel_request, writer),
-			EventType::ModifyChannelRequest => {
-				Writeable::write(&self.modify_channel_request, writer)
-			}
-			EventType::DeleteChannelRequest => {
-				Writeable::write(&self.delete_channel_request, writer)
-			}
-			EventType::GetMembersRequest => Writeable::write(&self.get_members_request, writer),
-			EventType::GetMembersResponse => Writeable::write(&self.get_members_response, writer),
-			EventType::CreateInviteRequest => Writeable::write(&self.create_invite_request, writer),
-			EventType::CreateInviteResponse => {
-				Writeable::write(&self.create_invite_response, writer)
-			}
-			EventType::ListInvitesRequest => Writeable::write(&self.list_invites_request, writer),
-			EventType::ListInvitesResponse => Writeable::write(&self.list_invites_response, writer),
-			EventType::ModifyInviteRequest => Writeable::write(&self.modify_invite_request, writer),
-			EventType::ModifyInviteResponse => {
-				Writeable::write(&self.modify_invite_response, writer)
-			}
-			EventType::DeleteInviteRequest => Writeable::write(&self.delete_invite_request, writer),
-			EventType::DeleteInviteResponse => {
-				Writeable::write(&self.delete_invite_response, writer)
-			}
-			EventType::ViewInviteRequest => Writeable::write(&self.view_invite_request, writer),
-			EventType::ViewInviteResponse => Writeable::write(&self.view_invite_response, writer),
-			EventType::AcceptInviteRequest => Writeable::write(&self.accept_invite_request, writer),
-			EventType::AcceptInviteResponse => {
-				Writeable::write(&self.accept_invite_response, writer)
-			}
-			EventType::JoinServerRequest => Writeable::write(&self.join_server_request, writer),
-			EventType::JoinServerResponse => Writeable::write(&self.join_server_response, writer),
-		}
+		writer.write_u32(self.request_id)?;
+		Writeable::write(&self.body, writer)
 	}
 }
 
 impl Readable for Event {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut auth_event = None.into();
-		let mut challenge_event = None.into();
-		let mut auth_response = None.into();
-		let mut get_servers_event = None.into();
-		let mut get_servers_response = None.into();
-		let mut create_server_event = None.into();
-		let mut delete_server_event = None.into();
-		let mut modify_server_event = None.into();
-		let mut get_channels_request = None.into();
-		let mut get_channels_response = None.into();
-		let mut add_channel_request = None.into();
-		let mut add_channel_response = None.into();
-		let mut modify_channel_request = None.into();
-		let mut modify_channel_response = None.into();
-		let mut delete_channel_request = None.into();
-		let mut delete_channel_response = None.into();
-		let mut get_members_request = None.into();
-		let mut get_members_response = None.into();
-		let mut create_invite_request = None.into();
-		let mut create_invite_response = None.into();
-		let mut list_invites_request = None.into();
-		let mut list_invites_response = None.into();
-		let mut modify_invite_request = None.into();
-		let mut modify_invite_response = None.into();
-		let mut delete_invite_request = None.into();
-		let mut delete_invite_response = None.into();
-		let mut view_invite_request = None.into();
-		let mut view_invite_response = None.into();
-		let mut accept_invite_request = None.into();
-		let mut accept_invite_response = None.into();
-		let mut join_server_request = None.into();
-		let mut join_server_response = None.into();
-
 		let version = reader.read_u8()?;
 		let timestamp = reader.read_u128()?;
-
-		let event_type: EventType = EventType::try_from(reader.read_u16()?).map_err(|e| {
-			let error: Error =
-				ErrorKind::SerializationError(format!("invalid event, unkown event type: {}", e))
-					.into();
-			error
-		})?;
-
-		match event_type {
-			EventType::AuthEvent => auth_event = SerOption::read(reader)?,
-			EventType::ChallengeEvent => challenge_event = SerOption::read(reader)?,
-			EventType::AuthResponse => auth_response = SerOption::read(reader)?,
-			EventType::GetServersEvent => get_servers_event = SerOption::read(reader)?,
-			EventType::GetServersResponse => get_servers_response = SerOption::read(reader)?,
-			EventType::CreateServerEvent => create_server_event = SerOption::read(reader)?,
-			EventType::DeleteServerEvent => delete_server_event = SerOption::read(reader)?,
-			EventType::ModifyServerEvent => modify_server_event = SerOption::read(reader)?,
-			EventType::GetChannelsRequest => get_channels_request = SerOption::read(reader)?,
-			EventType::GetChannelsResponse => get_channels_response = SerOption::read(reader)?,
-			EventType::AddChannelRequest => add_channel_request = SerOption::read(reader)?,
-			EventType::ModifyChannelRequest => modify_channel_request = SerOption::read(reader)?,
-			EventType::DeleteChannelRequest => delete_channel_request = SerOption::read(reader)?,
-			EventType::AddChannelResponse => add_channel_response = SerOption::read(reader)?,
-			EventType::ModifyChannelResponse => modify_channel_response = SerOption::read(reader)?,
-			EventType::DeleteChannelResponse => delete_channel_response = SerOption::read(reader)?,
-			EventType::GetMembersRequest => get_members_request = SerOption::read(reader)?,
-			EventType::GetMembersResponse => get_members_response = SerOption::read(reader)?,
-			EventType::CreateInviteRequest => create_invite_request = SerOption::read(reader)?,
-			EventType::CreateInviteResponse => create_invite_response = SerOption::read(reader)?,
-			EventType::ListInvitesRequest => list_invites_request = SerOption::read(reader)?,
-			EventType::ListInvitesResponse => list_invites_response = SerOption::read(reader)?,
-			EventType::ModifyInviteRequest => modify_invite_request = SerOption::read(reader)?,
-			EventType::ModifyInviteResponse => modify_invite_response = SerOption::read(reader)?,
-			EventType::DeleteInviteRequest => delete_invite_request = SerOption::read(reader)?,
-			EventType::DeleteInviteResponse => delete_invite_response = SerOption::read(reader)?,
-			EventType::ViewInviteRequest => view_invite_request = SerOption::read(reader)?,
-			EventType::ViewInviteResponse => view_invite_response = SerOption::read(reader)?,
-			EventType::AcceptInviteRequest => accept_invite_request = SerOption::read(reader)?,
-			EventType::AcceptInviteResponse => accept_invite_response = SerOption::read(reader)?,
-			EventType::JoinServerRequest => join_server_request = SerOption::read(reader)?,
-			EventType::JoinServerResponse => join_server_response = SerOption::read(reader)?,
-		};
+		let request_id = reader.read_u32()?;
+		let body = EventBody::read(reader)?;
 
 		Ok(Self {
 			version,
-			event_type,
-			challenge_event,
-			auth_event,
-			auth_response,
-			get_servers_event,
-			get_servers_response,
-			create_server_event,
-			delete_server_event,
-			modify_server_event,
-			get_channels_request,
-			get_channels_response,
-			add_channel_request,
-			add_channel_response,
-			modify_channel_request,
-			modify_channel_response,
-			delete_channel_request,
-			delete_channel_response,
-			get_members_request,
-			get_members_response,
-			create_invite_request,
-			create_invite_response,
-			list_invites_request,
-			list_invites_response,
-			modify_invite_request,
-			modify_invite_response,
-			delete_invite_request,
-			delete_invite_response,
-			view_invite_request,
-			view_invite_response,
-			accept_invite_request,
-			accept_invite_response,
-			join_server_request,
-			join_server_response,
 			timestamp,
+			body,
+			request_id,
 		})
 	}
 }

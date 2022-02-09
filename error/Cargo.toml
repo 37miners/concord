@@ -15,10 +15,10 @@ edition = "2018"
 #librustlet = { git = "http://github.com/37miners/rustlet", tag = "0.0.2" }
 
 # Local Testing
-librustlet = { path = "../../rustlet/rustlet" }
+#librustlet = { path = "../../rustlet/rustlet" }
 
 # Bleeding Edge
-#librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
+librustlet = { git = "http://github.com/37miners/rustlet", branch = "master" }
 
 
 failure = "0.1"

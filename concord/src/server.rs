@@ -14,6 +14,7 @@
 
 use crate::auth::check_auth;
 use crate::context::ConcordContext;
+use crate::types::EventBody;
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::concord::ServerInfo as DataServerInfo;
@@ -27,7 +28,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Write;
 
-use crate::types::{ConnectionInfo, Event, EventType, GetServersResponse, ServerInfo};
+use crate::types::{ConnectionInfo, Event, GetServersResponse, ServerInfo};
 use crate::{owner, send};
 use concorddata::types::{Pubkey, ServerId};
 
@@ -117,8 +118,7 @@ pub fn get_servers(
 	);
 
 	let event = Event {
-		event_type: EventType::GetServersResponse,
-		get_servers_response: Some(GetServersResponse { servers }).into(),
+		body: EventBody::GetServersResponse(GetServersResponse { servers }).into(),
 		..Default::default()
 	};
 	error!("end of building event, time = {}", now.elapsed().as_nanos());
@@ -136,18 +136,10 @@ pub fn create_server(
 ) -> Result<bool, ConcordError> {
 	owner!(conn_info);
 
-	let icon = match event.create_server_event.0.as_ref() {
-		Some(event) => event.icon.clone(),
-		None => {
-			warn!("Malformed create server event. No icon: {:?}", event);
-			return Ok(true);
-		}
-	};
-
-	let name = match event.create_server_event.0.as_ref() {
-		Some(event) => event.name.data.clone(),
-		None => {
-			warn!("Malformed create server event. No name: {:?}", event);
+	let (icon, name) = match &event.body {
+		EventBody::CreateServerEvent(body) => (body.icon.clone(), body.name.data.clone()),
+		_ => {
+			warn!("Unexpected EventBody in create server: {:?}", event);
 			return Ok(true);
 		}
 	};
@@ -176,9 +168,11 @@ pub fn delete_server(
 ) -> Result<bool, ConcordError> {
 	owner!(conn_info);
 
-	let (server_id, server_pubkey) = match event.delete_server_event.0.as_ref() {
-		Some(event) => (event.server_id.to_bytes(), event.server_pubkey.to_bytes()),
-		None => {
+	let (server_id, server_pubkey) = match &event.body {
+		EventBody::DeleteServerEvent(event) => {
+			(event.server_id.to_bytes(), event.server_pubkey.to_bytes())
+		}
+		_ => {
 			warn!(
 				"Malformed delete server event. No server_id/server_pubkey: {:?}",
 				event
@@ -200,14 +194,14 @@ pub fn modify_server(
 ) -> Result<bool, ConcordError> {
 	owner!(conn_info);
 
-	let (server_id, server_pubkey, name, icon) = match event.modify_server_event.0.as_ref() {
-		Some(event) => (
+	let (server_id, server_pubkey, name, icon) = match &event.body {
+		EventBody::ModifyServerEvent(event) => (
 			event.server_id.to_bytes(),
 			event.server_pubkey.to_bytes(),
 			event.name.clone(),
 			event.icon.clone(),
 		),
-		None => {
+		_ => {
 			warn!(
 				"Malformed modify server event. No server_id/server_pubkey: {:?}",
 				event

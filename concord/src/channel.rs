@@ -16,7 +16,7 @@ use crate::context::ConcordContext;
 use crate::types::{
 	AddChannelResponse, DeleteChannelResponse, GetChannelsResponse, ModifyChannelResponse,
 };
-use crate::types::{Channel, ConnectionInfo, Event, EventType};
+use crate::types::{Channel, ConnectionInfo, Event, EventBody};
 use crate::{member, send};
 use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
@@ -41,27 +41,25 @@ pub fn add_channel(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, server_id, server_pubkey, name, description) =
-		match event.add_channel_request.0.as_ref() {
-			Some(event) => (
-				event.request_id,
-				event.server_id.to_bytes(),
-				event.server_pubkey.to_bytes(),
-				event.name.to_string(),
-				event.description.to_string(),
-			),
-			None => {
-				warn!("Malformed add channel event. No event present: {:?}", event);
-				return Ok(true);
-			}
-		};
+	let request_id = event.request_id;
+	let (server_id, server_pubkey, name, description) = match &event.body {
+		EventBody::AddChannelRequest(event) => (
+			event.server_id.to_bytes(),
+			event.server_pubkey.to_bytes(),
+			event.name.to_string(),
+			event.description.to_string(),
+		),
+		_ => {
+			warn!("Malformed add channel event. No event present: {:?}", event);
+			return Ok(true);
+		}
+	};
 
 	let channel_id = ds_context.add_channel(server_id, server_pubkey, name, description)?;
 
 	let event = Event {
-		event_type: EventType::AddChannelResponse,
-		add_channel_response: Some(AddChannelResponse {
-			request_id,
+		request_id,
+		body: EventBody::AddChannelResponse(AddChannelResponse {
 			channel_id,
 			success: true,
 		})
@@ -79,34 +77,29 @@ pub fn modify_channel(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, server_id, server_pubkey, name, description, channel_id) =
-		match event.modify_channel_request.0.as_ref() {
-			Some(event) => (
-				event.request_id,
-				event.server_id.to_bytes(),
-				event.server_pubkey.to_bytes(),
-				event.name.to_string(),
-				event.description.to_string(),
-				event.channel_id,
-			),
-			None => {
-				warn!(
-					"Malformed modify channel event. No event present: {:?}",
-					event
-				);
-				return Ok(true);
-			}
-		};
+	let request_id = event.request_id;
+	let (server_id, server_pubkey, name, description, channel_id) = match &event.body {
+		EventBody::ModifyChannelRequest(event) => (
+			event.server_id.to_bytes(),
+			event.server_pubkey.to_bytes(),
+			event.name.to_string(),
+			event.description.to_string(),
+			event.channel_id,
+		),
+		_ => {
+			warn!(
+				"Malformed modify channel event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
 
 	ds_context.modify_channel(server_id, server_pubkey, channel_id, name, description)?;
 
 	let event = Event {
-		event_type: EventType::ModifyChannelResponse,
-		modify_channel_response: Some(ModifyChannelResponse {
-			request_id,
-			success: true,
-		})
-		.into(),
+		request_id,
+		body: EventBody::ModifyChannelResponse(ModifyChannelResponse { success: true }).into(),
 		..Default::default()
 	};
 
@@ -120,32 +113,27 @@ pub fn delete_channel(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, server_id, server_pubkey, channel_id) =
-		match event.delete_channel_request.0.as_ref() {
-			Some(event) => (
-				event.request_id,
-				event.server_id.to_bytes(),
-				event.server_pubkey.to_bytes(),
-				event.channel_id,
-			),
-			None => {
-				warn!(
-					"Malformed delete channel event. No event present: {:?}",
-					event
-				);
-				return Ok(true);
-			}
-		};
+	let request_id = event.request_id;
+	let (server_id, server_pubkey, channel_id) = match &event.body {
+		EventBody::DeleteChannelRequest(event) => (
+			event.server_id.to_bytes(),
+			event.server_pubkey.to_bytes(),
+			event.channel_id,
+		),
+		_ => {
+			warn!(
+				"Malformed delete channel event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
 
 	ds_context.delete_channel(server_id, server_pubkey, channel_id)?;
 
 	let event = Event {
-		event_type: EventType::DeleteChannelResponse,
-		delete_channel_response: Some(DeleteChannelResponse {
-			request_id,
-			success: true,
-		})
-		.into(),
+		request_id,
+		body: EventBody::DeleteChannelResponse(DeleteChannelResponse { success: true }).into(),
 		..Default::default()
 	};
 
@@ -161,13 +149,13 @@ pub fn get_channels(
 ) -> Result<bool, ConcordError> {
 	member!(conn_info, ds_context);
 
-	let (server_id, server_pubkey) = match event.get_channels_request.0.as_ref() {
-		Some(event) => (event.server_id.to_bytes(), event.server_pubkey.to_bytes()),
-		None => {
-			warn!(
-				"Malformed get channels event. No event present: {:?}",
-				event
-			);
+	let request_id = event.request_id;
+	let (server_id, server_pubkey) = match &event.body {
+		EventBody::GetChannelsRequest(event) => {
+			(event.server_id.to_bytes(), event.server_pubkey.to_bytes())
+		}
+		_ => {
+			warn!("Malformed get channel event. No event present: {:?}", event);
 			return Ok(true);
 		}
 	};
@@ -183,8 +171,8 @@ pub fn get_channels(
 	}
 
 	let event = Event {
-		event_type: EventType::GetChannelsResponse,
-		get_channels_response: Some(GetChannelsResponse {
+		request_id,
+		body: EventBody::GetChannelsResponse(GetChannelsResponse {
 			channels: channels_event,
 			server_id: ServerId::from_bytes(server_id),
 			server_pubkey: Pubkey::from_bytes(server_pubkey),

@@ -14,6 +14,7 @@
 
 use crate::auth::ws_auth;
 use crate::channel::{add_channel, delete_channel, get_channels, modify_channel};
+use crate::conn_manager::ConnManager;
 use crate::context::ConcordContext;
 use crate::invite::{
 	accept_invite, create_invite, delete_invite, join_server, list_invites, modify_invite,
@@ -33,7 +34,7 @@ use nioruntime_log::*;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
-info!(); // set log level to debug
+info!();
 
 fn process_open(
 	handle: ConnData,
@@ -43,8 +44,7 @@ fn process_open(
 	debug!("websocket open: {}", id);
 
 	let event = Event {
-		event_type: EventType::ChallengeEvent,
-		challenge_event: Some(ChallengeEvent { challenge: id }).into(),
+		body: EventBody::ChallengeEvent(ChallengeEvent { challenge: id }).into(),
 		..Default::default()
 	};
 	send!(handle, event);
@@ -67,14 +67,15 @@ fn process_binary(
 	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
 	ds_context: &DSContext,
 	config: &ConcordConfig,
+	conn_manager: Arc<RwLock<ConnManager>>,
 ) -> Result<(), Error> {
 	let id = handle.get_connection_id();
 	let event = bin_event!();
 
-	debug!("event on connection[{}]={:?}", id, event);
+	info!("event on connection[{}]={:?}", id, event);
 
-	match event.event_type {
-		EventType::AuthEvent => {
+	match event.body {
+		EventBody::AuthEvent(_) => {
 			let close = try2!(
 				ws_auth(handle.clone(), &event, ds_context, conn_info.clone()),
 				"ws_auth error"
@@ -98,14 +99,14 @@ fn process_binary(
 							Some(pubkey) => {
 								debug!("authed event on {}: {:?}, pubkey={:?}", id, event, pubkey);
 								// we know the user is authed, now process events
-								match event.event_type {
-									EventType::GetServersEvent => {
+								match event.body {
+									EventBody::GetServersEvent(_) => {
 										try2!(
 											get_servers(connection_info, ds_context),
 											"get_servers error"
 										)
 									}
-									EventType::CreateServerEvent => {
+									EventBody::CreateServerEvent(_) => {
 										try2!(
 											create_server(
 												connection_info,
@@ -116,13 +117,13 @@ fn process_binary(
 											"create_server error"
 										)
 									}
-									EventType::DeleteServerEvent => {
+									EventBody::DeleteServerEvent(_) => {
 										try2!(
 											delete_server(connection_info, ds_context, &event),
 											"delete_server error"
 										)
 									}
-									EventType::ModifyServerEvent => {
+									EventBody::ModifyServerEvent(_) => {
 										try2!(
 											modify_server(
 												connection_info,
@@ -133,75 +134,87 @@ fn process_binary(
 											"modify_server error"
 										)
 									}
-									EventType::GetChannelsRequest => {
+									EventBody::GetChannelsRequest(_) => {
 										try2!(
 											get_channels(connection_info, ds_context, &event),
 											"get_channels error"
 										)
 									}
-									EventType::AddChannelRequest => {
+									EventBody::AddChannelRequest(_) => {
 										try2!(
 											add_channel(connection_info, ds_context, &event),
 											"add_channel error"
 										)
 									}
-									EventType::ModifyChannelRequest => {
+									EventBody::ModifyChannelRequest(_) => {
 										try2!(
 											modify_channel(connection_info, ds_context, &event),
 											"modify channel error"
 										)
 									}
-									EventType::DeleteChannelRequest => {
+									EventBody::DeleteChannelRequest(_) => {
 										try2!(
 											delete_channel(connection_info, ds_context, &event),
 											"delete channel error"
 										)
 									}
-									EventType::GetMembersRequest => {
+									EventBody::GetMembersRequest(_) => {
 										try2!(
 											get_members(connection_info, ds_context, &event),
 											"get members error"
 										)
 									}
-									EventType::CreateInviteRequest => {
+									EventBody::CreateInviteRequest(_) => {
 										try2!(
 											create_invite(connection_info, ds_context, &event),
 											"create invite request error"
 										)
 									}
-									EventType::ListInvitesRequest => {
+									EventBody::ListInvitesRequest(_) => {
 										try2!(
 											list_invites(connection_info, ds_context, &event),
 											"list invites request error"
 										)
 									}
-									EventType::ModifyInviteRequest => {
+									EventBody::ModifyInviteRequest(_) => {
 										try2!(
 											modify_invite(connection_info, ds_context, &event),
 											"modify invite error"
 										)
 									}
-									EventType::DeleteInviteRequest => {
+									EventBody::DeleteInviteRequest(_) => {
 										try2!(
 											delete_invite(connection_info, ds_context, &event),
 											"delete invite request error"
 										)
 									}
-									EventType::ViewInviteRequest => {
+									EventBody::ViewInviteRequest(_) => {
 										try2!(
-											view_invite(connection_info, ds_context, &event),
+											view_invite(
+												connection_info,
+												ds_context,
+												&event,
+												conn_manager,
+												config
+											),
 											"view invite request error"
 										)
 									}
-									EventType::AcceptInviteRequest => {
+									EventBody::AcceptInviteRequest(_) => {
 										try2!(
 											accept_invite(connection_info, ds_context, &event),
 											"accept invite request error"
 										)
 									}
-									EventType::JoinServerRequest => {
+									EventBody::JoinServerRequest(_) => {
 										try2!(
-											join_server(connection_info, ds_context, &event),
+											join_server(
+												connection_info,
+												ds_context,
+												&event,
+												conn_manager,
+												config
+											),
 											"join server request error"
 										)
 									}
@@ -242,18 +255,19 @@ fn process_close(
 
 pub fn init_ws(cconfig: ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
 	let conn_info = Arc::new(RwLock::new(HashMap::new()));
-
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
+	let conn_manager = Arc::new(RwLock::new(ConnManager::new()));
 
 	socklet!("ws", {
 		let conn_info = conn_info.clone();
+		let conn_manager = conn_manager.clone();
 		let handle = handle!()?;
 		match event!()? {
 			Socklet::Open => {
 				process_open(handle, conn_info)?;
 			}
 			Socklet::Binary => {
-				process_binary(handle, conn_info, &ds_context, &cconfig)?;
+				process_binary(handle, conn_info, &ds_context, &cconfig, conn_manager)?;
 			}
 			Socklet::Close => {
 				process_close(handle, conn_info)?;

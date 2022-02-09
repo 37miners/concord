@@ -16,7 +16,7 @@ use crate::context::ConcordContext;
 use crate::send;
 use crate::types::ConnectionInfo;
 use crate::types::GetMembersResponse;
-use crate::types::{Event, EventType};
+use crate::types::{Event, EventBody};
 use crate::utils::extract_server_id_from_query;
 use crate::utils::extract_server_pubkey_from_query;
 use concordconfig::ConcordConfig;
@@ -37,13 +37,13 @@ pub fn get_members(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (server_id, server_pubkey, batch_num) = match event.get_members_request.0.as_ref() {
-		Some(event) => (
+	let (server_id, server_pubkey, batch_num) = match &event.body {
+		EventBody::GetMembersRequest(event) => (
 			event.server_id.clone(),
 			event.server_pubkey.clone(),
 			event.batch_num,
 		),
-		None => {
+		_ => {
 			warn!(
 				"Malformed get_members_request event. No event present: {:?}",
 				event
@@ -51,7 +51,6 @@ pub fn get_members(
 			return Ok(true);
 		}
 	};
-
 	// TODO: online/offline and role ordering
 
 	let mut members = ds_context
@@ -95,8 +94,7 @@ pub fn get_members(
 	}
 
 	let event = Event {
-		event_type: EventType::GetMembersResponse,
-		get_members_response: Some(GetMembersResponse {
+		body: EventBody::GetMembersResponse(GetMembersResponse {
 			batch_num,
 			server_id,
 			server_pubkey,

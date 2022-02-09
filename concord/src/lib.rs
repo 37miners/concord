@@ -21,6 +21,7 @@ pub mod types;
 mod auth;
 mod channel;
 mod concord;
+mod conn_manager;
 mod context;
 mod invite;
 mod members;
@@ -29,7 +30,6 @@ mod persistence;
 mod profile;
 mod server;
 mod ws;
-mod wscontext;
 
 #[macro_use]
 mod utils;

@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use crate::conn_manager::ConnManager;
 use crate::context::ConcordContext;
 use crate::send;
 use crate::types::{
-	ConnectionInfo, CreateInviteResponse, DeleteInviteResponse, Event, EventType, Image,
-	ListInvitesResponse, ViewInviteResponse,
+	ConnectionInfo, CreateInviteResponse, DeleteInviteResponse, Event, EventBody, Image,
+	InviteResponseInfo, ListInvitesResponse, ViewInviteResponse,
 };
 use concordconfig::ConcordConfig;
 use concorddata::concord::Channel;
@@ -27,6 +28,7 @@ use concorddata::concord::Profile;
 use concorddata::concord::ServerInfo;
 use concorddata::concord::ServerInfoReply;
 use concorddata::types::Pubkey;
+use concorddata::types::SerString;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use concordutil::torclient;
@@ -36,6 +38,7 @@ use nioruntime_log::*;
 use nioruntime_tor::ov3::OnionV3Address;
 use serde_json::Value;
 use std::convert::TryInto;
+use std::sync::{Arc, RwLock};
 use substring::Substring;
 use url::Host::Domain;
 use url::Url;
@@ -50,23 +53,22 @@ pub fn create_invite(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, server_id, server_pubkey, count, expiration) =
-		match event.create_invite_request.0.as_ref() {
-			Some(event) => (
-				event.request_id,
-				event.server_id.to_bytes(),
-				event.server_pubkey.to_bytes(),
-				event.count,
-				event.expiration,
-			),
-			None => {
-				warn!(
-					"Malformed create invite event. No event present: {:?}",
-					event
-				);
-				return Ok(true);
-			}
-		};
+	let request_id = event.request_id;
+	let (server_id, server_pubkey, count, expiration) = match &event.body {
+		EventBody::CreateInviteRequest(event) => (
+			event.server_id.to_bytes(),
+			event.server_pubkey.to_bytes(),
+			event.count,
+			event.expiration,
+		),
+		_ => {
+			warn!(
+				"Malformed create invite event. No event present: {:?}",
+				event
+			);
+			return Ok(true);
+		}
+	};
 
 	let user_pubkey = match &conn_info.pubkey {
 		Some(user_pubkey) => user_pubkey,
@@ -81,9 +83,8 @@ pub fn create_invite(
 			ds_context.create_invite(user_pubkey.to_bytes(), server_id, expiration, count)?;
 
 		let event = Event {
-			event_type: EventType::CreateInviteResponse,
-			create_invite_response: Some(CreateInviteResponse {
-				request_id,
+			request_id,
+			body: EventBody::CreateInviteResponse(CreateInviteResponse {
 				invite_id,
 				success: true,
 			})
@@ -104,13 +105,12 @@ pub fn list_invites(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, server_id, server_pubkey) = match event.list_invites_request.0.as_ref() {
-		Some(event) => (
-			event.request_id,
-			event.server_id.to_bytes(),
-			event.server_pubkey.to_bytes(),
-		),
-		None => {
+	let request_id = event.request_id;
+	let (server_id, server_pubkey) = match &event.body {
+		EventBody::ListInvitesRequest(event) => {
+			(event.server_id.to_bytes(), event.server_pubkey.to_bytes())
+		}
+		_ => {
 			warn!(
 				"Malformed list invites event. No event present: {:?}",
 				event
@@ -118,9 +118,7 @@ pub fn list_invites(
 			return Ok(true);
 		}
 	};
-	error!("server_pubkey={:?}", server_pubkey);
-	error!("server_id={:?}", server_id);
-	error!("our pubkey={:?}", pubkey!());
+
 	if server_pubkey == pubkey!() {
 		let user_pubkey = match &conn_info.pubkey {
 			Some(user_pubkey) => user_pubkey,
@@ -130,14 +128,9 @@ pub fn list_invites(
 			}
 		};
 		let invites = ds_context.get_invites(Some(user_pubkey.to_bytes()), server_id)?;
-
 		let event = Event {
-			event_type: EventType::ListInvitesResponse,
-			list_invites_response: Some(ListInvitesResponse {
-				request_id,
-				invites,
-			})
-			.into(),
+			request_id,
+			body: EventBody::ListInvitesResponse(ListInvitesResponse { invites }).into(),
 			..Default::default()
 		};
 		send!(conn_info.handle, event);
@@ -177,9 +170,10 @@ pub fn delete_invite(
 	ds_context: &DSContext,
 	event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (request_id, invite_id) = match event.delete_invite_request.0.as_ref() {
-		Some(event) => (event.request_id, event.invite_id),
-		None => {
+	let request_id = event.request_id;
+	let invite_id = match &event.body {
+		EventBody::DeleteInviteRequest(event) => event.invite_id,
+		_ => {
 			warn!(
 				"Malformed delete invite event. No event present: {:?}",
 				event
@@ -187,16 +181,13 @@ pub fn delete_invite(
 			return Ok(true);
 		}
 	};
+
 	info!("delete invite: {}", invite_id);
 	ds_context.delete_invite(invite_id)?;
 
 	let event = Event {
-		event_type: EventType::DeleteInviteResponse,
-		delete_invite_response: Some(DeleteInviteResponse {
-			request_id,
-			success: true,
-		})
-		.into(),
+		request_id,
+		body: EventBody::DeleteInviteResponse(DeleteInviteResponse { success: true }).into(),
 		..Default::default()
 	};
 	send!(conn_info.handle, event);
@@ -204,39 +195,51 @@ pub fn delete_invite(
 	Ok(false)
 }
 
-pub fn view_invite(
-	conn_info: &ConnectionInfo,
-	ds_context: &DSContext,
-	event: &Event,
-) -> Result<bool, ConcordError> {
-	let (request_id, invite_url) = match event.view_invite_request.0.as_ref() {
-		Some(event) => (event.request_id, event.invite_url.to_string()),
-		None => {
+fn parse_invite(event: &Event) -> Result<Option<([u8; 32], u32, u128, SerString)>, ConcordError> {
+	let request_id = event.request_id;
+	let invite_url = match &event.body {
+		EventBody::ViewInviteRequest(event) => event.invite_url.clone(),
+		_ => {
 			warn!("Malformed view invite event. No event present: {:?}", event);
-			return Ok(true);
+			return Ok(None);
 		}
 	};
 
-	let url = url::Url::parse(&invite_url)?;
+	let url = url::Url::parse(&invite_url.to_string())?;
 	let onion = url.host();
 
 	let onion = match onion {
 		Some(onion) => onion,
 		None => {
 			warn!("Invalid link address in check_invite. No host.");
-			return Ok(true);
+			return Ok(None);
 		}
 	}
 	.to_string();
 
 	let path = url.path();
-	error!("path pattern match = {:?}", path.find("/i/"));
 	if path.find("/i/") != Some(0) {
-		return Ok(true);
+		return Ok(None);
 	}
-	error!("sub={}", path.substring(3, path.len()));
 	let id: u128 = (path.substring(3, path.len())).parse()?;
 	let pubkey = Pubkey::from_onion(&onion)?.to_bytes();
+
+	Ok(Some((pubkey, request_id, id, invite_url)))
+}
+
+pub fn view_invite(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+	conn_manager: Arc<RwLock<ConnManager>>,
+	config: &ConcordConfig,
+) -> Result<bool, ConcordError> {
+	let (pubkey, request_id, id, invite_url) = match parse_invite(event)? {
+		Some((pubkey, request_id, id, invite_url)) => (pubkey, request_id, id, invite_url),
+		None => {
+			return Ok(true);
+		}
+	};
 
 	if pubkey == pubkey!() {
 		// this is our host, we can process directly
@@ -245,17 +248,17 @@ pub fn view_invite(
 		match jri {
 			Some(jri) => {
 				let event = Event {
-					event_type: EventType::ViewInviteResponse,
-					view_invite_response: Some(ViewInviteResponse {
-						request_id,
-						inviter_name: "".into(),
-						inviter_icon: Image { data: vec![] },
-						server_icon: Image { data: vec![] },
-						server_name: jri.name.into(),
-						current_members: 0,
-						online_members: 0,
-					})
-					.into(),
+					request_id,
+					body: EventBody::ViewInviteResponse(ViewInviteResponse {
+						response_info: Some(InviteResponseInfo {
+							inviter_name: "".into(),
+							inviter_icon: Image { data: vec![] },
+							server_icon: Image { data: vec![] },
+							server_name: jri.name.into(),
+							current_members: 0,
+							online_members: 0,
+						}),
+					}),
 					..Default::default()
 				};
 
@@ -263,53 +266,175 @@ pub fn view_invite(
 			}
 			None => {
 				info!("no jri!");
+				let event = Event {
+					request_id,
+					body: EventBody::ViewInviteResponse(ViewInviteResponse {
+						response_info: None,
+					}),
+					..Default::default()
+				};
+
+				send!(conn_info.handle, event);
 			}
 		}
 	} else {
-		// this is a remote host, we need to forward the request
+		let event = Event {
+			body: EventBody::ViewInviteRequest(crate::types::ViewInviteRequest { invite_url }),
+			..Default::default()
+		};
+
+		let mut conn_manager = nioruntime_util::lockw!(conn_manager)?;
+		let handle = conn_info.handle.clone();
+		conn_manager.send_event(
+			pubkey,
+			event,
+			config.tor_port,
+			Box::pin(move |event| {
+				send!(handle, event);
+				Ok(())
+			}),
+		)?;
 	}
 
-	error!(
-		"onion={:?},path={:?},id={},ourpubkey={:?}, invite_pubkey={:?}",
-		onion,
-		path,
-		id,
-		pubkey!(),
-		pubkey
-	);
 	Ok(false)
 }
 
 pub fn accept_invite(
 	_conn_info: &ConnectionInfo,
 	_ds_context: &DSContext,
-	event: &Event,
+	_event: &Event,
 ) -> Result<bool, ConcordError> {
-	let (_request_id, _invite_id) = match event.accept_invite_request.0.as_ref() {
-		Some(event) => (event.request_id, event.invite_id),
-		None => {
-			warn!(
-				"Malformed accept invite event. No event present: {:?}",
-				event
-			);
-			return Ok(true);
-		}
-	};
 	Ok(false)
 }
 
 pub fn join_server(
-	_conn_info: &ConnectionInfo,
+	conn_info: &ConnectionInfo,
 	_ds_context: &DSContext,
 	event: &Event,
+	conn_manager: Arc<RwLock<ConnManager>>,
+	config: &ConcordConfig,
 ) -> Result<bool, ConcordError> {
-	let (_request_id, _invite_url) = match event.join_server_request.0.as_ref() {
-		Some(event) => (event.request_id, event.invite_url.to_string()),
+	let (server_pubkey, request_id, invite_id, _invite_url) = match parse_invite(event)? {
+		Some((pubkey, request_id, id, invite_url)) => (pubkey, request_id, id, invite_url),
 		None => {
-			warn!("Malformed join invite event. No event present: {:?}", event);
 			return Ok(true);
 		}
 	};
+
+	if server_pubkey == pubkey!() {
+		// Something's wrong. We can't join our own server
+		warn!("tried to join our own server: {:?}", event);
+	} else {
+		let event = Event {
+			request_id,
+			body: EventBody::AcceptInviteRequest(crate::types::AcceptInviteRequest {
+				invite_id,
+				user_pubkey: pubkey!(),
+				server_pubkey,
+				user_name: "ourname".to_string().into(),
+				user_bio: "ourbio".to_string().into(),
+				avatar: Image { data: vec![] },
+			}),
+			..Default::default()
+		};
+
+		let mut conn_manager = nioruntime_util::lockw!(conn_manager)?;
+		let handle = conn_info.handle.clone();
+		conn_manager.send_event(
+			server_pubkey,
+			event,
+			config.tor_port,
+			Box::pin(move |event| {
+				send!(handle, event);
+				Ok(())
+			}),
+		)?;
+	}
+	/*
+							EventBody::JoinServerRequest(event) => event.invite_url.clone(),
+							_ => {
+									warn!("Malformed join server event. No event present: {:?}", event);
+									return Ok(true);
+							},
+					};
+
+			let url = url::Url::parse(&invite_url.to_string())?;
+			let onion = url.host();
+
+			let onion = match onion {
+					Some(onion) => onion,
+					None => {
+							warn!("Invalid link address in check_invite. No host.");
+							return Ok(true);
+					}
+			}
+			.to_string();
+
+			let path = url.path();
+			if path.find("/i/") != Some(0) {
+					return Ok(true);
+			}
+			let id: u128 = (path.substring(3, path.len())).parse()?;
+			let pubkey = Pubkey::from_onion(&onion)?.to_bytes();
+
+			if pubkey == pubkey!() {
+			// Something's wrong. We can't join our own server
+			warn!("tried to join our own server: {:?}", event);
+		} else {
+					// this is our host, we can process directly
+					let sinfo = ds_context
+							.accept_invite(
+									invite_id,
+									user_pubkey,
+									server_pubkey,
+									user_name,
+									user_bio,
+									avatar,
+							)
+							.map_err(|e| {
+									let error: Error = ErrorKind::ApplicationError(format!(
+											"error accepting invite: {}",
+											e.to_string()
+									))
+									.into();
+									error
+							})?;
+					info!("jri={:?}", jri);
+					match jri {
+							Some(jri) => {
+									let event = Event {
+											request_id,
+											body: EventBody::JoinServerResponse(JoinServerResponse {
+							success: true,
+											}),
+											..Default::default()
+									};
+
+									send!(conn_info.handle, event);
+							}
+							None => {
+									info!("no jri!");
+									let event = Event {
+											request_id,
+											body: EventBody::(ViewInviteResponse {
+													response_info: None,
+											}),
+											..Default::default()
+									};
+	 //                               send!(conn_info.handle, event);
+							}
+					}
+
+			} else {
+					let event = Event {
+							body: EventBody::ViewInviteRequest(crate::types::ViewInviteRequest{
+									invite_url,
+							}),
+							..Default::default()
+					};
+		}
+	*/
+
 	Ok(false)
 }
 

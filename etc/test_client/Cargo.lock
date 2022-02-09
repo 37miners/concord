@@ -345,6 +345,7 @@ version = "1.0.0"
 name = "concorddata"
 version = "1.0.0"
 dependencies = [
+ "backtrace",
  "base64 0.13.0",
  "bit_reverse",
  "blake2-rfc",
@@ -1102,6 +1103,7 @@ dependencies = [
 [[package]]
 name = "librustlet"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/rustlet?branch=master#b25ef73be6fcdaad8f490b8b9f754e469937e871"
 dependencies = [
  "backtrace",
  "lazy_static",
@@ -1223,6 +1225,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_err"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "backtrace",
  "base64 0.13.0",
@@ -1243,6 +1246,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_evh"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "backtrace",
  "errno",
@@ -1266,6 +1270,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_http"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "backtrace",
  "base64 0.13.0",
@@ -1291,6 +1296,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_log"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "chrono",
  "failure",
@@ -1306,6 +1312,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_tor"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "backtrace",
  "chrono",
@@ -1340,6 +1347,7 @@ dependencies = [
 [[package]]
 name = "nioruntime_util"
 version = "0.0.3-beta1"
+source = "git+http://github.com/37miners/nioruntime?branch=master#e438452b45faa24eb10cd50d4f14f994315fa148"
 dependencies = [
  "backtrace",
  "byteorder",

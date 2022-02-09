@@ -14,14 +14,13 @@
 
 use crate::librustlet::nioruntime_http::{build_messages, WebSocketMessageType};
 use crate::librustlet::WebSocketMessage;
-use crate::types::{AuthEvent, Event, EventType};
+use crate::types::{AuthEvent, Event, EventBody};
 use concorddata::ser::serialize_default;
 use concorddata::types::{Pubkey, Signature, U128};
 use concorderror::{Error, ErrorKind};
 use concordutil::nioruntime_log;
 use ed25519_dalek::ExpandedSecretKey;
 use ed25519_dalek::PublicKey;
-use ed25519_dalek::SecretKey;
 use nioruntime_log::*;
 use std::io::prelude::*;
 use std::net::*;
@@ -30,6 +29,9 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use tor_stream::TorStream;
 
 debug!();
+
+//trait Callback: for<'r, 's> Fn(&'r Event, &'s WSListenerClientWriter) -> Result<(), Error> + Send + Sync + Unpin + 'static {}
+//trait ErrHandler: for<'r, 's> Fn(Error, String) -> Result<(), Error> + Send + Sync + Unpin + 'static {}
 
 /// This struct is used to send messages in the [`WSListenerClient`] closure.
 /// See the examples there on how to use it.
@@ -64,7 +66,7 @@ impl WSListenerClientWriter {
 #[derive(Clone)]
 pub enum AuthParams {
 	Token(String),
-	Secret([u8; 32]),
+	Secret([u8; 64]),
 }
 
 /// Websocket listener client for concord. This struct can be used to communicate with
@@ -155,6 +157,8 @@ pub struct WSListenerClient<Callback, ErrHandler> {
 	auth_params: AuthParams,
 }
 
+//Fn(Error, String) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin
+//Fn(&Event, &WSListenerClientWriter) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin
 impl<Callback, ErrHandler> WSListenerClient<Callback, ErrHandler>
 where
 	Callback: Fn(&Event, &WSListenerClientWriter) -> Result<(), Error>
@@ -163,7 +167,7 @@ where
 		+ Clone
 		+ Sync
 		+ Unpin,
-	ErrHandler: Fn(Error) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin,
+	ErrHandler: Fn(Error, String) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin,
 {
 	/// Create a new WSListenerClient connection to the onion address specified using the specified
 	/// tor_proxy_port.
@@ -192,7 +196,10 @@ where
 	}
 
 	/// Start the WSListenerClient. See [`WSListenerClient`] for an example.
-	pub fn start(&mut self) -> Result<(), Error> {
+	pub fn start(
+		&mut self,
+		sync: Option<(SyncSender<Option<Event>>, Receiver<Option<Event>>)>,
+	) -> Result<(), Error> {
 		let auth_params = self.auth_params.clone();
 		let callback = match self.callback.as_ref() {
 			Some(callback) => callback,
@@ -222,7 +229,11 @@ where
 		let tor_proxy_port = self.tor_proxy_port;
 		let onion = self.onion.clone();
 
-		let (sender, receiver) = sync_channel(2);
+		let (sender, receiver) = match sync {
+			Some((sender, receiver)) => (sender, receiver),
+			None => sync_channel(2),
+		};
+
 		self.sender = Some(sender.clone());
 
 		let error_clone = error.clone();
@@ -231,7 +242,7 @@ where
 
 		let sec_value_base64 = base64::encode(sec_value);
 		let proxy_addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), tor_proxy_port);
-		let target: socks::TargetAddr = socks::TargetAddr::Domain(onion, 80);
+		let target: socks::TargetAddr = socks::TargetAddr::Domain(onion.clone(), 80);
 		let mut stream = TorStream::connect_with_address(proxy_addr, target)?;
 		stream.write_all(
 			format!(
@@ -253,13 +264,14 @@ Sec-WebSocket-Key: {}\
 			}
 		};
 
+		let onion_clone = onion.clone();
 		// start read thread
 		std::thread::spawn(move || {
 			let stream = match stream.try_clone() {
 				Ok(stream) => stream,
 				Err(e) => {
 					// do error callback
-					match (error_clone2)(e.into()) {
+					match (error_clone2)(e.into(), onion_clone) {
 						Ok(_) => {}
 						Err(e) => {
 							error!("error occurred in error callback: {}", e);
@@ -272,7 +284,7 @@ Sec-WebSocket-Key: {}\
 				Ok(stream) => stream,
 				Err(e) => {
 					// do error callback
-					match (error_clone2)(e.into()) {
+					match (error_clone2)(e.into(), onion_clone) {
 						Ok(_) => {}
 						Err(e) => {
 							error!("error occurred in error callback: {}", e);
@@ -281,14 +293,14 @@ Sec-WebSocket-Key: {}\
 					return;
 				}
 			};
-			match Self::do_proxy_read_loop(stream, callback, auth_params.clone(), sender) {
+			match Self::do_proxy_read_loop(stream, &callback, auth_params.clone(), sender) {
 				Ok(_) => {}
 				Err(e) => {
 					// also ensure we close the stream so writer thread ends
 					let _ = shutdown_stream.shutdown(std::net::Shutdown::Both);
 
 					// do error callback
-					match (error_clone3)(e) {
+					match (error_clone3)(e, onion_clone) {
 						Ok(_) => {}
 						Err(e) => {
 							error!("error occurred in error callback: {}", e);
@@ -298,13 +310,14 @@ Sec-WebSocket-Key: {}\
 			}
 		});
 
+		let onion_clone = onion.clone();
 		// start write thread
 		std::thread::spawn(move || {
 			let stream = match stream_clone.try_clone() {
 				Ok(stream) => stream,
 				Err(e) => {
 					// do error callback
-					match (error)(e.into()) {
+					match (error)(e.into(), onion_clone) {
 						Ok(_) => {}
 						Err(e) => {
 							error!("error occurred in error callback: {}", e);
@@ -313,14 +326,14 @@ Sec-WebSocket-Key: {}\
 					return;
 				}
 			};
-			match Self::do_proxy_write_loop(&stream, receiver, &error_clone) {
+			match Self::do_proxy_write_loop(&stream, receiver, &error_clone, onion_clone.clone()) {
 				Ok(_) => {}
 				Err(e) => {
 					// also ensure we close the stream so read thread ends
 					let _ = stream.shutdown(std::net::Shutdown::Both);
 
 					// do error callback
-					match (error_clone)(e) {
+					match (error_clone)(e, onion_clone) {
 						Ok(_) => {}
 						Err(e) => {
 							error!("error occurred in error callback: {}", e);
@@ -353,10 +366,14 @@ Sec-WebSocket-Key: {}\
 	}
 
 	fn do_proxy_write_loop(
-		mut stream: &TcpStream,
+		stream: &TcpStream,
 		receiver: Receiver<Option<Event>>,
 		error: &Pin<Box<ErrHandler>>,
+		onion: String,
 	) -> Result<(), Error> {
+		let mut auth = false;
+		let mut pending = vec![];
+
 		loop {
 			let event = receiver.recv()?;
 
@@ -368,21 +385,34 @@ Sec-WebSocket-Key: {}\
 				}
 			};
 
-			let mut buffer = vec![];
-			serialize_default(&mut buffer, &event)?;
-			let wsm: WebSocketMessage = WebSocketMessage {
-				mtype: WebSocketMessageType::Binary,
-				payload: buffer,
-				mask: false,
-				header_info: None,
-			};
-			let bin_data: Vec<u8> = wsm.into();
-			stream.write(&bin_data)?;
+			// make sure we've authed first. If not queue up events
+			if !auth {
+				match event.body {
+					EventBody::AuthEvent(_) => {
+						auth = true;
+						Self::process_event_write(&event, stream)?;
+						for event in &pending {
+							Self::process_event_write(&event, stream)?;
+						}
+						pending.clear();
+						continue;
+					}
+					_ => {
+						pending.push(event);
+						continue;
+					}
+				}
+			}
+
+			Self::process_event_write(&event, stream)?;
 		}
 
 		// if we get here we were disconnected. Send an error event to the error
 		// handler callback.
-		match (error)(ErrorKind::Disconnect("Socket disconnect".to_string()).into()) {
+		match (error)(
+			ErrorKind::Disconnect("Socket disconnect".to_string()).into(),
+			onion,
+		) {
 			Ok(_) => {}
 			Err(e) => {
 				error!("error occurred in error callback: {}", e);
@@ -391,9 +421,23 @@ Sec-WebSocket-Key: {}\
 		Ok(())
 	}
 
+	fn process_event_write(event: &Event, mut stream: &TcpStream) -> Result<(), Error> {
+		let mut buffer = vec![];
+		serialize_default(&mut buffer, &event)?;
+		let wsm: WebSocketMessage = WebSocketMessage {
+			mtype: WebSocketMessageType::Binary,
+			payload: buffer,
+			mask: false,
+			header_info: None,
+		};
+		let bin_data: Vec<u8> = wsm.into();
+		stream.write(&bin_data)?;
+		Ok(())
+	}
+
 	fn do_proxy_read_loop(
 		mut stream: TcpStream,
-		callback: Pin<Box<Callback>>,
+		callback: &Pin<Box<Callback>>,
 		auth_params: AuthParams,
 		sender: SyncSender<Option<Event>>,
 	) -> Result<(), Error> {
@@ -436,9 +480,9 @@ Sec-WebSocket-Key: {}\
 					);
 
 					let event: Event = concorddata::ser::Readable::read(&mut reader)?;
-
-					match event.event_type {
-						EventType::ChallengeEvent => {
+					info!("got a response event: {:?}", event);
+					match event.body {
+						EventBody::ChallengeEvent(challenge) => {
 							let token = match auth_params {
 								AuthParams::Token(token) => Some(U128(token.parse()?)).into(),
 								_ => None.into(),
@@ -446,17 +490,11 @@ Sec-WebSocket-Key: {}\
 
 							let (pubkey, signature) = match auth_params {
 								AuthParams::Secret(secret_bytes) => {
-									let secret_key = SecretKey::from_bytes(&secret_bytes[..])?;
-									let secret_key: ExpandedSecretKey = (&secret_key).into();
+									let secret_key =
+										ExpandedSecretKey::from_bytes(&secret_bytes[..])?;
 									let pubkey: PublicKey = (&secret_key).into();
 
-									let challenge_value = match event.challenge_event.0 {
-										Some(challenge_event) => challenge_event.challenge,
-										None => {
-											warn!("malformed challenge: {:?}", event);
-											0
-										}
-									};
+									let challenge_value = challenge.challenge;
 									let message = format!("{}", challenge_value);
 									let message = message.as_bytes();
 									let signature = secret_key.sign(message, &pubkey);
@@ -471,18 +509,19 @@ Sec-WebSocket-Key: {}\
 							};
 
 							let auth_event = Event {
-								event_type: EventType::AuthEvent,
-								auth_event: Some(AuthEvent {
+								body: EventBody::AuthEvent(AuthEvent {
 									pubkey,
 									signature,
 									token,
-								})
-								.into(),
+								}),
 								..Default::default()
 							};
 							writer.sender.send(Some(auth_event))?;
 						}
-						_ => (callback)(&event, writer)?,
+						_ => {
+							info!("calling callback");
+							(callback)(&event, writer)?;
+						}
 					}
 				}
 				WebSocketMessageType::Close => {}

@@ -1,4 +1,4 @@
-// Copyright 2021 The Grin Developers
+// Copyright 2022 37 Miners, LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,8 +15,9 @@
 use concorddata::types::SerString;
 use concorderror::Error;
 use concordlib::client::{AuthParams, WSListenerClient};
-use concordlib::types::{Event, EventType, GetServersEvent, ViewInviteRequest};
+use concordlib::types::{Event, EventBody, GetServersEvent, ViewInviteRequest};
 use concordutil::nioruntime_log;
+use ed25519_dalek::{ExpandedSecretKey, SecretKey};
 use nioruntime_log::*;
 use std::sync::{Arc, RwLock};
 
@@ -24,9 +25,12 @@ debug!();
 
 fn main() -> Result<(), Error> {
 	let secret = [0u8; 32];
+	let secret_key = SecretKey::from_bytes(&secret)?;
+	let secret_key: ExpandedSecretKey = (&secret_key).into();
+	let secret = secret_key.to_bytes();
 
 	let mut client = WSListenerClient::new(
-		"bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion".to_string(),
+		"hlcmyr6xwkgg4sjsnttms5gyc2imtoj6ecbtm34rddklla6lky4i7bad.onion".to_string(),
 		11990,
 		AuthParams::Secret(secret),
 	);
@@ -48,17 +52,17 @@ fn main() -> Result<(), Error> {
 		);
 		*time = std::time::Instant::now();
 
-		match event.event_type {
-			EventType::AuthResponse => {
+		match &event.body {
+			EventBody::AuthResponse(_e) => {
 				info!("Processing auth message: {:?}", event);
 				let event = Event {
-					event_type: EventType::ViewInviteRequest,
-					view_invite_request: Some(ViewInviteRequest { request_id: 1, invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/193941213129671565297558941931929350994".into()}).into(),
+					body: EventBody::ViewInviteRequest(
+					ViewInviteRequest { invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/32956607639384457967896023181155810984".into()}),
 					..Default::default()
 				};
 				writer.send(event)?;
 			}
-			EventType::GetServersResponse => {
+			EventBody::GetServersResponse(_e) => {
 				info!("Got a servers response: {:?}", event);
 				//writer.close()?;
 			}
