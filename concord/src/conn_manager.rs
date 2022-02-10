@@ -28,8 +28,6 @@ use std::sync::{Arc, RwLock};
 
 debug!();
 
-// Fn(&[u8], usize, WriteHandle) -> Result<(), Error> + Send + 'static + Clone + Sync + Unpin,
-
 #[derive(Clone)]
 pub struct ConnManager {
 	map: Arc<RwLock<HashMap<[u8; 32], SyncSender<Option<Event>>>>>,

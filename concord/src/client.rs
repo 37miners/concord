@@ -479,7 +479,7 @@ Sec-WebSocket-Key: {}\
 						concorddata::ser::ProtocolVersion::local(),
 					);
 
-					let event: Event = concorddata::ser::Readable::read(&mut reader)?;
+					let mut event: Event = concorddata::ser::Readable::read(&mut reader)?;
 					info!("got a response event: {:?}", event);
 					match event.body {
 						EventBody::ChallengeEvent(challenge) => {
@@ -520,7 +520,7 @@ Sec-WebSocket-Key: {}\
 						}
 						_ => {
 							info!("calling callback");
-							(callback)(&event, writer)?;
+							(callback)(&mut event, writer)?;
 						}
 					}
 				}

@@ -14,7 +14,7 @@
 
 use crate::nioruntime_log;
 use crate::nioruntime_tor::ov3::OnionV3Address;
-use crate::ser::{Readable, Reader, Writeable, Writer};
+use crate::ser::{chunk_read, chunk_write, Readable, Reader, Writeable, Writer};
 use concorderror::Error;
 use nioruntime_log::*;
 use std::convert::TryInto;
@@ -71,7 +71,7 @@ impl Readable for SerString {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct U128(pub u128);
 
 impl Writeable for U128 {
@@ -87,7 +87,7 @@ impl Readable for U128 {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Signature(pub [u8; 64]);
 
 impl Writeable for Signature {
@@ -284,7 +284,7 @@ impl Readable for Pubkey {
 	}
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Clone)]
 pub struct Invite {
 	pub inviter: [u8; 32],
 	pub server_id: [u8; 8],
@@ -336,6 +336,82 @@ impl Readable for Invite {
 			cur,
 			max,
 			id,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct Image {
+	pub data: Vec<u8>,
+}
+
+impl Default for Image {
+	fn default() -> Self {
+		Self { data: vec![] }
+	}
+}
+
+impl Writeable for Image {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.data.len();
+		writer.write_u64(len.try_into()?)?;
+		chunk_write(writer, &self.data)?;
+
+		Ok(())
+	}
+}
+
+impl Readable for Image {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let len = reader.read_u64()?;
+		let data = chunk_read(reader, len.try_into()?)?;
+
+		Ok(Self { data })
+	}
+}
+
+impl From<Vec<u8>> for Image {
+	fn from(data: Vec<u8>) -> Self {
+		Self { data }
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ProfileValue {
+	pub user_name: SerString,
+	pub user_bio: SerString,
+}
+
+impl Default for ProfileValue {
+	fn default() -> Self {
+		Self {
+			user_name: SerString {
+				data: "User Default".to_string(),
+			},
+			user_bio: SerString {
+				data: "Tell us about you..".to_string(),
+			},
+		}
+	}
+}
+
+impl Writeable for ProfileValue {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.user_name, writer)?;
+		Writeable::write(&self.user_bio, writer)?;
+
+		Ok(())
+	}
+}
+
+impl Readable for ProfileValue {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let user_name = SerString::read(reader)?;
+		let user_bio = SerString::read(reader)?;
+
+		Ok(Self {
+			user_name,
+			user_bio,
 		})
 	}
 }

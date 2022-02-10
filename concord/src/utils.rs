@@ -20,7 +20,7 @@ use nioruntime_log::*;
 
 info!();
 
-pub fn extract_server_id_from_query() -> Result<ServerId, librustlet::Error> {
+pub fn _extract_server_id_from_query() -> Result<ServerId, librustlet::Error> {
 	let server_id = match query!("server_id") {
 		Some(server_id) => ServerId::from_urlencoding(server_id).map_err(|e| {
 			let error: librustlet::Error = librustlet::ErrorKind::ApplicationError(format!(
@@ -39,7 +39,7 @@ pub fn extract_server_id_from_query() -> Result<ServerId, librustlet::Error> {
 	Ok(server_id)
 }
 
-pub fn extract_server_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
+pub fn _extract_server_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
 	let server_pubkey = match query!("server_pubkey") {
 		Some(server_pubkey) => Pubkey::from_urlencoding(server_pubkey).map_err(|e| {
 			let error: librustlet::Error = librustlet::ErrorKind::ApplicationError(format!(
@@ -58,7 +58,7 @@ pub fn extract_server_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
 	Ok(server_pubkey)
 }
 
-pub fn extract_user_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
+pub fn _extract_user_pubkey_from_query() -> Result<Pubkey, librustlet::Error> {
 	let user_pubkey = match query!("user_pubkey") {
 		Some(user_pubkey) => Pubkey::from_urlencoding(user_pubkey).map_err(|e| {
 			let error: librustlet::Error = librustlet::ErrorKind::ApplicationError(format!(

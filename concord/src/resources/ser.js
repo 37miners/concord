@@ -64,6 +64,61 @@ class U128 {
         }
 }
 
+class U32 {
+	constructor(value) {
+		this.value = value;
+	}
+
+        serialize(bint) {
+                var buffer = new ArrayBuffer(4);
+                var buffer = new Uint8Array(buffer);
+                
+                for(var i=0; i<4; i++) {
+                        buffer[i] = 0; 
+                }       
+                
+                var str16 = bint.toString(16);
+                var len = str16.length;
+                if(len % 2 != 0) {
+                        str16 = '0' + str16;
+                        len++;
+                }       
+                var itt = 3;
+                for(var i=len-2; i>=0; i-=2) {
+                        var hex = str16.substring(i, i+2);
+                        var num = parseInt(hex, 16); 
+                        buffer[itt] = num;
+                        itt--;
+                }       
+                
+                return buffer;
+        }       
+        
+        deserialize(buffer, offset) {
+                var num = BigInteger.ZERO;
+                var itt = 0;
+                for(var i=3+offset; i>=offset; i--) {
+                        num = num.add(
+                                new BigInteger(
+                                        String(buffer[i]),
+                                        10
+                                ).shiftLeft(
+                                        new BigInteger(
+                                                String(itt),
+                                                10
+                                        ).multiply(
+                                                new BigInteger("8", 10)
+                                        )       
+                                )       
+                        );      
+                        itt++;  
+                }       
+                var ret = new U32(num);
+                ret.offset = offset + 4;
+                return ret;
+        }
+}
+
 class U64 {
 	constructor(big_int) {
 		this.value = big_int;
@@ -314,12 +369,12 @@ const EVENT_TYPE_DELETE_SERVER_EVENT     = 6;
 const EVENT_TYPE_MODIFY_SERVER_EVENT     = 7;
 const EVENT_TYPE_GET_CHANNELS_REQUEST    = 8;
 const EVENT_TYPE_GET_CHANNELS_RESPONSE   = 9;
-const EVENT_TYPE_ADD_CHANNEL_REQUEST     = 10;
-const EVENT_TYPE_DELETE_CHANNEL_REQUEST  = 11;
+const EVENT_TYPE_DELETE_CHANNEL_REQUEST  = 10;
+const EVENT_TYPE_DELETE_CHANNEL_RESPONSE = 11;
 const EVENT_TYPE_MODIFY_CHANNEL_REQUEST  = 12;
-const EVENT_TYPE_ADD_CHANNEL_RESPONSE    = 13;
-const EVENT_TYPE_DELETE_CHANNEL_RESPONSE = 14;
-const EVENT_TYPE_MODIFY_CHANNEL_RESPONSE = 15;
+const EVENT_TYPE_MODIFY_CHANNEL_RESPONSE = 13;
+const EVENT_TYPE_ADD_CHANNEL_REQUEST     = 14;
+const EVENT_TYPE_ADD_CHANNEL_RESPONSE    = 15;
 const EVENT_TYPE_GET_MEMBERS_REQUEST     = 16;
 const EVENT_TYPE_GET_MEMBERS_RESPONSE    = 17;
 const EVENT_TYPE_CREATE_INVITE_REQUEST   = 18;
@@ -330,6 +385,8 @@ const EVENT_TYPE_MODIFY_INVITE_REQUEST   = 22;
 const EVENT_TYPE_MODIFY_INVITE_RESPONSE  = 23;
 const EVENT_TYPE_DELETE_INVITE_REQUEST   = 24;
 const EVENT_TYPE_DELETE_INVITE_RESPONSE  = 25;
+
+const FIRST_EVENT_DATA = 23; // first byte of event data
 
 class Invite {
 	constructor(invite_id, max, current, expiration, server_id, inviter) {
@@ -365,8 +422,7 @@ class Invite {
 }
 
 class ListInvitesResponse {
-	constructor(request_id, invites) {
-		this.request_id = request_id;
+	constructor(invites) {
 		this.invites = invites;
 	}
 
@@ -375,38 +431,30 @@ class ListInvitesResponse {
 	}
 
 	deserialize(buffer, offset) {
- 		var request_id = U128.prototype.deserialize(buffer, offset);
-                offset += 16;
 		var invite_count = U64.prototype.deserialize(buffer, offset);
-console.log('rid='+request_id.value+',invite_count='+invite_count.value);
 		offset += 8;
 		var invites = [];
 		for(var i=0; i<invite_count.value; i++) {
 			var invite = Invite.prototype.deserialize(buffer, offset);
 			offset = invite.offset;
-console.log('pushing invite with id = ' + invite.invite_id.value);
 			invites.push(invite);
 		}
-                var ret = new ListInvitesResponse(request_id.value, invites);
+                var ret = new ListInvitesResponse(invites);
                 ret.offset = offset;
                 return ret;
 	}
 }
 
 class DeleteInviteRequest {
-	constructor(request_id, invite_id) {
-		this.request_id = request_id;
+	constructor(invite_id) {
 		this.invite_id = invite_id;
 	}
 
 	serialize(delete_invite_request) {
 		var ret = new Uint8Array(new ArrayBuffer(32));
-		var request_id = U128.prototype.serialize(delete_invite_request.request_id);
 		var invite_id = U128.prototype.serialize(delete_invite_request.invite_id);
 		for(var i=0; i<16; i++)
-			ret[i] = request_id[i];
-		for(var i=0; i<16; i++)
-			ret[i+16] = invite_id[i];
+			ret[i] = invite_id[i];
 		return ret;
 	}
 
@@ -416,8 +464,7 @@ class DeleteInviteRequest {
 }
 
 class CreateInviteRequest {
-	constructor(request_id, server_id, server_pubkey, count, expiration) {
-		this.request_id = request_id;
+	constructor(server_id, server_pubkey, count, expiration) {
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 		this.count = count;
@@ -426,19 +473,16 @@ class CreateInviteRequest {
 
 	serialize(create_invite_request) {
                 var ret = new Uint8Array(new ArrayBuffer(80));
-                var request_id = U128.prototype.serialize(create_invite_request.request_id);
-                for(var i=0; i<16; i++)
-                        ret[i] = request_id[i];
                 for(var i=0; i<8; i++)
-                        ret[i+16] = create_invite_request.server_id[i];
+                        ret[i] = create_invite_request.server_id[i];
                 for(var i=0; i<32; i++)
-                        ret[i+24] = create_invite_request.server_pubkey[i];
+                        ret[i+8] = create_invite_request.server_pubkey[i];
 		var count = U64.prototype.serialize(create_invite_request.count);
 		var expiration = U128.prototype.serialize(create_invite_request.expiration);
 		for(var i=0; i<8; i++)
-			ret[i+56] = count[i];
+			ret[i+40] = count[i];
 		for(var i=0; i<16; i++)
-			ret[i+64] = expiration[i];
+			ret[i+48] = expiration[i];
                 return ret;	
 	}
 
@@ -448,22 +492,17 @@ class CreateInviteRequest {
 }
 
 class ListInvitesRequest {
-	constructor(request_id, server_id, server_pubkey) {
-		this.request_id = request_id;
+	constructor(server_id, server_pubkey) {
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 	}
 
 	serialize(list_invites_request) {
                 var ret = new Uint8Array(new ArrayBuffer(56));
-		var request_id = U128.prototype.serialize(list_invites_request.request_id);
-                for(var i=0; i<16; i++)
-                        ret[i] = request_id[i];
-
                 for(var i=0; i<8; i++)
-                        ret[i+16] = list_invites_request.server_id[i];
+                        ret[i] = list_invites_request.server_id[i];
                 for(var i=0; i<32; i++)
-                        ret[i+24] = list_invites_request.server_pubkey[i];
+                        ret[i+8] = list_invites_request.server_pubkey[i];
 
                 return ret;
 	}
@@ -564,8 +603,7 @@ class GetMembersRequest {
 }
 
 class ModifyChannelRequest {
-	constructor(request_id, server_id, server_pubkey, channel_id, name, description) {
-		this.request_id = request_id;
+	constructor(server_id, server_pubkey, channel_id, name, description) {
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 		this.channel_id = channel_id;
@@ -578,20 +616,17 @@ class ModifyChannelRequest {
                 var y = SerString.prototype.serialize(modify_channel_request.name);
                 var z = SerString.prototype.serialize(modify_channel_request.description);
                 var ret = new Uint8Array(new ArrayBuffer(64 + y.length + z.length));
-                var request_id = U128.prototype.serialize(modify_channel_request.request_id);
-                for(var i=0; i<16; i++)
-                        ret[i] = request_id[i];
                 for(var i=0; i<8; i++)
-                        ret[i+16] = modify_channel_request.server_id[i];
+                        ret[i] = modify_channel_request.server_id[i];
                 for(var i=0; i<32; i++)
-                        ret[i+24] = modify_channel_request.server_pubkey[i];
+                        ret[i+8] = modify_channel_request.server_pubkey[i];
 		
                 for(var i=0; i<x.length; i++)
-                        ret[i+56] = x[i];
+                        ret[i+40] = x[i];
                 for(var i=0; i<y.length; i++)
-                        ret[i+x.length+56] = y[i];
+                        ret[i+x.length+40] = y[i];
 		for(var i=0; i<z.length; i++)
-			ret[i+x.length+y.length+56] = z[i];
+			ret[i+x.length+y.length+40] = z[i];
                 return ret;
 	}
 
@@ -601,8 +636,7 @@ class ModifyChannelRequest {
 }
 
 class DeleteChannelRequest {
-	constructor(request_id, server_id, server_pubkey, channel_id) {
-		this.request_id = request_id;
+	constructor(server_id, server_pubkey, channel_id) {
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 		this.channel_id = channel_id;
@@ -610,16 +644,13 @@ class DeleteChannelRequest {
 
 	serialize(delete_channel_request) {
                 var ret = new Uint8Array(new ArrayBuffer(64));
-                var request_id = U128.prototype.serialize(delete_channel_request.request_id);
-                for(var i=0; i<16; i++)
-                        ret[i] = request_id[i];
                 for(var i=0; i<8; i++)
-                        ret[i+16] = delete_channel_request.server_id[i];
+                        ret[i] = delete_channel_request.server_id[i];
                 for(var i=0; i<32; i++)
-                        ret[i+24] = delete_channel_request.server_pubkey[i];
+                        ret[i+8] = delete_channel_request.server_pubkey[i];
 		var x = U64.prototype.serialize(delete_channel_request.channel_id);
 		for(var i=0; i<8; i++)
-			ret[i+56] = x[i];
+			ret[i+40] = x[i];
                 return ret;
 	}
 
@@ -629,8 +660,7 @@ class DeleteChannelRequest {
 }
 
 class AddChannelRequest {
-	constructor(request_id, server_id, server_pubkey, name, description) {
-		this.request_id = request_id;
+	constructor(server_id, server_pubkey, name, description) {
 		this.server_id = server_id;
 		this.server_pubkey = server_pubkey;
 		this.name = name;
@@ -641,17 +671,14 @@ class AddChannelRequest {
 		var x = SerString.prototype.serialize(add_channel_request.name);
 		var y = SerString.prototype.serialize(add_channel_request.description);
                 var ret = new Uint8Array(new ArrayBuffer(56 + x.length + y.length));
-		var request_id = U128.prototype.serialize(add_channel_request.request_id);
-                for(var i=0; i<16; i++)
-                        ret[i] = request_id[i];
 		for(var i=0; i<8; i++)
-			ret[i+16] = add_channel_request.server_id[i];
+			ret[i] = add_channel_request.server_id[i];
                 for(var i=0; i<32; i++)
-                        ret[i+24] = add_channel_request.server_pubkey[i];
+                        ret[i+8] = add_channel_request.server_pubkey[i];
 		for(var i=0; i<x.length; i++)
-			ret[i+56] = x[i];
+			ret[i+40] = x[i];
 		for(var i=0; i<y.length; i++)
-			ret[i+x.length+56] = y[i];
+			ret[i+x.length+40] = y[i];
                 return ret;
 	}
 
@@ -967,6 +994,7 @@ class Event {
 			this.version = EVENT_VERSION;
 			this.timestamp = Date.now();
 			this.event_type = event_type;
+			this.request_id = Math.floor(Math.random() * 4294967296); // u32
 			if(this.event_type == EVENT_TYPE_AUTH) {
 				this.auth_event = event_data;
 			} else if(this.event_type == EVENT_TYPE_CHALLENGE) {
@@ -1049,19 +1077,20 @@ class Event {
 			throw "Unknown event type in event.serialize = " + event.event_type;
 		}
 
-		var ret = new ArrayBuffer(x.length + 35);
+		var ret = new ArrayBuffer(x.length + FIRST_EVENT_DATA);
 		var ret = new Uint8Array(ret);
 		ret[0] = event.version;
 		var t = U128.prototype.serialize(event.timestamp);
 		for(var i=0; i<16; i++) {
 			ret[i+1] = t[i];
 		}
-		for(var i=0; i<16; i++) {
-			ret[i+17] = Math.floor(Math.random() * 256);
+		var y = U32.prototype.serialize(event.request_id);
+		for(var i=0; i<4; i++) {
+			ret[i+17] = y[i];
 		}
-		ret[34] = event.event_type;
+		ret[FIRST_EVENT_DATA-1] = event.event_type;
 		for(var i=0; i<x.length; i++) {
-			ret[i+35] = x[i];
+			ret[i+FIRST_EVENT_DATA] = x[i];
 		}
 		return ret;
 
@@ -1071,83 +1100,84 @@ class Event {
 		var event = new Event();
 		event.version = buffer[0];
 		event.timestamp = U128.prototype.deserialize(buffer, 1);
-		event.event_type = buffer[34];
+		event.request_id = U32.prototype.deserialize(buffer, 17).value;
+		event.event_type = buffer[FIRST_EVENT_DATA-1];
 		if(event.event_type == EVENT_TYPE_AUTH) {
 			event.auth_event = AuthEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_CHALLENGE) {
 			event.challenge_event = ChallengeEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_AUTH_RESP) {
 			event.auth_resp = AuthResp
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_EVENT) {
 			event.get_servers = GetServersEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
 			event.get_servers_response = GetServersResponse
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_CREATE_SERVER_EVENT) {
 			event.create_server_event = CreateServerEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_DELETE_SERVER_EVENT) {
 			event.delete_server_event = DeleteServerEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_SERVER_EVENT) {
 			event.modify_server_event = ModifyServerEvent
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_REQUEST) {
 			event.get_channels_request = GetChannelsRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
 			event.get_channels_response = GetChannelsResponse
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_REQUEST) {
 			event.add_channel_response = AddChannelRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_DELETE_CHANNEL_REQUEST) {
 			event.delete_channel_request = DeleteChannelRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_MODIFY_CHANNEL_REQUEST) {
 			event.modify_channel_request = ModifyChannelRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_REQUEST) {
 			event.get_members_request = GetMembersRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_GET_MEMBERS_RESPONSE) {
 			event.get_members_response = GetMembersResponse
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
 			event.list_invites_request = ListInvitesRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
 			event.create_invite_request = CreateInviteRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
 			event.list_invites_response = ListInvitesResponse
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_DELETE_INVITE_REQUEST) {
 			event.delete_invite_request = DeleteInviteRequest
 				.prototype
-				.deserialize(buffer, 35);
+				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_ADD_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_MODIFY_CHANNEL_RESPONSE ||
 			event.event_type == EVENT_TYPE_DELETE_CHANNEL_RESPONSE){

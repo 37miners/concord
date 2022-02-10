@@ -13,8 +13,10 @@
 // limitations under the License.
 
 use crate::librustlet::ConnData;
-use concorddata::ser::{chunk_read, chunk_write, Readable, Reader, Writeable, Writer};
-use concorddata::types::{Invite, Pubkey, SerOption, SerString, ServerId, Signature, U128};
+use concorddata::ser::{Readable, Reader, Writeable, Writer};
+use concorddata::types::{
+	Image, Invite, ProfileValue, Pubkey, SerOption, SerString, ServerId, Signature, U128,
+};
 use concorderror::{Error, ErrorKind};
 use concordutil::nioruntime_log;
 use nioruntime_log::*;
@@ -31,7 +33,7 @@ pub struct ConnectionInfo {
 	pub pubkey: Option<Pubkey>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteServerEvent {
 	pub server_pubkey: Pubkey,
 	pub server_id: ServerId,
@@ -57,7 +59,7 @@ impl Readable for DeleteServerEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModifyServerEvent {
 	pub name: SerOption<SerString>,
 	pub icon: SerOption<Image>,
@@ -91,7 +93,7 @@ impl Readable for ModifyServerEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CreateServerEvent {
 	pub name: SerString,
 	pub icon: Vec<u8>,
@@ -122,7 +124,7 @@ impl Readable for CreateServerEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Channel {
 	pub name: SerString,
 	pub description: SerString,
@@ -151,7 +153,7 @@ impl Readable for Channel {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AddChannelRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -184,7 +186,7 @@ impl Readable for AddChannelRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AddChannelResponse {
 	pub channel_id: u64,
 	pub success: bool,
@@ -215,7 +217,7 @@ impl Readable for AddChannelResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModifyChannelRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -252,7 +254,7 @@ impl Readable for ModifyChannelRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModifyChannelResponse {
 	pub success: bool,
 }
@@ -277,7 +279,7 @@ impl Readable for ModifyChannelResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteChannelRequest {
 	pub channel_id: u64,
 	pub server_id: ServerId,
@@ -306,7 +308,7 @@ impl Readable for DeleteChannelRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteChannelResponse {
 	pub success: bool,
 }
@@ -331,7 +333,7 @@ impl Readable for DeleteChannelResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetChannelsResponse {
 	pub channels: Vec<Channel>,
 	pub server_id: ServerId,
@@ -367,7 +369,7 @@ impl Readable for GetChannelsResponse {
 		})
 	}
 }
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetChannelsRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -393,7 +395,7 @@ impl Readable for GetChannelsRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CreateInviteRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -426,7 +428,7 @@ impl Readable for CreateInviteRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CreateInviteResponse {
 	pub success: bool,
 	pub invite_id: u128,
@@ -457,7 +459,7 @@ impl Readable for CreateInviteResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ListInvitesRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -482,7 +484,7 @@ impl Readable for ListInvitesRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ListInvitesResponse {
 	pub invites: Vec<Invite>,
 }
@@ -509,7 +511,7 @@ impl Readable for ListInvitesResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModifyInviteRequest {
 	pub invite_id: u128,
 	pub max: u64,
@@ -539,7 +541,7 @@ impl Readable for ModifyInviteRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ModifyInviteResponse {
 	pub success: bool,
 }
@@ -564,7 +566,7 @@ impl Readable for ModifyInviteResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteInviteRequest {
 	pub invite_id: u128,
 }
@@ -584,7 +586,7 @@ impl Readable for DeleteInviteRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DeleteInviteResponse {
 	pub success: bool,
 }
@@ -609,7 +611,7 @@ impl Readable for DeleteInviteResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JoinServerRequest {
 	pub invite_url: SerString,
 }
@@ -629,7 +631,7 @@ impl Readable for JoinServerRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct JoinServerResponse {
 	pub success: bool,
 }
@@ -654,7 +656,7 @@ impl Readable for JoinServerResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewInviteRequest {
 	pub invite_url: SerString,
 }
@@ -674,7 +676,7 @@ impl Readable for ViewInviteRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct InviteResponseInfo {
 	pub inviter_name: SerString,
 	pub inviter_icon: Image,
@@ -684,7 +686,7 @@ pub struct InviteResponseInfo {
 	pub online_members: u64,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ViewInviteResponse {
 	pub response_info: Option<InviteResponseInfo>,
 }
@@ -734,7 +736,7 @@ impl Readable for ViewInviteResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AcceptInviteRequest {
 	pub invite_id: u128,
 	pub user_pubkey: [u8; 32],
@@ -786,7 +788,7 @@ impl Readable for AcceptInviteRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AcceptInviteResponse {
 	pub success: bool,
 }
@@ -811,6 +813,157 @@ impl Readable for AcceptInviteResponse {
 	}
 }
 
+#[derive(PartialEq, Debug, Clone)]
+pub enum ProfileImageRequestType {
+	ReturnAvatars,
+	SaveAvatars,
+	NoAvatars,
+}
+
+#[derive(Debug, Clone)]
+pub struct GetProfileRequest {
+	pub user_pubkeys: Vec<Pubkey>,
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
+	pub image_request_type: ProfileImageRequestType,
+	pub include_profile_data: bool,
+}
+
+impl Writeable for GetProfileRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.user_pubkeys.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			Writeable::write(&self.user_pubkeys[i], writer)?;
+		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		match self.image_request_type {
+			ProfileImageRequestType::ReturnAvatars => writer.write_u8(0)?,
+			ProfileImageRequestType::SaveAvatars => writer.write_u8(1)?,
+			ProfileImageRequestType::NoAvatars => writer.write_u8(2)?,
+		}
+		match self.include_profile_data {
+			true => writer.write_u8(1)?,
+			false => writer.write_u8(0)?,
+		}
+		Ok(())
+	}
+}
+
+impl Readable for GetProfileRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut user_pubkeys = vec![];
+		let len = reader.read_u64()?;
+		for _ in 0..len {
+			user_pubkeys.push(Pubkey::read(reader)?);
+		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let image_request_type = match reader.read_u8()? {
+			0 => ProfileImageRequestType::ReturnAvatars,
+			1 => ProfileImageRequestType::SaveAvatars,
+			_ => ProfileImageRequestType::NoAvatars,
+		};
+		let include_profile_data = match reader.read_u8()? {
+			0 => false,
+			_ => true,
+		};
+		Ok(Self {
+			user_pubkeys,
+			server_pubkey,
+			server_id,
+			image_request_type,
+			include_profile_data,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct GetProfileResponse {
+	pub data: Vec<(SerOption<Image>, SerOption<ProfileValue>)>,
+}
+
+impl Writeable for GetProfileResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.data.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			Writeable::write(&self.data[i], writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for GetProfileResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let len = reader.read_u64()?;
+		let mut data = vec![];
+		for _ in 0..len {
+			data.push((SerOption::read(reader)?, SerOption::read(reader)?));
+		}
+		Ok(Self { data })
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SetProfileRequest {
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
+	pub avatar: SerOption<Image>,
+	pub profile_data: SerOption<ProfileValue>,
+}
+
+impl Writeable for SetProfileRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.avatar, writer)?;
+		Writeable::write(&self.profile_data, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for SetProfileRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let avatar = SerOption::read(reader)?;
+		let profile_data = SerOption::read(reader)?;
+		Ok(Self {
+			server_pubkey,
+			server_id,
+			avatar,
+			profile_data,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SetProfileResponse {
+	pub success: bool,
+}
+
+impl Writeable for SetProfileResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		match self.success {
+			true => writer.write_u8(1),
+			false => writer.write_u8(0),
+		}
+	}
+}
+
+impl Readable for SetProfileResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		Ok(Self {
+			success: match reader.read_u8()? {
+				0 => false,
+				_ => true,
+			},
+		})
+	}
+}
+
 // for now just two
 #[derive(Debug, Eq, PartialEq, IntoPrimitive, TryFromPrimitive, Clone)]
 #[repr(u8)]
@@ -819,7 +972,7 @@ pub enum OnlineStatus {
 	Online,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Member {
 	user_pubkey: Pubkey,
 	user_name: SerString,
@@ -837,7 +990,7 @@ impl From<concorddata::concord::Member> for Member {
 				profile.profile_data.user_name,
 				profile.profile_data.user_bio,
 			),
-			None => ("".to_string(), "".to_string()),
+			None => ("".to_string().into(), "".to_string().into()),
 		};
 		let roles = 0;
 		let profile_seqno = 0;
@@ -897,7 +1050,7 @@ impl Readable for Member {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetMembersRequest {
 	pub server_id: ServerId,
 	pub server_pubkey: Pubkey,
@@ -927,7 +1080,7 @@ impl Readable for GetMembersRequest {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetMembersResponse {
 	pub members: Vec<Member>,
 	pub server_id: ServerId,
@@ -969,7 +1122,7 @@ impl Readable for GetMembersResponse {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetServersEvent {}
 
 impl Writeable for GetServersEvent {
@@ -984,7 +1137,7 @@ impl Readable for GetServersEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ChallengeEvent {
 	pub challenge: u128,
 }
@@ -1006,7 +1159,7 @@ impl Readable for ChallengeEvent {
 // There are two methods to authenticate.
 // 1.) Use auth token (u128) provided on startup of concord server.
 // 2.) Sign a ChallengeEvent with your pubkey.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthEvent {
 	pub signature: SerOption<Signature>,
 	pub token: SerOption<U128>,
@@ -1036,7 +1189,7 @@ impl Readable for AuthEvent {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct AuthResponse {
 	pub success: bool,
 	pub redirect: SerOption<SerString>,
@@ -1067,36 +1220,6 @@ impl Readable for AuthResponse {
 }
 
 #[derive(Debug, Clone)]
-pub struct Image {
-	pub data: Vec<u8>,
-}
-
-impl Writeable for Image {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		let len = self.data.len();
-		writer.write_u64(len.try_into()?)?;
-		chunk_write(writer, &self.data)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for Image {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let len = reader.read_u64()?;
-		let data = chunk_read(reader, len.try_into()?)?;
-
-		Ok(Self { data })
-	}
-}
-
-impl From<Vec<u8>> for Image {
-	fn from(data: Vec<u8>) -> Self {
-		Self { data }
-	}
-}
-
-#[derive(Debug)]
 pub struct ServerInfo {
 	pub name: SerString,
 	pub description: SerString,
@@ -1133,7 +1256,7 @@ impl Readable for ServerInfo {
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GetServersResponse {
 	pub servers: Vec<ServerInfo>,
 }
@@ -1194,9 +1317,13 @@ pub enum EventType {
 	AcceptInviteResponse,
 	JoinServerRequest,
 	JoinServerResponse,
+	GetProfileRequest,
+	GetProfileResponse,
+	SetProfileRequest,
+	SetProfileResponse,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum EventBody {
 	AuthEvent(AuthEvent),
 	ChallengeEvent(ChallengeEvent),
@@ -1230,6 +1357,10 @@ pub enum EventBody {
 	AcceptInviteResponse(AcceptInviteResponse),
 	JoinServerRequest(JoinServerRequest),
 	JoinServerResponse(JoinServerResponse),
+	GetProfileRequest(GetProfileRequest),
+	GetProfileResponse(GetProfileResponse),
+	SetProfileRequest(SetProfileRequest),
+	SetProfileResponse(SetProfileResponse),
 }
 
 impl Writeable for EventBody {
@@ -1363,6 +1494,22 @@ impl Writeable for EventBody {
 				writer.write_u16(31)?;
 				Writeable::write(e, writer)?;
 			}
+			EventBody::GetProfileRequest(e) => {
+				writer.write_u16(32)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetProfileResponse(e) => {
+				writer.write_u16(33)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::SetProfileRequest(e) => {
+				writer.write_u16(34)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::SetProfileResponse(e) => {
+				writer.write_u16(35)?;
+				Writeable::write(e, writer)?;
+			}
 		}
 		Ok(())
 	}
@@ -1460,12 +1607,24 @@ impl Readable for EventBody {
 			31 => Ok(EventBody::JoinServerResponse(JoinServerResponse::read(
 				reader,
 			)?)),
+			32 => Ok(EventBody::GetProfileRequest(GetProfileRequest::read(
+				reader,
+			)?)),
+			33 => Ok(EventBody::GetProfileResponse(GetProfileResponse::read(
+				reader,
+			)?)),
+			34 => Ok(EventBody::SetProfileRequest(SetProfileRequest::read(
+				reader,
+			)?)),
+			35 => Ok(EventBody::SetProfileResponse(SetProfileResponse::read(
+				reader,
+			)?)),
 			_ => Err(ErrorKind::CorruptedData("corrupted data in EventBody".to_string()).into()),
 		}
 	}
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Event {
 	pub body: EventBody,
 	pub version: u8,

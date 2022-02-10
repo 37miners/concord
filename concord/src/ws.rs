@@ -15,12 +15,12 @@
 use crate::auth::ws_auth;
 use crate::channel::{add_channel, delete_channel, get_channels, modify_channel};
 use crate::conn_manager::ConnManager;
-use crate::context::ConcordContext;
 use crate::invite::{
 	accept_invite, create_invite, delete_invite, join_server, list_invites, modify_invite,
 	view_invite,
 };
 use crate::members::get_members;
+use crate::profile::{get_profile, set_profile};
 use crate::server::{create_server, delete_server, get_servers, modify_server};
 use crate::types::*;
 use crate::{bin_event, close, send, try2};
@@ -62,6 +62,135 @@ fn process_open(
 	Ok(())
 }
 
+fn process_authed_event(
+	event: &Event,
+	connection_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	config: &ConcordConfig,
+	conn_manager: Arc<RwLock<ConnManager>>,
+	id: u128,
+) -> Result<bool, Error> {
+	let res = match event.body {
+		EventBody::GetServersEvent(_) => {
+			try2!(
+				get_servers(connection_info, ds_context),
+				"get_servers error"
+			)
+		}
+		EventBody::CreateServerEvent(_) => {
+			try2!(
+				create_server(connection_info, ds_context, &event, config),
+				"create_server error"
+			)
+		}
+		EventBody::DeleteServerEvent(_) => {
+			try2!(
+				delete_server(connection_info, ds_context, &event),
+				"delete_server error"
+			)
+		}
+		EventBody::ModifyServerEvent(_) => {
+			try2!(
+				modify_server(connection_info, ds_context, &event, config),
+				"modify_server error"
+			)
+		}
+		EventBody::GetChannelsRequest(_) => {
+			try2!(
+				get_channels(connection_info, ds_context, &event),
+				"get_channels error"
+			)
+		}
+		EventBody::AddChannelRequest(_) => {
+			try2!(
+				add_channel(connection_info, ds_context, &event),
+				"add_channel error"
+			)
+		}
+		EventBody::ModifyChannelRequest(_) => {
+			try2!(
+				modify_channel(connection_info, ds_context, &event),
+				"modify channel error"
+			)
+		}
+		EventBody::DeleteChannelRequest(_) => {
+			try2!(
+				delete_channel(connection_info, ds_context, &event),
+				"delete channel error"
+			)
+		}
+		EventBody::GetMembersRequest(_) => {
+			try2!(
+				get_members(connection_info, ds_context, &event),
+				"get members error"
+			)
+		}
+		EventBody::CreateInviteRequest(_) => {
+			try2!(
+				create_invite(connection_info, ds_context, &event),
+				"create invite request error"
+			)
+		}
+		EventBody::ListInvitesRequest(_) => {
+			try2!(
+				list_invites(connection_info, ds_context, &event),
+				"list invites request error"
+			)
+		}
+		EventBody::ModifyInviteRequest(_) => {
+			try2!(
+				modify_invite(connection_info, ds_context, &event),
+				"modify invite error"
+			)
+		}
+		EventBody::DeleteInviteRequest(_) => {
+			try2!(
+				delete_invite(connection_info, ds_context, &event),
+				"delete invite request error"
+			)
+		}
+		EventBody::ViewInviteRequest(_) => {
+			try2!(
+				view_invite(connection_info, ds_context, &event, conn_manager, config),
+				"view invite request error"
+			)
+		}
+		EventBody::AcceptInviteRequest(_) => {
+			try2!(
+				accept_invite(connection_info, ds_context, &event),
+				"accept invite request error"
+			)
+		}
+		EventBody::JoinServerRequest(_) => {
+			try2!(
+				join_server(connection_info, ds_context, &event, conn_manager, config),
+				"join server request error"
+			)
+		}
+		EventBody::GetProfileRequest(_) => {
+			try2!(
+				get_profile(connection_info, ds_context, &event, conn_manager, config,),
+				"get profile request error"
+			)
+		}
+		EventBody::SetProfileRequest(_) => {
+			try2!(
+				set_profile(connection_info, ds_context, &event, conn_manager, config),
+				"set profile request error"
+			)
+		}
+		_ => {
+			warn!(
+				"unexpected event type in event {:?}. Closing conn = {}",
+				event, id
+			);
+			true
+		}
+	};
+
+	Ok(res)
+}
+
 fn process_binary(
 	handle: ConnData,
 	conn_info: Arc<RwLock<HashMap<u128, ConnectionInfo>>>,
@@ -99,132 +228,15 @@ fn process_binary(
 							Some(pubkey) => {
 								debug!("authed event on {}: {:?}, pubkey={:?}", id, event, pubkey);
 								// we know the user is authed, now process events
-								match event.body {
-									EventBody::GetServersEvent(_) => {
-										try2!(
-											get_servers(connection_info, ds_context),
-											"get_servers error"
-										)
-									}
-									EventBody::CreateServerEvent(_) => {
-										try2!(
-											create_server(
-												connection_info,
-												ds_context,
-												&event,
-												config
-											),
-											"create_server error"
-										)
-									}
-									EventBody::DeleteServerEvent(_) => {
-										try2!(
-											delete_server(connection_info, ds_context, &event),
-											"delete_server error"
-										)
-									}
-									EventBody::ModifyServerEvent(_) => {
-										try2!(
-											modify_server(
-												connection_info,
-												ds_context,
-												&event,
-												config
-											),
-											"modify_server error"
-										)
-									}
-									EventBody::GetChannelsRequest(_) => {
-										try2!(
-											get_channels(connection_info, ds_context, &event),
-											"get_channels error"
-										)
-									}
-									EventBody::AddChannelRequest(_) => {
-										try2!(
-											add_channel(connection_info, ds_context, &event),
-											"add_channel error"
-										)
-									}
-									EventBody::ModifyChannelRequest(_) => {
-										try2!(
-											modify_channel(connection_info, ds_context, &event),
-											"modify channel error"
-										)
-									}
-									EventBody::DeleteChannelRequest(_) => {
-										try2!(
-											delete_channel(connection_info, ds_context, &event),
-											"delete channel error"
-										)
-									}
-									EventBody::GetMembersRequest(_) => {
-										try2!(
-											get_members(connection_info, ds_context, &event),
-											"get members error"
-										)
-									}
-									EventBody::CreateInviteRequest(_) => {
-										try2!(
-											create_invite(connection_info, ds_context, &event),
-											"create invite request error"
-										)
-									}
-									EventBody::ListInvitesRequest(_) => {
-										try2!(
-											list_invites(connection_info, ds_context, &event),
-											"list invites request error"
-										)
-									}
-									EventBody::ModifyInviteRequest(_) => {
-										try2!(
-											modify_invite(connection_info, ds_context, &event),
-											"modify invite error"
-										)
-									}
-									EventBody::DeleteInviteRequest(_) => {
-										try2!(
-											delete_invite(connection_info, ds_context, &event),
-											"delete invite request error"
-										)
-									}
-									EventBody::ViewInviteRequest(_) => {
-										try2!(
-											view_invite(
-												connection_info,
-												ds_context,
-												&event,
-												conn_manager,
-												config
-											),
-											"view invite request error"
-										)
-									}
-									EventBody::AcceptInviteRequest(_) => {
-										try2!(
-											accept_invite(connection_info, ds_context, &event),
-											"accept invite request error"
-										)
-									}
-									EventBody::JoinServerRequest(_) => {
-										try2!(
-											join_server(
-												connection_info,
-												ds_context,
-												&event,
-												conn_manager,
-												config
-											),
-											"join server request error"
-										)
-									}
-									_ => {
-										warn!("unexpected event type in event {:?}. Closing conn = {}",
-											event, id
-										);
-										true
-									}
-								}
+
+								process_authed_event(
+									&event,
+									connection_info,
+									ds_context,
+									config,
+									conn_manager,
+									id,
+								)?
 							}
 							None => true,
 						}
@@ -253,7 +265,7 @@ fn process_close(
 	Ok(())
 }
 
-pub fn init_ws(cconfig: ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
+pub fn init_ws(cconfig: ConcordConfig) -> Result<(), ConcordError> {
 	let conn_info = Arc::new(RwLock::new(HashMap::new()));
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
 	let conn_manager = Arc::new(RwLock::new(ConnManager::new()));

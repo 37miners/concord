@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::context::ConcordContext;
 use crate::types::ConnectionInfo;
 use crate::types::{AuthResponse, Event, EventBody};
 use crate::{send, try2};
@@ -25,7 +24,6 @@ use concordutil::librustlet;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
-use std::borrow::Cow::Borrowed;
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::sync::{Arc, RwLock};
@@ -145,59 +143,8 @@ pub fn ws_auth(
 	Ok(!success)
 }
 
-// check whether a session is authorized. We assume that we are in the rustlet context
-// here.
-pub fn check_auth(ds_context: &DSContext, auth_flag: u128) -> Result<(), ConcordError> {
-	let token = match cookie!("auth") {
-		Some(auth) => auth,
-		None => query!("token").unwrap_or("".to_string()),
-	};
-
-	let user_pubkey = query!("user_pubkey").unwrap_or("".to_string());
-	let user_pubkey = if user_pubkey != "".to_string() {
-		let user_pubkey = urlencoding::decode(&user_pubkey)
-			.unwrap_or(Borrowed(""))
-			.to_string();
-		base64::decode(user_pubkey).unwrap_or([0u8; 32].to_vec())[..]
-			.try_into()
-			.unwrap_or([0u8; 32])
-	} else {
-		pubkey!()
-	};
-
-	let server_pubkey = query!("server_pubkey").unwrap_or("".to_string());
-	let server_pubkey = if server_pubkey != "".to_string() {
-		let server_pubkey = urlencoding::decode(&server_pubkey)
-			.unwrap_or(Borrowed(""))
-			.to_string();
-		base64::decode(server_pubkey).unwrap_or([0u8; 32].to_vec())[..]
-			.try_into()
-			.unwrap_or([0u8; 32])
-	} else {
-		pubkey!()
-	};
-
-	let server_id = query!("server_id").unwrap_or("".to_string());
-	let server_id = urlencoding::decode(&server_id)
-		.unwrap_or(Borrowed(""))
-		.to_string();
-	let server_id = base64::decode(server_id).unwrap_or([0u8; 8].to_vec())[..]
-		.try_into()
-		.unwrap_or([0u8; 8]);
-
-	ds_context.is_authorized(
-		user_pubkey,
-		server_pubkey,
-		token.parse().unwrap_or(0),
-		server_id,
-		auth_flag,
-	)?;
-
-	Ok(())
-}
-
 // initialize this module. Create rustlets, log info, open browser.
-pub fn init_auth(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
+pub fn init_auth(cconfig: &ConcordConfig) -> Result<(), ConcordError> {
 	let uri = format!("{}:{}", cconfig.host, cconfig.port);
 
 	let ds_context = DSContext::new(cconfig.root_dir.clone())?;

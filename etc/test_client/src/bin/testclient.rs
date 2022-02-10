@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use concorddata::types::SerString;
+use concorddata::types::*;
 use concorderror::Error;
 use concordlib::client::{AuthParams, WSListenerClient};
-use concordlib::types::{Event, EventBody, GetServersEvent, ViewInviteRequest};
+use concordlib::types::*;
 use concordutil::nioruntime_log;
 use ed25519_dalek::{ExpandedSecretKey, SecretKey};
 use nioruntime_log::*;
@@ -55,9 +55,26 @@ fn main() -> Result<(), Error> {
 		match &event.body {
 			EventBody::AuthResponse(_e) => {
 				info!("Processing auth message: {:?}", event);
+/*
 				let event = Event {
 					body: EventBody::ViewInviteRequest(
 					ViewInviteRequest { invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/32956607639384457967896023181155810984".into()}),
+					..Default::default()
+				};
+*/
+				let server_pubkey = Pubkey::from_onion("bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid")?;
+				let event = Event {
+					body: EventBody::SetProfileRequest(
+						SetProfileRequest {
+							//server_pubkey: Pubkey::from_bytes([0u8; 32]),
+							server_pubkey,
+							server_id: ServerId::from_bytes([0u8; 8]),
+							avatar: Some(Image { data: [1,2,3,4].to_vec() }).into(),
+							profile_data: Some(
+								ProfileValue { user_bio: "my bio".to_string().into(), user_name: "usrabc".to_string().into() }
+							).into(),
+						}
+					),
 					..Default::default()
 				};
 				writer.send(event)?;
@@ -65,6 +82,18 @@ fn main() -> Result<(), Error> {
 			EventBody::GetServersResponse(_e) => {
 				info!("Got a servers response: {:?}", event);
 				//writer.close()?;
+			}
+			EventBody::ViewInviteResponse(_) => {
+				info!("got the view invite response. Joining.");
+				let event = Event {
+					body: EventBody::JoinServerRequest(
+						JoinServerRequest {
+							invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/32956607639384457967896023181155810984".into()
+						}
+					),
+					..Default::default()
+				};
+				writer.send(event)?;
 			}
 			_ => {
 				error!("Unexpected event type: {:?}", event);
@@ -74,12 +103,12 @@ fn main() -> Result<(), Error> {
 		Ok(())
 	})?;
 
-	client.set_error(move |e| {
+	client.set_error(move |e, onion| {
 		error!("got an error: {}", e);
 		Ok(())
 	})?;
 
-	client.start()?;
+	client.start(None)?;
 	/*
 		let mut client2 = WSListenerClient::new(
 					"bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion".to_string(),

@@ -12,422 +12,315 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::context::ConcordContext;
-use crate::try2;
-use crate::utils::extract_server_id_from_query;
-use crate::utils::extract_server_pubkey_from_query;
-use crate::utils::extract_user_pubkey_from_query;
+use crate::conn_manager::ConnManager;
+use crate::send;
+use crate::types::EventBody;
+use crate::types::{
+	ConnectionInfo, Event, GetProfileResponse, ProfileImageRequestType, SetProfileResponse,
+};
 use concordconfig::ConcordConfig;
-use concorddata::concord::get_default_profile;
 use concorddata::concord::DSContext;
-use concorddata::concord::ProfileData;
 use concorddata::types::Pubkey;
 use concorddata::types::ServerId;
+use concorddata::types::{Image, ProfileValue, SerOption};
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
-use concordutil::torclient;
 use librustlet::nioruntime_log;
 use librustlet::*;
 use nioruntime_log::*;
 use std::fs::File;
 use std::io::Read;
-use url::Host::Domain;
-use url::Url;
+use std::io::Write;
+use std::sync::{Arc, RwLock};
 
 debug!(); // set log level to debug
 
-fn get_default_user_icon(root_dir: String) -> Result<Vec<u8>, Error> {
-	let user1 = format!("{}/www/images/user1.png", root_dir);
-	let mut file = File::open(user1)?;
-	let mut data = vec![];
-	file.read_to_end(&mut data)?;
+fn get_avatar(
+	root_dir: String,
+	server_id: [u8; 8],
+	pubkey: [u8; 32],
+) -> Result<Vec<u8>, ConcordError> {
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
+	let file_name = format!(
+		"{}/www/images/user_images/{}-{}",
+		root_dir, server_id, pubkey
+	);
+	error!("start read: {}", file_name);
+	let start = std::time::Instant::now();
+	let mut f = File::open(&file_name)?;
+	let metadata = std::fs::metadata(&file_name)?;
+	let mut data = vec![0; metadata.len() as usize];
+	f.read(&mut data)?;
+	error!(
+		"end read of {} bytes, time = {}",
+		metadata.len(),
+		start.elapsed().as_nanos()
+	);
+
 	Ok(data)
 }
 
-fn process_remote_image(
-	user_pubkey: Pubkey,
-	server_pubkey: Pubkey,
-	server_id: ServerId,
+fn set_avatar(
 	root_dir: String,
-	tor_port: u16,
-	ac: RustletAsyncContext,
-) -> Result<(), Error> {
-	let gear = format!("{}/www/images/gear.png", root_dir);
-	let mut file = File::open(gear).unwrap();
-	let mut data = vec![];
-	file.read_to_end(&mut data).unwrap();
-
-	let onion = server_pubkey.to_onion().unwrap();
-	let image_link = format!(
-		"http://{}.onion/get_profile_image?&user_pubkey={}&server_pubkey={}&server_id={}",
-		onion,
-		user_pubkey.to_urlencoding().unwrap(),
-		server_pubkey.to_urlencoding().unwrap(),
-		server_id.to_urlencoding().unwrap(),
+	server_id: [u8; 8],
+	pubkey: [u8; 32],
+	icon: Vec<u8>,
+) -> Result<(), ConcordError> {
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
+	let file_name = format!(
+		"{}/www/images/user_images/avatars-{}-{}",
+		root_dir, server_id, pubkey
 	);
-	let url = Url::parse(&image_link).map_err(|e| {
-		let error: Error =
-			ErrorKind::ApplicationError(format!("url parse error: {}", e.to_string())).into();
-		error
-	})?;
-	let host = format!("{}", url.host().unwrap_or(Domain("notfound")));
-	let path = format!("{}?{}", url.path(), url.query().unwrap_or(""));
-	let res = torclient::do_get_bin(host.clone(), path.clone(), tor_port).map_err(|e| {
-		let error: Error =
-			ErrorKind::ApplicationError(format!("tor client error: {}", e.to_string())).into();
-		error
-	});
 
-	if res.is_ok() {
-		let data = res.unwrap();
-		let len = data.len();
-		let mut start = 0;
-		for i in 4..len {
-			start = i;
-			if data[i - 1] == 10 && data[i - 2] == 13 && data[i - 3] == 10 && data[i - 4] == 13 {
-				break;
-			}
-		}
-		let data = &data[start..].to_vec();
-
-		let ds_context = DSContext::new(root_dir.clone()).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("error getting ds_context: {}", e.to_string()))
-					.into();
-			error
-		})?;
-
-		ds_context
-			.set_profile_image(
-				user_pubkey.to_bytes(),
-				server_pubkey.to_bytes(),
-				server_id.to_bytes(),
-				data.to_vec(),
-			)
-			.map_err(|e| {
-				let error: Error = ErrorKind::ApplicationError(format!(
-					"set_profile_image error: {}",
-					e.to_string()
-				))
-				.into();
-				error
-			})?;
-		async_context!(ac);
-		bin_write!(&data);
-		async_complete!();
+	let mut file = if std::path::Path::new(&file_name).exists() {
+		std::fs::OpenOptions::new()
+			.write(true)
+			.truncate(true)
+			.open(file_name)?
 	} else {
-		async_context!(ac);
-		bin_write!(&data);
-		async_complete!();
-	}
+		std::fs::OpenOptions::new()
+			.write(true)
+			.create_new(true)
+			.open(file_name)?
+	};
+	file.write_all(&icon)?;
 	Ok(())
 }
 
-fn load_remote_image(
-	user_pubkey: Pubkey,
-	server_pubkey: Pubkey,
-	server_id: ServerId,
-	root_dir: String,
-	tor_port: u16,
-) -> Result<(), Error> {
-	let ac = async_context!();
-	std::thread::spawn(move || {
-		let res = process_remote_image(
-			user_pubkey,
-			server_pubkey,
-			server_id,
-			root_dir,
-			tor_port,
-			ac,
-		);
-		match res {
-			Ok(_) => {}
-			Err(e) => {
-				error!("Error occurred in process remote image: {}", e);
+pub fn get_profile(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+	conn_manager: Arc<RwLock<ConnManager>>,
+	config: &ConcordConfig,
+) -> Result<bool, ConcordError> {
+	let request_id = event.request_id;
+	let (user_pubkeys, server_pubkey, server_id, image_request_type, include_profile_data) =
+		match &event.body {
+			EventBody::GetProfileRequest(event) => (
+				event.user_pubkeys.clone(),
+				event.server_pubkey.clone(),
+				event.server_id.clone(),
+				event.image_request_type.clone(),
+				event.include_profile_data,
+			),
+			_ => {
+				warn!(
+					"Malformed GetProfileRequest. Wrong body present: {:?}",
+					event
+				);
+				return Ok(true);
 			}
-		}
-	});
-	Ok(())
-}
+		};
 
-// initialize this module.
-pub fn init_profile(cconfig: &ConcordConfig, _context: ConcordContext) -> Result<(), ConcordError> {
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-	// sets profile image for the specified user on this server
-	rustlet!("set_profile_image", {
-		let user_pubkey = extract_user_pubkey_from_query()?;
-		let server_pubkey = extract_server_pubkey_from_query()?;
-		let server_id = extract_server_id_from_query()?;
+	let pubkey = pubkey!();
 
-		let content = request_content!();
-		let content = &mut &content[..];
-		let mut headers = hyper::header::Headers::new();
-		for i in 0..header_len!() {
-			headers.append_raw(header_name!(i), header_value!(i).as_bytes().to_vec());
-		}
-		// parse the mime_multipart data in this request
-		let res = mime_multipart::read_multipart_body(content, &headers, false).unwrap_or(vec![]);
+	if pubkey == server_pubkey.to_bytes() {
+		// local request
+		let mut data: Vec<(SerOption<Image>, SerOption<ProfileValue>)> = vec![];
 
-		let mut avatar = None;
-		for node in &res {
-			match node {
-				mime_multipart::Node::File(filepart) => {
-					let mut f = File::open(&filepart.path)?;
-					let size = filepart.size.unwrap_or(0);
-					let mut buf = vec![0 as u8; size];
-					f.read(&mut buf)?;
-					avatar = Some(buf);
+		if include_profile_data {
+			let profiles =
+				ds_context.get_profiles(user_pubkeys.clone(), server_pubkey, server_id.clone())?;
+			for profile in profiles {
+				match profile {
+					Some(profile) => data.push((None.into(), Some(profile.profile_data).into())),
+					None => data.push((None.into(), None.into())),
 				}
-				_ => {}
 			}
 		}
 
-		let avatar = match avatar {
-			Some(avatar) => avatar,
-			None => {
-				return Err(
-					ErrorKind::ApplicationError("avatar must specified".to_string()).into(),
-				);
+		if image_request_type == ProfileImageRequestType::ReturnAvatars {
+			for i in 0..user_pubkeys.len() {
+				data[i].0 = match get_avatar(
+					config.root_dir.clone(),
+					server_id.to_bytes(),
+					user_pubkeys[i].to_bytes(),
+				) {
+					Ok(avatar) => Some(Image { data: avatar }).into(),
+					Err(e) => {
+						warn!("error getting profile image: {}", e);
+						None.into()
+					}
+				};
 			}
-		};
-
-		ds_context
-			.set_profile_image(
-				user_pubkey.to_bytes(),
-				server_pubkey.to_bytes(),
-				server_id.to_bytes(),
-				avatar,
-			)
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("ds error setting user image: {}", e))
-						.into();
-				error
-			})?;
-	});
-	rustlet_mapping!("/set_profile_image", "set_profile_image");
-
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-	// sets the profile data for the specified user on this server
-	rustlet!("set_profile_data", {
-		let user_pubkey = extract_user_pubkey_from_query()?;
-		let server_pubkey = extract_server_pubkey_from_query()?;
-		let server_id = extract_server_id_from_query()?;
-
-		let user_bio = match query!("user_bio") {
-			Some(user_bio) => user_bio,
-			None => {
-				return Err(
-					ErrorKind::ApplicationError("user_bio must be specified".to_string()).into(),
-				);
-			}
-		};
-		let user_bio = urlencoding::decode(&user_bio)?.to_string();
-
-		let user_name = match query!("user_name") {
-			Some(user_name) => user_name,
-			None => {
-				return Err(
-					ErrorKind::ApplicationError("user_name must be specified".to_string()).into(),
-				);
-			}
-		};
-		let user_name = urlencoding::decode(&user_name)?.to_string();
-
-		ds_context
-			.set_profile_data(
-				user_pubkey.to_bytes(),
-				server_pubkey.to_bytes(),
-				server_id.to_bytes(),
-				ProfileData {
-					user_name,
-					user_bio,
-				},
-			)
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("set_profile_data generated error: {}", e))
-						.into();
-				error
-			})?;
-	});
-	rustlet_mapping!("/set_profile_data", "set_profile_data");
-
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-	// get the profile images for the specified users on the specified server
-	rustlet!("get_profile_images", {
-		let server_pubkey = extract_server_pubkey_from_query()?;
-		let server_id = extract_server_id_from_query()?;
-
-		let content = request_content!();
-		let content = std::str::from_utf8(&content)?;
-		let lines = content.split("\r\n");
-
-		let mut user_pubkeys = vec![];
-
-		for line in lines {
-			if line.len() == 0 {
-				continue;
-			}
-
-			let user_pubkey = Pubkey::from_urlencoding(line.to_string()).map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("error parsing user_pubkey: {}", e)).into();
-				error
-			})?;
-
-			user_pubkeys.push(user_pubkey.to_bytes());
 		}
 
-		let images = ds_context
-			.get_profile_images(user_pubkeys, server_pubkey.to_bytes(), server_id.to_bytes())
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("get_profile_data error: {}", e)).into();
-				error
-			})?;
+		let response = Event {
+			request_id,
+			body: EventBody::GetProfileResponse(GetProfileResponse { data }),
+			..Default::default()
+		};
 
-		response!("{:?}", images);
-	});
-	rustlet_mapping!("/get_profile_images", "get_profile_images");
+		let handle = conn_info.handle.clone();
+		send!(handle, response);
+	} else {
+		// need to request a remote server
+		let mut conn_manager = nioruntime_util::lockw!(conn_manager)?;
+		let handle = conn_info.handle.clone();
+		let mut new_event = event.clone();
 
-	let root_dir = cconfig.root_dir.clone();
-	let tor_port = cconfig.tor_port;
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-	// get the profile images for the specified users on the specified server
-	rustlet!("get_profile_image", {
-		let local_pubkey = pubkey!();
-		let user_pubkey = extract_user_pubkey_from_query()?;
-		let server_pubkey = extract_server_pubkey_from_query()?;
-		let server_id = extract_server_id_from_query()?;
+		let mut is_save = false;
+		new_event.body = match new_event.body {
+			EventBody::GetProfileRequest(get_profile_request) => {
+				if get_profile_request.image_request_type == ProfileImageRequestType::SaveAvatars {
+					is_save = true;
+					let mut updated = get_profile_request.clone();
+					updated.image_request_type = ProfileImageRequestType::ReturnAvatars;
+					EventBody::GetProfileRequest(updated)
+				} else {
+					EventBody::GetProfileRequest(get_profile_request)
+				}
+			}
+			_ => {
+				error!(
+					"unexpected event body. Expected GetProfileRequest: {:?}",
+					new_event
+				);
+				return Ok(true);
+			}
+		};
 
-		let image = ds_context
-			.get_profile_images(
-				vec![user_pubkey.to_bytes()],
-				server_pubkey.to_bytes(),
-				server_id.to_bytes(),
-			)
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("get_profile_image error: {}", e)).into();
-				error
-			})?;
+		let root_dir = config.root_dir.clone();
+		conn_manager.send_event(
+			server_pubkey.to_bytes(),
+			new_event.clone(),
+			config.tor_port,
+			Box::pin(move |event| {
+				if is_save {
+					// strip out and save avatars.
+					let new_body = match &event.body {
+						EventBody::GetProfileResponse(get_profile_response) => {
+							let mut data = vec![];
+							let mut i = 0;
+							for elem in &get_profile_response.data {
+								match &elem.0 .0 {
+									Some(image) => {
+										set_avatar(
+											root_dir.clone(),
+											server_id.to_bytes(),
+											user_pubkeys[i].to_bytes(),
+											image.data.clone(),
+										)?;
+									}
+									None => {}
+								}
+								i += 1;
 
-		match image.len() {
-			1 => match &image[0] {
-				Some(image) => {
-					if image.len() > 0 {
-						bin_write!(&image);
-					} else {
-						if server_pubkey.to_bytes() != local_pubkey {
-							// try the remote server
-							load_remote_image(
-								user_pubkey,
-								server_pubkey,
-								server_id,
-								root_dir.clone(),
-								tor_port,
-							)?;
-						} else {
-							let def_user_icon = get_default_user_icon(root_dir.clone())?;
-							bin_write!(&def_user_icon);
+								data.push((None.into(), elem.1.clone()));
+							}
+							EventBody::GetProfileResponse(GetProfileResponse { data })
 						}
-					}
+						_ => {
+							warn!(
+								"unexpected event type returned when expecting get_profile_request: {:?}",
+								event
+							);
+							return Ok(()); // not allowing event to propogate further.
+						}
+					};
+
+					let new_event = Event {
+						request_id: event.request_id,
+						timestamp: event.timestamp,
+						body: new_body,
+						..Default::default()
+					};
+
+					send!(handle, new_event);
+				} else {
+					send!(handle, event);
 				}
-				None => {
-					if server_pubkey.to_bytes() != local_pubkey {
-						// try the remote server
-						load_remote_image(
-							user_pubkey,
-							server_pubkey,
-							server_id,
-							root_dir.clone(),
-							tor_port,
-						)?;
-					} else {
-						let def_user_icon = get_default_user_icon(root_dir.clone())?;
-						bin_write!(&def_user_icon);
-					}
-				}
-			},
-			_ => response!("error! image not found!"),
+				Ok(())
+			}),
+		)?;
+	}
+
+	Ok(false)
+}
+
+pub fn set_profile(
+	conn_info: &ConnectionInfo,
+	ds_context: &DSContext,
+	event: &Event,
+	conn_manager: Arc<RwLock<ConnManager>>,
+	config: &ConcordConfig,
+) -> Result<bool, ConcordError> {
+	let request_id = event.request_id;
+	let user_pubkey = match &conn_info.pubkey {
+		Some(user_pubkey) => user_pubkey,
+		None => {
+			warn!(
+				"unexpected unauthed call in set_profile for event: {:?}",
+				event
+			);
+			return Ok(true);
 		}
-	});
-	rustlet_mapping!("/get_profile_image", "get_profile_image");
+	};
 
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-	// get the profile data for the specified users on this server
-	rustlet!("get_profile_data", {
-		let server_pubkey = extract_server_pubkey_from_query()?;
-		let server_id = extract_server_id_from_query()?;
+	let (server_id, server_pubkey, avatar, profile_data) = match &event.body {
+		EventBody::SetProfileRequest(event) => (
+			&event.server_id,
+			&event.server_pubkey,
+			&event.avatar,
+			&event.profile_data,
+		),
+		_ => {
+			warn!("Malformed SetProfileRequest. No event present: {:?}", event);
+			return Ok(true);
+		}
+	};
 
-		let content = request_content!();
-		let content = std::str::from_utf8(&content)?;
-		let lines = content.split("\r\n");
-
-		let mut user_pubkeys = vec![];
-
-		for line in lines {
-			if line.len() == 0 {
-				continue;
+	if pubkey!() == server_pubkey.to_bytes() {
+		// local data
+		match &profile_data.0 {
+			Some(profile_data) => {
+				ds_context.set_profile(
+					user_pubkey.clone(),
+					server_pubkey.clone(),
+					server_id.clone(),
+					profile_data.clone(),
+				)?;
 			}
-
-			let user_pubkey = Pubkey::from_urlencoding(line.to_string()).map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("error parsing user_pubkey: {}", e)).into();
-				error
-			})?;
-
-			user_pubkeys.push(user_pubkey.to_bytes());
+			None => {}
 		}
 
-		let data = ds_context
-			.get_profile_data(user_pubkeys, server_pubkey.to_bytes(), server_id.to_bytes())
-			.map_err(|e| {
-				let error: Error =
-					ErrorKind::ApplicationError(format!("get_profile_data error: {}", e)).into();
-				error
-			})?;
+		match &avatar.0 {
+			Some(avatar) => {
+				set_avatar(
+					config.root_dir.clone(),
+					server_id.to_bytes(),
+					server_pubkey.to_bytes(),
+					avatar.data.clone(),
+				)?;
+			}
+			None => {}
+		}
 
-		let json = serde_json::to_string(&data).map_err(|e| {
-			let error: Error =
-				ErrorKind::ApplicationError(format!("json parse error: {}", e)).into();
-			error
-		})?;
-		response!("{}", json);
-	});
-	rustlet_mapping!("/get_profile_data", "get_profile_data");
-
-	let ds_context = DSContext::new(cconfig.root_dir.clone())?;
-
-	rustlet!("get_mini_profile", {
-		let user_pubkey = pubkey!();
-		let server_pubkey = pubkey!();
-		let server_id = [0u8; 8]; // special server_id for our global data
-
-		let profile = try2!(
-			{ ds_context.get_profile(user_pubkey, server_pubkey, server_id) },
-			"get_profile"
-		);
-
-		let profile = match profile {
-			Some(profile) => profile,
-			None => get_default_profile(),
+		let event = Event {
+			request_id,
+			body: EventBody::SetProfileResponse(SetProfileResponse { success: true }),
+			..Default::default()
 		};
 
-		let user_pubkey = try2!(
-			{ Pubkey::from_bytes(user_pubkey).to_urlencoding() },
-			"pubkey parse error"
-		);
+		let handle = conn_info.handle.clone();
+		send!(handle, event);
+	} else {
+		// remote server
+		let mut conn_manager = nioruntime_util::lockw!(conn_manager)?;
+		let handle = conn_info.handle.clone();
+		conn_manager.send_event(
+			server_pubkey.to_bytes(),
+			event.clone(),
+			config.tor_port,
+			Box::pin(move |event| {
+				send!(handle, event);
+				Ok(())
+			}),
+		)?;
+	}
 
-		let json = try2!(
-			{ serde_json::to_string(&(profile.profile_data, user_pubkey)) },
-			"json parse error"
-		);
-
-		response!("{}", json);
-	});
-	rustlet_mapping!("/get_mini_profile", "get_mini_profile");
-
-	Ok(())
+	Ok(false)
 }

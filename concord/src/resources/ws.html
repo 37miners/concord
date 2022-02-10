@@ -115,7 +115,6 @@ function convertBinaryStringToUint8Array(bStr) {
 					sock.send(challenge);
 				}
 				else if(recv_event.event_type == EVENT_TYPE_CHALLENGE) {
-console.log("got a challenge");
 					var event = new Event(
 						EVENT_TYPE_AUTH,
 						new AuthEvent(
@@ -126,7 +125,6 @@ console.log("got a challenge");
 							new SerOption(),
 						)
 					);
-console.log("sending auth");
 					let resp_buffer = event.serialize(event);
 					sock.send(resp_buffer);
 				} else if(recv_event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
@@ -154,7 +152,6 @@ console.log("sending auth");
                                                 	var event = new Event(
                                                         	EVENT_TYPE_DELETE_CHANNEL_REQUEST,
                                                         	new DeleteChannelRequest(
-                                                                	1,
                                                                 	server_id_raw,
                                                                 	server_pubkey_raw,
 								this.channel_id,
@@ -176,7 +173,6 @@ console.log("sending auth");
                                                         var event = new Event(
                                                                 EVENT_TYPE_MODIFY_CHANNEL_REQUEST,
                                                                 new ModifyChannelRequest(
-                                                                        1,
                                                                         server_id_raw,
                                                                         server_pubkey_raw,
                                                                         channel_id,
@@ -201,7 +197,6 @@ console.log("sending auth");
                                                 var event = new Event(
                                                 	EVENT_TYPE_ADD_CHANNEL_REQUEST,
                                                 	new AddChannelRequest(
-								1,
                                                 		server_id_raw,
                                                 		server_pubkey_raw,
 								name,
@@ -215,7 +210,7 @@ console.log("sending auth");
 					add_chan.appendChild(add_chan_link);
 					channel_div.appendChild(add_chan);
 				} else if(recv_event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
-					var rid = recv_event.list_invites_response.request_id;
+					var rid = recv_event.request_id;
 					var invite_div = document.getElementById('invites-'+rid);
 					invite_div.innerHTML = '';
 					for(var i=0; i<recv_event.list_invites_response.invites.length; i++) {
@@ -239,7 +234,6 @@ console.log("sending auth");
                                                 	var event = new Event(
                                                         	EVENT_TYPE_DELETE_INVITE_REQUEST,
                                                         	new DeleteInviteRequest(
-                                                                	1,
 									this.invite_id
                                                         	)
                                                 	);
@@ -267,7 +261,6 @@ console.log("sending auth");
 						var server_pubkey = servers[i].server_pubkey.data;
 						var server_id_b58 = to_b58(server_id, alphabet);
 						var server_pubkey_b58 = to_b58(server_pubkey, alphabet);
-console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						var seqno = servers[i].seqno.value;
 						console.log('name='+name);
 						console.log(servers[i].description);
@@ -276,7 +269,7 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						var icon = document.createElement('img');
 						icon.style.height = '15px';
 						icon.style.width = '15px';
-						icon.src = '/images/user_images/' + server_id_b58+'-'+server_pubkey_b58;
+						icon.src = '/images/user_images/servers-' + server_id_b58+'-'+server_pubkey_b58;
 						//icon.src = "data:image;base64," + base64icon;
 						//icon.src = '/images/user1.png';
 						icon.title = servers[i].name.value;
@@ -286,7 +279,6 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						del_server.server_id = server_id;
 						del_server.server_pubkey = server_pubkey;
 						del_server.onclick = function(evt) {
-							console.log('id=\''+this.server_id + '\',pubkey=\'' + this.server_pubkey+'\'');
 							var event = new Event(
 								EVENT_TYPE_DELETE_SERVER_EVENT,
 								new DeleteServerEvent(
@@ -341,7 +333,6 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 							var event = new Event(
 								EVENT_TYPE_CREATE_INVITE_REQUEST,
 								new CreateInviteRequest(
-									1,
 									this.server_id,
 									this.server_pubkey,
 									count,
@@ -352,19 +343,20 @@ console.log('b58='+server_id_b58+'-'+server_pubkey_b58);
 						};
 						document.body.appendChild(add_invites);
 						var invites = document.createElement('div');
-						var rid = Math.round(Math.random() * 1000000000000);
+
+                                                var event = new Event(
+                                                        EVENT_TYPE_LIST_INVITES_REQUEST,
+                                                        new ListInvitesRequest(
+                                                                server_id,
+                                                                server_pubkey,
+                                                        )
+                                                );
+
+						var rid = event.request_id;
+
 						invites.id = 'invites-' + rid;
 						invites.innerHTML = 'invites for ' + name + ': ';
 						document.body.appendChild(invites);
-
-						var event = new Event(
-							EVENT_TYPE_LIST_INVITES_REQUEST,
-							new ListInvitesRequest(
-								rid,
-								server_id,
-								server_pubkey,
-							)
-						);
 
 						let buffer = Event.prototype.serialize(event);
 						sock.send(buffer);

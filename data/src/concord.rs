@@ -16,7 +16,7 @@ use crate::lmdb::{Batch, Store};
 use crate::nioruntime_log;
 use crate::ser::serialize_default;
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use crate::types::Invite;
+use crate::types::{Invite, ProfileValue, Pubkey, SerString, ServerId};
 use concorderror::{Error, ErrorKind};
 use nioruntime_log::*;
 
@@ -34,14 +34,17 @@ info!();
 
 pub fn get_default_profile() -> Profile {
 	Profile {
-		avatar: vec![],
-		profile_data: ProfileData {
-			user_name: "User Default".to_string(),
-			user_bio: "Tell us about you..".to_string(),
+		profile_data: ProfileValue {
+			user_name: SerString {
+				data: "User Default".to_string(),
+			},
+			user_bio: SerString {
+				data: "Tell us about you..".to_string(),
+			},
 		},
-		server_id: [0u8; 8],
-		server_pubkey: [0u8; 32],
-		user_pubkey: [0u8; 32],
+		server_id: ServerId::from_bytes([0u8; 8]),
+		server_pubkey: Pubkey::from_bytes([0u8; 32]),
+		user_pubkey: Pubkey::from_bytes([0u8; 32]),
 	}
 }
 
@@ -51,212 +54,77 @@ pub struct DSContext {
 	store: Store,
 }
 
-#[derive(Debug, Clone, Serialize)]
-pub struct ProfileData {
-	pub user_name: String,
-	pub user_bio: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone)]
 pub struct Profile {
-	pub user_pubkey: [u8; 32],
-	pub server_pubkey: [u8; 32],
-	pub server_id: [u8; 8],
-	pub avatar: Vec<u8>,
-	pub profile_data: ProfileData,
+	pub user_pubkey: Pubkey,
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
+	pub profile_data: ProfileValue,
 }
 
 struct ProfileKey {
-	user_pubkey: [u8; 32],
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	user_pubkey: Pubkey,
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 }
 
-struct ProfileValue {
-	avatar: Vec<u8>,
-	profile_data: ProfileData,
+impl Default for Profile {
+	fn default() -> Self {
+		Self {
+			user_pubkey: Pubkey::from_bytes([0u8; 32]),
+			server_pubkey: Pubkey::from_bytes([0u8; 32]),
+			server_id: ServerId::from_bytes([0u8; 8]),
+			profile_data: ProfileValue::default(),
+		}
+	}
 }
 
 impl Writeable for Profile {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		let avatar_len = self.avatar.len();
-		writer.write_u64(avatar_len.try_into()?)?;
-		for i in 0..avatar_len {
-			writer.write_u8(self.avatar[i])?;
-		}
-
+		Writeable::write(&self.user_pubkey, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		Writeable::write(&self.profile_data, writer)?;
-
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-
 		Ok(())
 	}
 }
 
 impl Readable for Profile {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut avatar = vec![];
-		let avatar_len = reader.read_u64()?;
-		for _ in 0..avatar_len {
-			avatar.push(reader.read_u8()?);
-		}
-		let profile_data = ProfileData::read(reader)?;
-
-		let mut server_id = [0u8; 8];
-		let mut server_pubkey = [0u8; 32];
-		let mut user_pubkey = [0u8; 32];
-
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
+		let user_pubkey = Pubkey::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let profile_data = ProfileValue::read(reader)?;
 
 		Ok(Profile {
-			avatar,
 			profile_data,
 			server_pubkey,
 			server_id,
 			user_pubkey,
 		})
-	}
-}
-
-impl From<Profile> for ProfileKey {
-	fn from(profile: Profile) -> ProfileKey {
-		ProfileKey {
-			user_pubkey: profile.user_pubkey,
-			server_pubkey: profile.server_pubkey,
-			server_id: profile.server_id,
-		}
 	}
 }
 
 impl Writeable for ProfileKey {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(PROFILE_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
+		Writeable::write(&self.user_pubkey, writer)?;
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		Ok(())
 	}
 }
 
 impl Readable for ProfileKey {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut user_pubkey = [0u8; 32];
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-		let _ = reader.read_u8()?;
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-		Ok(ProfileKey {
+		let _ = reader.read_u8()?; // for prefix
+		let user_pubkey = Pubkey::read(reader)?;
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		Ok(Self {
 			user_pubkey,
 			server_pubkey,
 			server_id,
-		})
-	}
-}
-
-impl From<Profile> for ProfileValue {
-	fn from(profile: Profile) -> ProfileValue {
-		ProfileValue {
-			profile_data: profile.profile_data,
-			avatar: profile.avatar.clone(),
-		}
-	}
-}
-
-impl Writeable for ProfileValue {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		let avatar_len = self.avatar.len();
-		writer.write_u64(avatar_len.try_into()?)?;
-		for i in 0..avatar_len {
-			writer.write_u8(self.avatar[i])?;
-		}
-
-		Writeable::write(&self.profile_data, writer)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for ProfileValue {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut avatar = vec![];
-		let avatar_len = reader.read_u64()?;
-		for _ in 0..avatar_len {
-			avatar.push(reader.read_u8()?);
-		}
-		let profile_data = ProfileData::read(reader)?;
-
-		Ok(ProfileValue {
-			avatar,
-			profile_data,
-		})
-	}
-}
-
-impl Writeable for ProfileData {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		let name_len = self.user_name.len();
-		writer.write_u64(name_len.try_into()?)?;
-		let name_bytes = self.user_name.as_bytes();
-		for i in 0..name_len {
-			writer.write_u8(name_bytes[i])?;
-		}
-		let bio_len = self.user_bio.len();
-		writer.write_u64(bio_len.try_into()?)?;
-		let bio_bytes = self.user_bio.as_bytes();
-		for i in 0..bio_len {
-			writer.write_u8(bio_bytes[i])?;
-		}
-		Ok(())
-	}
-}
-
-impl Readable for ProfileData {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let name_len = reader.read_u64()?;
-		let mut user_name = vec![];
-		for _ in 0..name_len {
-			user_name.push(reader.read_u8()?);
-		}
-		let user_name = std::str::from_utf8(&user_name)?.to_string();
-		let bio_len = reader.read_u64()?;
-		let mut user_bio = vec![];
-		for _ in 0..bio_len {
-			user_bio.push(reader.read_u8()?);
-		}
-		let user_bio = std::str::from_utf8(&user_bio)?.to_string();
-		Ok(ProfileData {
-			user_name,
-			user_bio,
 		})
 	}
 }
@@ -1650,16 +1518,20 @@ impl DSContext {
 			AUTH_FLAG_OWNER | AUTH_FLAG_MEMBER
 		};
 
-		let profile = self.get_profile_impl(user_pubkey, user_pubkey, [0u8; 8], &batch)?;
+		//let profile = self.get_profile_impl(user_pubkey, user_pubkey, [0u8; 8], &batch)?;
+		//let profile = Some(get_default_profile());
+		let profile = Some(Profile::default());
 
-		let profile = match profile {
-			Some(mut profile) => {
-				profile.server_id = server_id;
-				profile.server_pubkey = server_info.pubkey;
-				Some(profile)
-			}
-			None => None,
-		};
+		/*
+				let profile = match profile {
+					Some(mut profile) => {
+						profile.server_id = ServerId::from_bytes(server_id);
+						profile.server_pubkey = Pubkey::from_bytes(server_info.pubkey);
+						Some(profile)
+					}
+					None => None,
+				};
+		*/
 
 		self.set_member(
 			user_pubkey,
@@ -1874,15 +1746,8 @@ impl DSContext {
 					let next = itt.next();
 					match next {
 						Some(mut m) => {
-							let profile = self.get_profile_impl(
-								m.user_pubkey,
-								server_pubkey,
-								server_id,
-								&batch,
-							)?;
-							let profile = profile.unwrap_or(get_default_profile());
-							m.user_name = profile.profile_data.user_name;
-							m.user_bio = profile.profile_data.user_bio;
+							m.user_name = "not implemented".to_string();
+							m.user_bio = "not implemented".to_string();
 							m.seqno = message_num;
 							message_num += 1;
 							ret.push(m);
@@ -2188,11 +2053,11 @@ impl DSContext {
 	pub fn accept_invite(
 		&self,
 		invite_id: u128,
-		user_pubkey: [u8; 32],
-		server_pubkey: [u8; 32],
-		user_name: String,
-		user_bio: String,
-		avatar: Vec<u8>,
+		_user_pubkey: [u8; 32],
+		_server_pubkey: [u8; 32],
+		_user_name: String,
+		_user_bio: String,
+		_avatar: Vec<u8>,
 	) -> Result<Option<ServerInfoReply>, Error> {
 		let batch = self.store.batch()?;
 		let mut key = vec![INVITE_ID_PREFIX];
@@ -2211,28 +2076,30 @@ impl DSContext {
 					batch.put_ser(&key, &buffer)?;
 
 					// build the profile
-					let profile = Profile {
-						user_pubkey,
-						server_pubkey,
-						server_id: invite.server_id,
-						avatar,
-						profile_data: ProfileData {
-							user_name,
-							user_bio,
-						},
-					};
+					/*
+										let profile = Profile {
+											user_pubkey: Pubkey::from_bytes(user_pubkey),
+											server_pubkey: Pubkey::from_bytes(server_pubkey),
+											server_id: ServerId::from_bytes(invite.server_id),
 
-					// add to member table
-					self.set_member(
-						user_pubkey,
-						invite.server_id,
-						server_pubkey,
-						AUTH_FLAG_MEMBER,
-						Some(profile),
-						None,
-						None,
-						&batch,
-					)?;
+											profile_data: Some(ProfileData {
+												user_name: user_name.into(),
+												user_bio: user_bio.into(),
+											}).into(),
+										};
+
+										// add to member table
+										self.set_member(
+											user_pubkey,
+											invite.server_id,
+											server_pubkey,
+											AUTH_FLAG_MEMBER,
+											Some(profile),
+											None,
+											None,
+											&batch,
+										)?;
+					*/
 
 					let mut key = vec![SERVER_PREFIX];
 					key.append(&mut invite.server_id.to_vec());
@@ -2263,7 +2130,7 @@ impl DSContext {
 		user_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		server_pubkey: [u8; 32],
-		get_profile: bool, // whether to get profile too
+		_get_profile: bool, // whether to get profile too
 		batch: &Batch,
 	) -> Result<Option<Member>, Error> {
 		let hash_key = MemberKeyHashImpl {
@@ -2275,11 +2142,14 @@ impl DSContext {
 		serialize_default(&mut hash_key_buffer, &hash_key)?;
 		let member_value_impl: Option<MemberValueImpl> = batch.get_ser(&hash_key_buffer)?;
 
-		let profile = if get_profile {
-			self.get_profile_impl(user_pubkey, server_pubkey, server_id, batch)?
-		} else {
-			None
-		};
+		/*
+				let profile = if get_profile {
+					self.get_profile_impl(user_pubkey, server_pubkey, server_id, batch)?
+				} else {
+					None
+				};
+		*/
+		let profile = None;
 
 		match member_value_impl {
 			Some(m) => Ok(Some(Member {
@@ -2354,17 +2224,8 @@ impl DSContext {
 		let member = match member {
 			Some(mut member) => {
 				match profile {
-					Some(mut profile) => {
-						let existing_avatar = match member.profile {
-							Some(profile) => profile.avatar,
-							None => vec![],
-						};
-						// if avatar len is 0, it means the server didn't send it.
-						// maintain the old avatar if we have it.
-						if profile.avatar.len() == 0 && existing_avatar.len() > 0 {
-							profile.avatar = existing_avatar;
-						}
-						member.profile = Some(profile);
+					Some(_profile) => {
+						// TODO Handle profile update here
 					}
 					None => {}
 				}
@@ -2466,9 +2327,7 @@ impl DSContext {
 		}
 
 		match &member.profile {
-			Some(profile) => {
-				self.save_profile_impl(profile.clone(), batch)?;
-			}
+			Some(_profile) => {}
 			None => {}
 		}
 
@@ -2480,7 +2339,7 @@ impl DSContext {
 		server_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		batch_num: u64,
-		include_profile: bool,
+		_include_profile: bool,
 		auth: bool, // if true send back users with auth privileges (moderators), otherwise members.
 	) -> Result<Vec<Member>, Error> {
 		let batch = self.store.batch()?;
@@ -2571,19 +2430,7 @@ impl DSContext {
 			}
 		}
 
-		match include_profile {
-			true => {
-				for mut member in &mut ret {
-					member.profile = self.get_profile_impl(
-						member.user_pubkey,
-						server_pubkey,
-						server_id,
-						&batch,
-					)?;
-				}
-			}
-			false => {}
-		}
+		// handle including profile here
 
 		Ok(ret)
 	}
@@ -2758,7 +2605,85 @@ impl DSContext {
 		}
 	*/
 
-	pub fn get_profile(
+	pub fn get_profiles(
+		&self,
+		user_pubkeys: Vec<Pubkey>,
+		server_pubkey: Pubkey,
+		server_id: ServerId,
+	) -> Result<Vec<Option<Profile>>, Error> {
+		let batch = self.store.batch()?;
+		let res = self.get_profiles_impl(user_pubkeys, server_pubkey, server_id, &batch)?;
+		batch.commit()?;
+		Ok(res)
+	}
+
+	pub fn set_profile(
+		&self,
+		user_pubkey: Pubkey,
+		server_pubkey: Pubkey,
+		server_id: ServerId,
+		profile_data: ProfileValue,
+	) -> Result<(), Error> {
+		let batch = self.store.batch()?;
+		self.set_profile_impl(user_pubkey, server_pubkey, server_id, profile_data, &batch)?;
+		batch.commit()?;
+		Ok(())
+	}
+
+	fn get_profiles_impl(
+		&self,
+		user_pubkeys: Vec<Pubkey>,
+		server_pubkey: Pubkey,
+		server_id: ServerId,
+		batch: &Batch,
+	) -> Result<Vec<Option<Profile>>, Error> {
+		let mut ret = vec![];
+		for user_pubkey in user_pubkeys {
+			let profile_key = ProfileKey {
+				user_pubkey: user_pubkey.clone(),
+				server_pubkey: server_pubkey.clone(),
+				server_id: server_id.clone(),
+			};
+			let mut profile_key_buffer = vec![];
+			serialize_default(&mut profile_key_buffer, &profile_key)?;
+			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			match profile_value {
+				Some(profile_data) => {
+					ret.push(Some(Profile {
+						user_pubkey: user_pubkey.clone(),
+						server_pubkey: server_pubkey.clone(),
+						server_id: server_id.clone(),
+						profile_data,
+					}));
+				}
+				None => ret.push(None),
+			}
+		}
+		Ok(ret)
+	}
+
+	fn set_profile_impl(
+		&self,
+		user_pubkey: Pubkey,
+		server_pubkey: Pubkey,
+		server_id: ServerId,
+		profile_data: ProfileValue,
+		batch: &Batch,
+	) -> Result<(), Error> {
+		let profile_key = ProfileKey {
+			user_pubkey,
+			server_pubkey,
+			server_id,
+		};
+		let mut profile_key_buffer = vec![];
+		serialize_default(&mut profile_key_buffer, &profile_key)?;
+		let mut profile_data_buffer = vec![];
+		serialize_default(&mut profile_data_buffer, &profile_data)?;
+		batch.put_ser(&profile_key_buffer, &profile_data_buffer)?;
+		Ok(())
+	}
+
+	/*pub fn get_profile(
 		&self,
 		user_pubkey: [u8; 32],
 		server_pubkey: [u8; 32],
@@ -2766,9 +2691,9 @@ impl DSContext {
 	) -> Result<Option<Profile>, Error> {
 		let batch = self.store.batch()?;
 		self.get_profile_impl(user_pubkey, server_pubkey, server_id, &batch)
-	}
+	}*/
 
-	fn get_profile_impl(
+	/*fn get_profile_impl(
 		&self,
 		user_pubkey: [u8; 32],
 		server_pubkey: [u8; 32],
@@ -2796,9 +2721,9 @@ impl DSContext {
 			})),
 			None => Ok(None),
 		}
-	}
+	}*/
 
-	fn save_profile_impl(&self, profile: Profile, batch: &Batch) -> Result<(), Error> {
+	/*fn save_profile_impl(&self, profile: Profile, batch: &Batch) -> Result<(), Error> {
 		let profile_key: ProfileKey = profile.clone().into();
 		let profile_value: ProfileValue = profile.into();
 		let mut profile_key_buffer = vec![];
@@ -2806,16 +2731,16 @@ impl DSContext {
 		batch.put_ser(&profile_key_buffer, &profile_value)?;
 
 		Ok(())
-	}
+	}*/
 
-	pub fn save_profile(&self, profile: Profile) -> Result<(), Error> {
+	/*pub fn save_profile(&self, profile: Profile) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		self.save_profile_impl(profile, &batch)?;
 		batch.commit()?;
 		Ok(())
-	}
+	}*/
 
-	pub fn set_profile_image(
+	/*pub fn set_profile_image(
 		&self,
 		user_pubkey: [u8; 32],
 		server_pubkey: [u8; 32],
@@ -2854,9 +2779,9 @@ impl DSContext {
 		}
 
 		Ok(())
-	}
+	}*/
 
-	pub fn get_profile_images(
+	/*pub fn get_profile_images(
 		&self,
 		user_pubkeys: Vec<[u8; 32]>,
 		server_pubkey: [u8; 32],
@@ -2887,9 +2812,9 @@ impl DSContext {
 		}
 
 		Ok(ret)
-	}
+	}*/
 
-	pub fn get_profile_data(
+	/*pub fn get_profile_data(
 		&self,
 		user_pubkeys: Vec<[u8; 32]>,
 		server_pubkey: [u8; 32],
@@ -2924,9 +2849,9 @@ impl DSContext {
 		}
 
 		Ok(ret)
-	}
+	}*/
 
-	pub fn set_profile_data(
+	/*pub fn set_profile_data(
 		&self,
 		user_pubkey: [u8; 32],
 		server_pubkey: [u8; 32],
@@ -2954,7 +2879,7 @@ impl DSContext {
 			}
 			None => Err(ErrorKind::ProfileNotFoundErr("profile not found".to_string()).into()),
 		}
-	}
+	}*/
 
 	pub fn save_ws_auth_token(&self, token: u128) -> Result<(), Error> {
 		let batch = self.store.batch()?;
