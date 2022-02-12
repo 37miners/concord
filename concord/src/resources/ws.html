@@ -2,6 +2,7 @@
 		<title>Welcome to NIO Runtime Httpd Server!</title>
         	<script>
 			var sock;
+			var global_server_pubkey;
 var alphabet = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 var to_b58 = function(B,A){var d=[],s="",i,j,c,n;for(i in B){j=0,c=B[i];s+=c||s.length^i?"":1;while(j in d||c){n=d[j];n=n?n*256+c:c;c=n/58|0;d[j]=n%58;j++}}while(j--)s+=A[d[j]];return s};
 var from_b58 = function(S,A){var d=[],b=[],i,j,c,n;for(i in S){j=0,c=A.indexOf(S[i]);if(c<0)return undefined;c||b.length^i?i:b.push(0);while(j in d||c){n=d[j];n=n?n*58+c:c;c=n>>8;d[j]=n%256;j++}}while(j--)b.push(d[j]);return new Uint8Array(b)};
@@ -32,7 +33,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                 )
                                         );
 
-                                        let create_server_buffer = event.serialize(event);
+                                        var create_server_buffer = event.serialize(event);
                                         sock.send(create_server_buffer);
 				};
 				reader.onerror = function(e) {
@@ -51,7 +52,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						0,
                                         )
                                 );
-                                let buffer = event.serialize(event);
+                                var buffer = event.serialize(event);
                                 sock.send(buffer);
 			}
 			
@@ -63,7 +64,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						server_pubkey,
 					)
 				);
-				let buffer = event.serialize(event);
+				var buffer = event.serialize(event);
 				sock.send(buffer);
 			}
         	</script>
@@ -80,11 +81,11 @@ function convertBinaryStringToUint8Array(bStr) {
 		Test WS</br>
 		<script>
 			function getCookie(cname) {
-				let name = cname + "=";
-				let decodedCookie = decodeURIComponent(document.cookie);
-				let ca = decodedCookie.split(';');
-				for(let i = 0; i <ca.length; i++) {
-					let c = ca[i];
+				var name = cname + "=";
+				var decodedCookie = decodeURIComponent(document.cookie);
+				var ca = decodedCookie.split(';');
+				for(var i = 0; i <ca.length; i++) {
+					var c = ca[i];
 					while (c.charAt(0) == ' ') {
 						c = c.substring(1);
 					}
@@ -111,7 +112,7 @@ function convertBinaryStringToUint8Array(bStr) {
 					var event = new Event(
 						EVENT_TYPE_GET_SERVERS_EVENT,
 					);
-					let challenge = event.serialize(event);
+					var challenge = event.serialize(event);
 					sock.send(challenge);
 				}
 				else if(recv_event.event_type == EVENT_TYPE_CHALLENGE) {
@@ -125,7 +126,7 @@ function convertBinaryStringToUint8Array(bStr) {
 							new SerOption(),
 						)
 					);
-					let resp_buffer = event.serialize(event);
+					var resp_buffer = event.serialize(event);
 					sock.send(resp_buffer);
 				} else if(recv_event.event_type == EVENT_TYPE_GET_CHANNELS_RESPONSE) {
 					var channels = recv_event.get_channels_response.channels;
@@ -158,7 +159,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                         	)
                                                 	);
 
-                                                	let buffer = event.serialize(event);
+                                                	var buffer = event.serialize(event);
                                                 	sock.send(buffer);
 						};
 						channel_div.appendChild(delete_chan);
@@ -181,7 +182,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                                 )
                                                         );
 
-                                                        let buffer = event.serialize(event);
+                                                        var buffer = event.serialize(event);
                                                         sock.send(buffer);
                                                 };
                                                 channel_div.appendChild(mod_chan);
@@ -204,7 +205,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                 	)
                                                 );
 
-                                                let buffer = event.serialize(event);
+                                                var buffer = event.serialize(event);
                                                 sock.send(buffer);
 					};
 					add_chan.appendChild(add_chan_link);
@@ -238,7 +239,7 @@ function convertBinaryStringToUint8Array(bStr) {
                                                         	)
                                                 	);
 
-                                                	let buffer = Event.prototype.serialize(event);
+                                                	var buffer = Event.prototype.serialize(event);
                                                 	sock.send(buffer);
 						};
 						invite_div.appendChild(del_invite);
@@ -254,6 +255,7 @@ function convertBinaryStringToUint8Array(bStr) {
 						document.body.appendChild(document.createElement('br'));
 					}
 				} else if(recv_event.event_type == EVENT_TYPE_GET_SERVERS_RESPONSE) {
+					global_server_pubkey = recv_event.get_servers_response.server_pubkey.data;
 					var servers = recv_event.get_servers_response.servers;
 					for(var i=0; i<servers.length; i++) {
 						var name = servers[i].name.value;
@@ -287,7 +289,7 @@ function convertBinaryStringToUint8Array(bStr) {
 								)
 							);
 
-							let buffer = event.serialize(event);
+							var buffer = event.serialize(event);
 							sock.send(buffer);
 						}
 						var mod_server = document.createElement('a');
@@ -306,7 +308,7 @@ function convertBinaryStringToUint8Array(bStr) {
 								)
 							);
 
-							let buffer = event.serialize(event);
+							var buffer = event.serialize(event);
 							sock.send(buffer);
 						}
 						document.body.appendChild(del_server);
@@ -358,11 +360,35 @@ function convertBinaryStringToUint8Array(bStr) {
 						invites.innerHTML = 'invites for ' + name + ': ';
 						document.body.appendChild(invites);
 
-						let buffer = Event.prototype.serialize(event);
+						var buffer = Event.prototype.serialize(event);
 						sock.send(buffer);
 					}
 				}
 			}
+
+			function set_profile() {
+				var user_name = document.forms['create_server']['server_name'].value;
+				var user_bio = document.forms['create_server']['other'].value;
+				var avatar = '';
+				var server_id = new ArrayBuffer(8);
+				var server_id = new Uint8Array(server_id);
+				var icon = convertBinaryStringToUint8Array('');
+				for(var i=0; i<8; i++) server_id[i] = 0;
+				var event = new Event(
+					EVENT_TYPE_SET_PROFILE_REQUEST,
+					new SetProfileRequest(
+						new Pubkey(global_server_pubkey),
+						new ServerId(server_id),
+						new SerOption(),
+						new SerOption(new ProfileData(user_name, user_bio)),
+					)
+				);
+
+				sock.send(Event.prototype.serialize(event));
+			}
 		</script>
+
+		<a id=set_profile_link href="Javascript:set_profile()">set profile</a>
+		<br/>
 	</body>
 </html>

@@ -15,7 +15,8 @@
 use crate::nioruntime_log;
 use crate::nioruntime_tor::ov3::OnionV3Address;
 use crate::ser::{chunk_read, chunk_write, Readable, Reader, Writeable, Writer};
-use concorderror::Error;
+use concorderror::{Error, ErrorKind};
+use ed25519_dalek::PublicKey;
 use nioruntime_log::*;
 use std::convert::TryInto;
 
@@ -60,6 +61,7 @@ impl Writeable for SerString {
 impl Readable for SerString {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let len = reader.read_u64()?;
+		info!("serstring len={}", len);
 		let mut byte_vec = vec![];
 		for _ in 0..len {
 			byte_vec.push(reader.read_u8()?);
@@ -87,7 +89,7 @@ impl Readable for U128 {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Signature(pub [u8; 64]);
 
 impl Writeable for Signature {
@@ -107,6 +109,21 @@ impl Readable for Signature {
 		}
 
 		Ok(Self(signature))
+	}
+}
+
+impl From<ed25519_dalek::Signature> for Signature {
+	fn from(signature: ed25519_dalek::Signature) -> Self {
+		Self(signature.to_bytes())
+	}
+}
+
+impl Signature {
+	pub fn to_dalek(&self) -> Result<ed25519_dalek::Signature, Error> {
+		ed25519_dalek::Signature::from_bytes(&self.0).map_err(|e| {
+			let error: Error = ErrorKind::DalekError(format!("{}", e)).into();
+			error
+		})
 	}
 }
 
@@ -144,7 +161,7 @@ impl<T> From<Option<T>> for SerOption<T> {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ServerId {
 	data: [u8; 8],
 }
@@ -215,7 +232,7 @@ impl From<[u8; 8]> for ServerId {
 	}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Pubkey {
 	data: [u8; 32],
 }
@@ -260,6 +277,19 @@ impl Pubkey {
 	pub fn from_base58(&mut self, s: String) -> Result<(), Error> {
 		self.data = (bs58::decode(s).into_vec()?)[..].try_into()?;
 		Ok(())
+	}
+
+	pub fn to_dalek(&self) -> Result<PublicKey, Error> {
+		PublicKey::from_bytes(&self.data).map_err(|e| {
+			let error: Error = ErrorKind::DalekError(format!("{}", e)).into();
+			error
+		})
+	}
+
+	pub fn from_dalek(pubkey: PublicKey) -> Self {
+		Self {
+			data: *pubkey.as_bytes(),
+		}
 	}
 }
 
@@ -377,12 +407,12 @@ impl From<Vec<u8>> for Image {
 }
 
 #[derive(Debug, Clone)]
-pub struct ProfileValue {
+pub struct ProfileData {
 	pub user_name: SerString,
 	pub user_bio: SerString,
 }
 
-impl Default for ProfileValue {
+impl Default for ProfileData {
 	fn default() -> Self {
 		Self {
 			user_name: SerString {
@@ -395,7 +425,7 @@ impl Default for ProfileValue {
 	}
 }
 
-impl Writeable for ProfileValue {
+impl Writeable for ProfileData {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		Writeable::write(&self.user_name, writer)?;
 		Writeable::write(&self.user_bio, writer)?;
@@ -404,7 +434,7 @@ impl Writeable for ProfileValue {
 	}
 }
 
-impl Readable for ProfileValue {
+impl Readable for ProfileData {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let user_name = SerString::read(reader)?;
 		let user_bio = SerString::read(reader)?;

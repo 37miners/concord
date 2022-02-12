@@ -78,7 +78,7 @@ pub enum AuthParams {
 /// use concordutil::nioruntime_log as nioruntime_log;
 /// use nioruntime_log::*;
 /// use concordlib::client::{WSListenerClient,AuthParams};
-/// use concordlib::types::{Event,EventType,GetServersEvent};
+/// use concordlib::types::{Event,EventBody,GetServersEvent};
 /// use std::sync::{RwLock,Arc};
 ///
 /// debug!();
@@ -108,12 +108,12 @@ pub enum AuthParams {
 ///                *time = std::time::Instant::now();
 ///
 ///                // respond to specific event types
-///                match event.event_type {
-///                        EventType::AuthResponse => {
+///                match event.body {
+///                        EventBody::AuthResponse(_) => {
 ///                                let event = Event {
-///                                        event_type: EventType::GetServersEvent,
-///                                        get_servers_event: Some(GetServersEvent {
-///                                        }).into(),
+///                                        body: EventBody::GetServersEvent(
+///                                        	GetServersEvent {}
+///                                        ),
 ///                                        ..Default::default()
 ///                                };
 ///
@@ -121,7 +121,7 @@ pub enum AuthParams {
 ///                                writer.send(event)?;
 ///                                info!("Processing auth message");
 ///                        },
-///                        EventType::GetServersResponse => {
+///                        EventBody::GetServersResponse(_) => {
 ///                                info!("Got a servers response: {:?}", event);
 ///                                // close the connection and free all resources
 ///                                writer.close()?;
@@ -135,13 +135,13 @@ pub enum AuthParams {
 ///        })?;
 ///
 ///        // set an error callback handler
-///        client.set_error(move |e| {
+///        client.set_error(move |e, onion| {
 ///                error!("got an error: {}", e);
 ///                Ok(())
 ///        })?;
 ///
 ///        // start the client
-///        client.start()?;
+///        client.start(None)?;
 ///
 ///        // park the thread so that the client doesn't immediately exit.
 ///        std::thread::park();

@@ -47,13 +47,7 @@ pub fn get_members(
 	// TODO: online/offline and role ordering
 
 	let mut members = ds_context
-		.get_members(
-			server_pubkey.to_bytes(),
-			server_id.to_bytes(),
-			0,
-			true,
-			true,
-		)
+		.get_members(server_pubkey.to_bytes(), server_id.to_bytes(), 0, true)
 		.map_err(|e| {
 			let error: Error = ErrorKind::ApplicationError(format!(
 				"error accepting invite - members: {}",
@@ -64,13 +58,7 @@ pub fn get_members(
 		})?;
 
 	let mut other_members = ds_context
-		.get_members(
-			server_pubkey.to_bytes(),
-			server_id.to_bytes(),
-			0,
-			true,
-			false,
-		)
+		.get_members(server_pubkey.to_bytes(), server_id.to_bytes(), 0, false)
 		.map_err(|e| {
 			let error: Error = ErrorKind::ApplicationError(format!(
 				"error accepting invite - members: {}",
@@ -83,7 +71,8 @@ pub fn get_members(
 
 	let mut types_members: Vec<crate::types::Member> = vec![];
 	for member in members {
-		types_members.push(member.into());
+		let member: crate::types::Member = member.into();
+		types_members.push(member);
 	}
 
 	let event = Event {

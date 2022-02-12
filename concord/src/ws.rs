@@ -20,6 +20,7 @@ use crate::invite::{
 	view_invite,
 };
 use crate::members::get_members;
+use crate::message::{get_messages, send_message, subscribe_channel};
 use crate::profile::{get_profile, set_profile};
 use crate::server::{create_server, delete_server, get_servers, modify_server};
 use crate::types::*;
@@ -177,6 +178,24 @@ fn process_authed_event(
 			try2!(
 				set_profile(connection_info, ds_context, &event, conn_manager, config),
 				"set profile request error"
+			)
+		}
+		EventBody::GetMessagesRequest(_) => {
+			try2!(
+				get_messages(connection_info, ds_context, &event, conn_manager, config),
+				"get messages error"
+			)
+		}
+		EventBody::SendMessage(_) => {
+			try2!(
+				send_message(connection_info, ds_context, &event, conn_manager, config),
+				"send message error"
+			)
+		}
+		EventBody::SubscribeChannel(_) => {
+			try2!(
+				subscribe_channel(connection_info, ds_context, &event, conn_manager, config),
+				"subscribe channel error"
 			)
 		}
 		_ => {

@@ -25,6 +25,7 @@ use concorddata::concord::ServerInfoReply;
 use concorddata::types::Image;
 use concorddata::types::Pubkey;
 use concorddata::types::SerString;
+use concorddata::types::ServerId;
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
@@ -32,6 +33,8 @@ use librustlet::*;
 use nioruntime_log::*;
 use std::sync::{Arc, RwLock};
 use substring::Substring;
+
+const LOCAL_SERVER_ID: [u8; 8] = [0u8; 8];
 
 debug!(); // set log level to debug
 
@@ -330,7 +333,7 @@ pub fn accept_invite(
 
 pub fn join_server(
 	conn_info: &ConnectionInfo,
-	_ds_context: &DSContext,
+	ds_context: &DSContext,
 	event: &Event,
 	conn_manager: Arc<RwLock<ConnManager>>,
 	config: &ConcordConfig,
@@ -346,14 +349,32 @@ pub fn join_server(
 		// Something's wrong. We can't join our own server
 		warn!("tried to join our own server: {:?}", event);
 	} else {
+		let pubkey = Pubkey::from_bytes(pubkey!());
+		let profiles = ds_context.get_profiles(
+			vec![pubkey.clone()],
+			pubkey,
+			ServerId::from_bytes(LOCAL_SERVER_ID),
+		)?;
+
+		let (user_name, user_bio) = match profiles.len() == 1 {
+			true => match &profiles[0] {
+				Some(profile_data) => (
+					profile_data.profile_data.user_name.clone(),
+					profile_data.profile_data.user_bio.clone(),
+				),
+				None => ("".to_string().into(), "".to_string().into()),
+			},
+			false => ("".to_string().into(), "".to_string().into()),
+		};
+
 		let event = Event {
 			request_id,
 			body: EventBody::AcceptInviteRequest(crate::types::AcceptInviteRequest {
 				invite_id,
 				user_pubkey: pubkey!(),
 				server_pubkey,
-				user_name: "ourname".to_string().into(),
-				user_bio: "ourbio".to_string().into(),
+				user_name,
+				user_bio,
 				avatar: Image { data: vec![] },
 			}),
 			..Default::default()
@@ -371,90 +392,6 @@ pub fn join_server(
 			}),
 		)?;
 	}
-	/*
-							EventBody::JoinServerRequest(event) => event.invite_url.clone(),
-							_ => {
-									warn!("Malformed join server event. No event present: {:?}", event);
-									return Ok(true);
-							},
-					};
-
-			let url = url::Url::parse(&invite_url.to_string())?;
-			let onion = url.host();
-
-			let onion = match onion {
-					Some(onion) => onion,
-					None => {
-							warn!("Invalid link address in check_invite. No host.");
-							return Ok(true);
-					}
-			}
-			.to_string();
-
-			let path = url.path();
-			if path.find("/i/") != Some(0) {
-					return Ok(true);
-			}
-			let id: u128 = (path.substring(3, path.len())).parse()?;
-			let pubkey = Pubkey::from_onion(&onion)?.to_bytes();
-
-			if pubkey == pubkey!() {
-			// Something's wrong. We can't join our own server
-			warn!("tried to join our own server: {:?}", event);
-		} else {
-					// this is our host, we can process directly
-					let sinfo = ds_context
-							.accept_invite(
-									invite_id,
-									user_pubkey,
-									server_pubkey,
-									user_name,
-									user_bio,
-									avatar,
-							)
-							.map_err(|e| {
-									let error: Error = ErrorKind::ApplicationError(format!(
-											"error accepting invite: {}",
-											e.to_string()
-									))
-									.into();
-									error
-							})?;
-					info!("jri={:?}", jri);
-					match jri {
-							Some(jri) => {
-									let event = Event {
-											request_id,
-											body: EventBody::JoinServerResponse(JoinServerResponse {
-							success: true,
-											}),
-											..Default::default()
-									};
-
-									send!(conn_info.handle, event);
-							}
-							None => {
-									info!("no jri!");
-									let event = Event {
-											request_id,
-											body: EventBody::(ViewInviteResponse {
-													response_info: None,
-											}),
-											..Default::default()
-									};
-	 //                               send!(conn_info.handle, event);
-							}
-					}
-
-			} else {
-					let event = Event {
-							body: EventBody::ViewInviteRequest(crate::types::ViewInviteRequest{
-									invite_url,
-							}),
-							..Default::default()
-					};
-		}
-	*/
 
 	Ok(false)
 }

@@ -17,7 +17,7 @@ use concorderror::Error;
 use concordlib::client::{AuthParams, WSListenerClient};
 use concordlib::types::*;
 use concordutil::nioruntime_log;
-use ed25519_dalek::{ExpandedSecretKey, SecretKey};
+use ed25519_dalek::{ExpandedSecretKey, PublicKey, SecretKey};
 use nioruntime_log::*;
 use std::sync::{Arc, RwLock};
 
@@ -26,8 +26,12 @@ debug!();
 fn main() -> Result<(), Error> {
 	let secret = [0u8; 32];
 	let secret_key = SecretKey::from_bytes(&secret)?;
+	let user_pubkey: PublicKey = (&secret_key).into();
+	let user_pubkey = Pubkey::from_bytes(user_pubkey.to_bytes());
 	let secret_key: ExpandedSecretKey = (&secret_key).into();
 	let secret = secret_key.to_bytes();
+
+	info!("starting with user_pubkey {:?}", user_pubkey);
 
 	let mut client = WSListenerClient::new(
 		"hlcmyr6xwkgg4sjsnttms5gyc2imtoj6ecbtm34rddklla6lky4i7bad.onion".to_string(),
@@ -55,24 +59,45 @@ fn main() -> Result<(), Error> {
 		match &event.body {
 			EventBody::AuthResponse(_e) => {
 				info!("Processing auth message: {:?}", event);
-/*
+
 				let event = Event {
 					body: EventBody::ViewInviteRequest(
-					ViewInviteRequest { invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/32956607639384457967896023181155810984".into()}),
+					ViewInviteRequest { invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/74447668189693976956422911572595666066".into()}),
 					..Default::default()
 				};
-*/
+/*
 				let server_pubkey = Pubkey::from_onion("bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid")?;
+				info!("setting to pubkey = {:?}", server_pubkey);
 				let event = Event {
 					body: EventBody::SetProfileRequest(
 						SetProfileRequest {
 							//server_pubkey: Pubkey::from_bytes([0u8; 32]),
 							server_pubkey,
 							server_id: ServerId::from_bytes([0u8; 8]),
-							avatar: Some(Image { data: [1,2,3,4].to_vec() }).into(),
+							avatar: Some(Image { data: [56,56,56].to_vec() }).into(),
 							profile_data: Some(
-								ProfileValue { user_bio: "my bio".to_string().into(), user_name: "usrabc".to_string().into() }
+								ProfileData { user_bio: "my bio".to_string().into(), user_name: "usrabc".to_string().into() }
 							).into(),
+						}
+					),
+					..Default::default()
+				};
+*/
+				writer.send(event)?;
+			}
+			EventBody::SetProfileResponse(e) => {
+				info!("got a set profile response: {:?}", e);
+				let server_pubkey = Pubkey::from_onion("bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid")?;
+				let user_pubkey: [u8; 32] = [58, 196, 204, 71, 215, 178, 140, 110, 73, 50, 108, 230, 201, 116, 216, 22, 144, 201, 185, 62, 32, 131, 54, 111, 145, 24, 212, 181, 131, 203, 86, 56];
+				let user_pubkey = Pubkey::from_bytes(user_pubkey);
+				let event = Event {
+					body: EventBody::GetProfileRequest(
+						GetProfileRequest {
+							server_pubkey,
+							server_id: ServerId::from_bytes([0u8; 8]),
+							user_pubkeys: vec![user_pubkey.clone()],
+							image_request_type: ProfileImageRequestType::SaveAvatars,
+							include_profile_data: true,
 						}
 					),
 					..Default::default()
@@ -88,7 +113,7 @@ fn main() -> Result<(), Error> {
 				let event = Event {
 					body: EventBody::JoinServerRequest(
 						JoinServerRequest {
-							invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/32956607639384457967896023181155810984".into()
+							invite_url: "http://bjnwu6l4vmps25kwf33wrjy226xkywnwrjwbvrdbvxf74f4dbilawqid.onion/i/74447668189693976956422911572595666066".into()
 						}
 					),
 					..Default::default()

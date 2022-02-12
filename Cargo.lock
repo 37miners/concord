@@ -393,6 +393,7 @@ dependencies = [
  "concordutil",
  "croaring-mw",
  "dirs",
+ "ed25519-dalek",
  "env_logger",
  "failure",
  "failure_derive",

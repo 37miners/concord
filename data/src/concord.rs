@@ -16,7 +16,7 @@ use crate::lmdb::{Batch, Store};
 use crate::nioruntime_log;
 use crate::ser::serialize_default;
 use crate::ser::{BinReader, ProtocolVersion, Readable, Reader, Writeable, Writer};
-use crate::types::{Invite, ProfileValue, Pubkey, SerString, ServerId};
+use crate::types::{Invite, ProfileData, Pubkey, SerString, ServerId};
 use concorderror::{Error, ErrorKind};
 use nioruntime_log::*;
 
@@ -34,7 +34,7 @@ info!();
 
 pub fn get_default_profile() -> Profile {
 	Profile {
-		profile_data: ProfileValue {
+		profile_data: ProfileData {
 			user_name: SerString {
 				data: "User Default".to_string(),
 			},
@@ -59,7 +59,7 @@ pub struct Profile {
 	pub user_pubkey: Pubkey,
 	pub server_pubkey: Pubkey,
 	pub server_id: ServerId,
-	pub profile_data: ProfileValue,
+	pub profile_data: ProfileData,
 }
 
 struct ProfileKey {
@@ -74,7 +74,7 @@ impl Default for Profile {
 			user_pubkey: Pubkey::from_bytes([0u8; 32]),
 			server_pubkey: Pubkey::from_bytes([0u8; 32]),
 			server_id: ServerId::from_bytes([0u8; 8]),
-			profile_data: ProfileValue::default(),
+			profile_data: ProfileData::default(),
 		}
 	}
 }
@@ -94,7 +94,7 @@ impl Readable for Profile {
 		let user_pubkey = Pubkey::read(reader)?;
 		let server_pubkey = Pubkey::read(reader)?;
 		let server_id = ServerId::read(reader)?;
-		let profile_data = ProfileValue::read(reader)?;
+		let profile_data = ProfileData::read(reader)?;
 
 		Ok(Profile {
 			profile_data,
@@ -246,137 +246,31 @@ impl Readable for InviteKey {
 
 // member data structures
 
-#[derive(Clone, Debug)]
+// member structure returned by get_members
+#[derive(Debug, Clone)]
 pub struct Member {
-	pub user_pubkey: [u8; 32],
-	pub server_pubkey: [u8; 32],
-	pub server_id: [u8; 8],
-	pub profile: Option<Profile>,
+	pub user_pubkey: Pubkey,
+	pub profile_data: Option<ProfileData>,
+	pub roles: u128,
+	pub join_time: u64,
+	pub modified_time: u64,
+}
+
+// internal member datastructure
+#[derive(Clone, Debug)]
+pub struct MemberImpl {
+	pub user_pubkey: Pubkey,
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
 	pub roles: u128,
 	pub batch_num: u64,
 	pub join_time: u64,
 	pub modified_time: u64,
 }
 
-impl Writeable for Member {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-		writer.write_u64(self.batch_num)?;
-		writer.write_u64(self.join_time)?;
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
-		writer.write_u128(self.roles)?;
-		writer.write_u64(self.modified_time)?;
-
-		match &self.profile {
-			Some(profile) => {
-				writer.write_u8(1)?;
-				Writeable::write(&profile, writer)?;
-			}
-			None => writer.write_u8(0)?,
-		}
-
-		Ok(())
-	}
-}
-
-impl Readable for Member {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-		let mut user_pubkey = [0u8; 32];
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-		let batch_num = reader.read_u64()?;
-		let join_time = reader.read_u64()?;
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-		let roles = reader.read_u128()?;
-		let modified_time = reader.read_u64()?;
-
-		let profile = match reader.read_u8()? {
-			0 => None,
-			_ => Some(Profile::read(reader)?),
-		};
-
-		Ok(Self {
-			server_pubkey,
-			server_id,
-			batch_num,
-			join_time,
-			user_pubkey,
-			roles,
-			modified_time,
-			profile,
-		})
-	}
-}
-
-#[derive(Debug)]
-pub struct MemberList {
-	pub members: Vec<Member>,
-}
-
-impl Writeable for MemberList {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		writer.write_u64(self.members.len().try_into()?)?;
-		for member in &self.members {
-			Writeable::write(&member, writer)?;
-		}
-
-		Ok(())
-	}
-}
-
-impl Readable for MemberList {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let len = reader.read_u64()?;
-
-		let mut members = vec![];
-
-		for _ in 0..len {
-			members.push(Member::read(reader)?);
-		}
-
-		Ok(Self { members })
-	}
-}
-
-impl MemberList {
-	pub fn new(members: Vec<Member>) -> Result<Self, Error> {
-		Ok(MemberList { members })
-	}
-
-	pub fn from_b58(data: String) -> Result<Self, Error> {
-		let member_data = bs58::decode(data).into_vec()?;
-		let mut cursor = Cursor::new(member_data);
-		cursor.set_position(0);
-		let mut reader = BinReader::new(&mut cursor, ProtocolVersion::local());
-		Ok(Self::read(&mut reader)?)
-	}
-
-	pub fn to_b58(&self) -> Result<String, Error> {
-		let mut data = vec![];
-		serialize_default(&mut data, &self)?;
-		Ok(bs58::encode(&data).into_string())
-	}
-}
-
 struct MemberMetaDataKey {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 }
 
 struct MemberMetaDataValue {
@@ -384,39 +278,39 @@ struct MemberMetaDataValue {
 }
 
 struct MemberKeyIttImpl {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 	batch_num: u64,
 	join_time: u64,
-	user_pubkey: [u8; 32],
+	user_pubkey: Pubkey,
 }
 
 struct MemberKeyHashImpl {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
-	user_pubkey: [u8; 32],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
+	user_pubkey: Pubkey,
 }
 
 struct MemberKeyAuthImpl {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 	roles: u128,
 	batch_num: u64,
 	join_time: u64,
-	user_pubkey: [u8; 32],
+	user_pubkey: Pubkey,
 }
 
 #[derive(Debug)]
 struct MemberBatchLookupKeyImpl {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 	batch_num: u64,
 }
 
 #[derive(Debug)]
 struct AuthBatchLookupKeyImpl {
-	server_pubkey: [u8; 32],
-	server_id: [u8; 8],
+	server_pubkey: Pubkey,
+	server_id: ServerId,
 	batch_num: u64,
 }
 
@@ -425,6 +319,18 @@ struct MemberValueImpl {
 	join_time: u64,
 	modified_time: u64,
 	batch_num: u64,
+}
+
+impl From<MemberImpl> for Member {
+	fn from(mi: MemberImpl) -> Self {
+		Self {
+			user_pubkey: mi.user_pubkey,
+			roles: mi.roles,
+			profile_data: None,
+			join_time: mi.join_time,
+			modified_time: mi.modified_time,
+		}
+	}
 }
 
 impl Writeable for MemberMetaDataValue {
@@ -445,12 +351,8 @@ impl Readable for MemberMetaDataValue {
 impl Writeable for MemberMetaDataKey {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_META_DATA_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 
 		Ok(())
 	}
@@ -458,17 +360,10 @@ impl Writeable for MemberMetaDataKey {
 
 impl Readable for MemberMetaDataKey {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
 		reader.read_u8()?;
 
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
 
 		Ok(Self {
 			server_pubkey,
@@ -477,14 +372,14 @@ impl Readable for MemberMetaDataKey {
 	}
 }
 
-impl From<&Member> for MemberKeyIttImpl {
-	fn from(member: &Member) -> MemberKeyIttImpl {
+impl From<&MemberImpl> for MemberKeyIttImpl {
+	fn from(member: &MemberImpl) -> MemberKeyIttImpl {
 		Self {
-			server_pubkey: member.server_pubkey,
-			server_id: member.server_id,
+			server_pubkey: member.server_pubkey.clone(),
+			server_id: member.server_id.clone(),
 			batch_num: member.batch_num,
 			join_time: member.join_time,
-			user_pubkey: member.user_pubkey,
+			user_pubkey: member.user_pubkey.clone(),
 		}
 	}
 }
@@ -492,17 +387,11 @@ impl From<&Member> for MemberKeyIttImpl {
 impl Writeable for MemberKeyIttImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_ITT_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		writer.write_u64(self.batch_num)?;
 		writer.write_u64(self.join_time)?;
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
+		Writeable::write(&self.user_pubkey, writer)?;
 
 		Ok(())
 	}
@@ -510,23 +399,12 @@ impl Writeable for MemberKeyIttImpl {
 
 impl Readable for MemberKeyIttImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-		let mut user_pubkey = [0u8; 32];
-
 		reader.read_u8()?;
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
 		let batch_num = reader.read_u64()?;
 		let join_time = reader.read_u64()?;
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
+		let user_pubkey = Pubkey::read(reader)?;
 
 		Ok(Self {
 			server_pubkey,
@@ -541,12 +419,8 @@ impl Readable for MemberKeyIttImpl {
 impl Writeable for AuthBatchLookupKeyImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_AUTH_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		writer.write_u64(self.batch_num)?;
 
 		Ok(())
@@ -555,17 +429,9 @@ impl Writeable for AuthBatchLookupKeyImpl {
 
 impl Readable for AuthBatchLookupKeyImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
 		reader.read_u8()?;
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
 		let batch_num = reader.read_u64()?;
 
 		Ok(Self {
@@ -579,12 +445,8 @@ impl Readable for AuthBatchLookupKeyImpl {
 impl Writeable for MemberBatchLookupKeyImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_ITT_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		writer.write_u64(self.batch_num)?;
 
 		Ok(())
@@ -593,17 +455,9 @@ impl Writeable for MemberBatchLookupKeyImpl {
 
 impl Readable for MemberBatchLookupKeyImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
 		reader.read_u8()?;
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
 		let batch_num = reader.read_u64()?;
 
 		Ok(Self {
@@ -614,12 +468,12 @@ impl Readable for MemberBatchLookupKeyImpl {
 	}
 }
 
-impl From<&Member> for MemberKeyHashImpl {
-	fn from(member: &Member) -> MemberKeyHashImpl {
+impl From<&MemberImpl> for MemberKeyHashImpl {
+	fn from(member: &MemberImpl) -> MemberKeyHashImpl {
 		Self {
-			server_pubkey: member.server_pubkey,
-			server_id: member.server_id,
-			user_pubkey: member.user_pubkey,
+			server_pubkey: member.server_pubkey.clone(),
+			server_id: member.server_id.clone(),
+			user_pubkey: member.user_pubkey.clone(),
 		}
 	}
 }
@@ -627,15 +481,9 @@ impl From<&Member> for MemberKeyHashImpl {
 impl Writeable for MemberKeyHashImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_HASH_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		Writeable::write(&self.user_pubkey, writer)?;
 
 		Ok(())
 	}
@@ -643,21 +491,10 @@ impl Writeable for MemberKeyHashImpl {
 
 impl Readable for MemberKeyHashImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-		let mut user_pubkey = [0u8; 32];
-
 		reader.read_u8()?;
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let user_pubkey = Pubkey::read(reader)?;
 
 		Ok(Self {
 			server_pubkey,
@@ -667,15 +504,15 @@ impl Readable for MemberKeyHashImpl {
 	}
 }
 
-impl From<&Member> for MemberKeyAuthImpl {
-	fn from(member: &Member) -> MemberKeyAuthImpl {
+impl From<&MemberImpl> for MemberKeyAuthImpl {
+	fn from(member: &MemberImpl) -> MemberKeyAuthImpl {
 		Self {
-			server_pubkey: member.server_pubkey,
-			server_id: member.server_id,
+			server_pubkey: member.server_pubkey.clone(),
+			server_id: member.server_id.clone(),
 			roles: member.roles,
 			batch_num: member.batch_num,
 			join_time: member.join_time,
-			user_pubkey: member.user_pubkey,
+			user_pubkey: member.user_pubkey.clone(),
 		}
 	}
 }
@@ -683,20 +520,12 @@ impl From<&Member> for MemberKeyAuthImpl {
 impl Writeable for MemberKeyAuthImpl {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
 		writer.write_u8(MEMBER_AUTH_PREFIX)?;
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
 		writer.write_u64(self.batch_num)?;
 		writer.write_u128(self.roles)?;
 		writer.write_u64(self.join_time)?;
-
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
+		Writeable::write(&self.user_pubkey, writer)?;
 
 		Ok(())
 	}
@@ -704,26 +533,13 @@ impl Writeable for MemberKeyAuthImpl {
 
 impl Readable for MemberKeyAuthImpl {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-		let mut user_pubkey = [0u8; 32];
-
 		reader.read_u8()?;
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
 		let batch_num = reader.read_u64()?;
 		let roles = reader.read_u128()?;
 		let join_time = reader.read_u64()?;
-
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
+		let user_pubkey = Pubkey::read(reader)?;
 
 		Ok(Self {
 			server_pubkey,
@@ -736,8 +552,8 @@ impl Readable for MemberKeyAuthImpl {
 	}
 }
 
-impl From<&Member> for MemberValueImpl {
-	fn from(member: &Member) -> MemberValueImpl {
+impl From<&MemberImpl> for MemberValueImpl {
+	fn from(member: &MemberImpl) -> MemberValueImpl {
 		Self {
 			roles: member.roles,
 			join_time: member.join_time,
@@ -772,171 +588,6 @@ impl Readable for MemberValueImpl {
 		})
 	}
 }
-
-/*
-struct MinMember {
-	user_pubkey: [u8; 32],
-	roles: u128,
-}
-
-impl Writeable for MinMember {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
-		writer.write_u128(self.roles)?;
-
-		Ok(())
-	}
-}
-
-impl Readable for MinMember {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut user_pubkey = [0u8; 32];
-
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-		let roles = reader.read_u128()?;
-
-		Ok(MinMember {
-			user_pubkey,
-			roles,
-		})
-	}
-}
-
-pub struct MemberList {
-	pub member_data: Vec<u8>,
-}
-
-impl MemberList {
-	pub fn read_member_list(&self) -> Result<Vec<(Member, u64)>, Error> {
-		let mut cursor = Cursor::new(&self.member_data);
-		cursor.set_position(0);
-		let mut reader = BinReader::new(&mut cursor, ProtocolVersion::local());
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-
-		let mut ret = vec![];
-		loop {
-			let next = MinMember::read(&mut reader);
-
-			match next {
-				Ok(next) => ret.push((
-					Member {
-						server_pubkey,
-						server_id,
-						user_pubkey: next.user_pubkey,
-					},
-					next.roles,
-				)),
-				Err(_) => {
-					break;
-				}
-			}
-		}
-
-		Ok(ret)
-	}
-
-	pub fn new(
-		member_list: Vec<(Member, u64)>,
-		server_pubkey: [u8; 32],
-		server_id: [u8; 8],
-	) -> Result<Self, Error> {
-		let mut member_data = vec![];
-		member_data.append(&mut server_pubkey.to_vec());
-		member_data.append(&mut server_id.to_vec());
-
-		for (member, roles) in member_list {
-			let mut buffer = vec![];
-			let min_member = MinMember {
-				user_pubkey: member.user_pubkey,
-				roles,
-			};
-			serialize_default(&mut buffer, &min_member)?;
-			member_data.append(&mut buffer);
-		}
-
-		Ok(MemberList { member_data })
-	}
-
-	pub fn from_b58(data: String) -> Result<Self, Error> {
-		let member_data = bs58::decode(data).into_vec()?;
-		Ok(MemberList { member_data })
-	}
-
-	pub fn to_b58(&self) -> Result<String, Error> {
-		Ok(bs58::encode(&self.member_data).into_string())
-	}
-}
-
-#[derive(Serialize, Debug, Clone)]
-pub struct Member {
-	pub server_id: [u8; 8],
-	pub user_pubkey: [u8; 32],
-	pub server_pubkey: [u8; 32],
-}
-
-pub struct MemberWithProfileInfo {
-	pub server_id: [u8; 8],
-	pub user_pubkey: [u8; 32],
-	pub server_pubkey: [u8; 32],
-	pub user_name: String,
-	pub user_bio: String,
-}
-
-impl Writeable for Member {
-	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
-		for i in 0..8 {
-			writer.write_u8(self.server_id[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.user_pubkey[i])?;
-		}
-		for i in 0..32 {
-			writer.write_u8(self.server_pubkey[i])?;
-		}
-
-		Ok(())
-	}
-}
-
-impl Readable for Member {
-	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
-		let mut user_pubkey = [0u8; 32];
-		let mut server_pubkey = [0u8; 32];
-		let mut server_id = [0u8; 8];
-
-		for i in 0..8 {
-			server_id[i] = reader.read_u8()?;
-		}
-		for i in 0..32 {
-			user_pubkey[i] = reader.read_u8()?;
-		}
-		for i in 0..32 {
-			server_pubkey[i] = reader.read_u8()?;
-		}
-
-		let member = Member {
-			user_pubkey,
-			server_id,
-			server_pubkey,
-		};
-
-		Ok(member)
-	}
-}
-*/
 
 // type of message
 #[derive(Debug, Clone)]
@@ -1520,7 +1171,7 @@ impl DSContext {
 
 		//let profile = self.get_profile_impl(user_pubkey, user_pubkey, [0u8; 8], &batch)?;
 		//let profile = Some(get_default_profile());
-		let profile = Some(Profile::default());
+		//let profile = Some(ProfileData::default());
 
 		/*
 				let profile = match profile {
@@ -1534,11 +1185,10 @@ impl DSContext {
 		*/
 
 		self.set_member(
-			user_pubkey,
-			server_id,
-			server_info.pubkey,
+			Pubkey::from_bytes(user_pubkey),
+			ServerId::from_bytes(server_id),
+			Pubkey::from_bytes(server_info.pubkey),
 			roles,
-			profile,
 			None,
 			None,
 			&batch,
@@ -1572,59 +1222,60 @@ impl DSContext {
 		Ok(())
 	}
 
-	// add a remote server
-	pub fn add_remote_server(
-		&self,
-		id: String,
-		server_info: ServerInfo,
-		channels: Vec<Channel>,
-		members: MemberList,
-	) -> Result<(), Error> {
-		let members = members.members;
-		{
-			let batch = self.store.batch()?;
-			let server_id = urlencoding::decode(&id)?;
-			let server_id = base64::decode(&*server_id)?;
-			let server_id = server_id.as_slice().try_into()?;
+	/*
+		// add a remote server
+		pub fn add_remote_server(
+			&self,
+			id: String,
+			server_info: ServerInfo,
+			channels: Vec<Channel>,
+			members: MemberList,
+		) -> Result<(), Error> {
+			let members = members.members;
+			{
+				let batch = self.store.batch()?;
+				let server_id = urlencoding::decode(&id)?;
+				let server_id = base64::decode(&*server_id)?;
+				let server_id = server_id.as_slice().try_into()?;
 
-			for channel in channels {
-				let channel_key = ChannelKey {
-					channel_id: channel.channel_id,
-					server_id,
-					server_pubkey: server_info.pubkey,
-				};
-				let mut buffer = vec![];
-				serialize_default(&mut buffer, &channel_key)?;
-				let mut buffer2 = vec![CHANNEL_PREFIX];
-				buffer2.append(&mut buffer);
-				batch.put_ser(&buffer2, &channel)?;
+				for channel in channels {
+					let channel_key = ChannelKey {
+						channel_id: channel.channel_id,
+						server_id,
+						server_pubkey: server_info.pubkey,
+					};
+					let mut buffer = vec![];
+					serialize_default(&mut buffer, &channel_key)?;
+					let mut buffer2 = vec![CHANNEL_PREFIX];
+					buffer2.append(&mut buffer);
+					batch.put_ser(&buffer2, &channel)?;
+				}
+
+				for member in members {
+					self.set_member(
+						member.user_pubkey,
+						server_id,
+						server_info.pubkey,
+						member.roles,
+						Some(member.modified_time),
+						Some(member.join_time),
+						&batch,
+					)?;
+				}
+
+				batch.commit()?;
 			}
 
-			for member in members {
-				self.set_member(
-					member.user_pubkey,
-					server_id,
-					server_info.pubkey,
-					member.roles,
-					member.profile,
-					Some(member.modified_time),
-					Some(member.join_time),
-					&batch,
-				)?;
-			}
-
-			batch.commit()?;
+			//self.modify_server(id, server_info)
+			Ok(())
 		}
 
-		//self.modify_server(id, server_info)
-		Ok(())
-	}
-
-	// delete a remote server
-	pub fn delete_remove_server(&self, _id: String) -> Result<(), Error> {
-		//self.delete_server(id)
-		Ok(())
-	}
+		// delete a remote server
+		pub fn delete_remove_server(&self, _id: String) -> Result<(), Error> {
+			//self.delete_server(id)
+			Ok(())
+		}
+	*/
 
 	// post the specified message to our local DB.
 	pub fn post_message(&self, message: Message) -> Result<(), Error> {
@@ -2053,10 +1704,10 @@ impl DSContext {
 	pub fn accept_invite(
 		&self,
 		invite_id: u128,
-		_user_pubkey: [u8; 32],
-		_server_pubkey: [u8; 32],
-		_user_name: String,
-		_user_bio: String,
+		user_pubkey: [u8; 32],
+		server_pubkey: [u8; 32],
+		user_name: String,
+		user_bio: String,
 		_avatar: Vec<u8>,
 	) -> Result<Option<ServerInfoReply>, Error> {
 		let batch = self.store.batch()?;
@@ -2075,31 +1726,30 @@ impl DSContext {
 					serialize_default(&mut buffer, &invite)?;
 					batch.put_ser(&key, &buffer)?;
 
+					let user_name = user_name.into();
+					let user_bio = user_bio.into();
 					// build the profile
-					/*
-										let profile = Profile {
-											user_pubkey: Pubkey::from_bytes(user_pubkey),
-											server_pubkey: Pubkey::from_bytes(server_pubkey),
-											server_id: ServerId::from_bytes(invite.server_id),
+					self.set_profile_impl(
+						Pubkey::from_bytes(user_pubkey),
+						Pubkey::from_bytes(server_pubkey),
+						ServerId::from_bytes(invite.server_id),
+						ProfileData {
+							user_name,
+							user_bio,
+						},
+						&batch,
+					)?;
 
-											profile_data: Some(ProfileData {
-												user_name: user_name.into(),
-												user_bio: user_bio.into(),
-											}).into(),
-										};
-
-										// add to member table
-										self.set_member(
-											user_pubkey,
-											invite.server_id,
-											server_pubkey,
-											AUTH_FLAG_MEMBER,
-											Some(profile),
-											None,
-											None,
-											&batch,
-										)?;
-					*/
+					// add to member table
+					self.set_member(
+						Pubkey::from_bytes(user_pubkey),
+						ServerId::from_bytes(invite.server_id),
+						Pubkey::from_bytes(server_pubkey),
+						AUTH_FLAG_MEMBER,
+						None,
+						None,
+						&batch,
+					)?;
 
 					let mut key = vec![SERVER_PREFIX];
 					key.append(&mut invite.server_id.to_vec());
@@ -2127,32 +1777,22 @@ impl DSContext {
 
 	fn get_member(
 		&self,
-		user_pubkey: [u8; 32],
-		server_id: [u8; 8],
-		server_pubkey: [u8; 32],
-		_get_profile: bool, // whether to get profile too
+		user_pubkey: Pubkey,
+		server_id: ServerId,
+		server_pubkey: Pubkey,
 		batch: &Batch,
-	) -> Result<Option<Member>, Error> {
+	) -> Result<Option<MemberImpl>, Error> {
 		let hash_key = MemberKeyHashImpl {
-			server_pubkey,
-			server_id,
-			user_pubkey,
+			server_pubkey: server_pubkey.clone(),
+			server_id: server_id.clone(),
+			user_pubkey: user_pubkey.clone(),
 		};
 		let mut hash_key_buffer = vec![];
 		serialize_default(&mut hash_key_buffer, &hash_key)?;
 		let member_value_impl: Option<MemberValueImpl> = batch.get_ser(&hash_key_buffer)?;
 
-		/*
-				let profile = if get_profile {
-					self.get_profile_impl(user_pubkey, server_pubkey, server_id, batch)?
-				} else {
-					None
-				};
-		*/
-		let profile = None;
-
 		match member_value_impl {
-			Some(m) => Ok(Some(Member {
+			Some(m) => Ok(Some(MemberImpl {
 				server_pubkey,
 				server_id,
 				user_pubkey,
@@ -2160,57 +1800,55 @@ impl DSContext {
 				join_time: m.join_time,
 				modified_time: m.modified_time,
 				batch_num: m.batch_num,
-				profile,
 			})),
 			None => Ok(None),
 		}
 	}
 
-	fn update_roles(
-		&self,
-		user_pubkey: [u8; 32],
-		server_id: [u8; 8],
-		server_pubkey: [u8; 32],
-		roles: u128,
-		batch: &Batch,
-	) -> Result<(), Error> {
-		match self.get_member(user_pubkey, server_id, server_pubkey, false, batch)? {
-			Some(member) => {
-				self.set_member(
-					user_pubkey,
-					server_id,
-					server_pubkey,
-					roles,
-					None,
-					Some(member.modified_time),
-					Some(member.join_time),
-					batch,
-				)?;
+	/*
+		fn update_roles(
+			&self,
+			user_pubkey: [u8; 32],
+			server_id: [u8; 8],
+			server_pubkey: [u8; 32],
+			roles: u128,
+			batch: &Batch,
+		) -> Result<(), Error> {
+			match self.get_member(user_pubkey, server_id, server_pubkey, false, batch)? {
+				Some(member) => {
+					self.set_member(
+						user_pubkey,
+						server_id,
+						server_pubkey,
+						roles,
+						Some(member.modified_time),
+						Some(member.join_time),
+						batch,
+					)?;
+				}
+				None => {
+					self.set_member(
+						user_pubkey,
+						server_id,
+						server_pubkey,
+						roles,
+						None,
+						None,
+						batch,
+					)?;
+				}
 			}
-			None => {
-				self.set_member(
-					user_pubkey,
-					server_id,
-					server_pubkey,
-					roles,
-					None,
-					None,
-					None,
-					batch,
-				)?;
-			}
-		}
 
-		Ok(())
-	}
+			Ok(())
+		}
+	*/
 
 	fn set_member(
 		&self,
-		user_pubkey: [u8; 32],
-		server_id: [u8; 8],
-		server_pubkey: [u8; 32],
+		user_pubkey: Pubkey,
+		server_id: ServerId,
+		server_pubkey: Pubkey,
 		roles: u128,
-		profile: Option<Profile>,
 		modified_time: Option<u64>,
 		join_time: Option<u64>,
 		batch: &Batch,
@@ -2220,82 +1858,93 @@ impl DSContext {
 			.as_millis()
 			.try_into()?;
 
-		let member = self.get_member(user_pubkey, server_id, server_pubkey, true, batch)?;
-		let member = match member {
-			Some(mut member) => {
-				match profile {
-					Some(_profile) => {
-						// TODO Handle profile update here
-					}
-					None => {}
-				}
-				member.modified_time = time_now;
-				member.roles = roles;
-				member
+		match self.get_member(user_pubkey, server_id, server_pubkey, batch)? {
+			Some(member) => {
+				warn!("member already joined the server");
+				Ok(member.into())
 			}
 			None => {
-				let time_now = std::time::SystemTime::now()
-					.duration_since(std::time::UNIX_EPOCH)?
-					.as_millis()
-					.try_into()?;
-				let mut member_meta_data_key = vec![];
-				serialize_default(
-					&mut member_meta_data_key,
-					&MemberMetaDataKey {
-						server_pubkey,
-						server_id,
-					},
-				)?;
-
-				let member_meta_data_value: Option<MemberMetaDataValue> =
-					batch.get_ser(&member_meta_data_key)?;
-
-				let batch_num = match member_meta_data_value {
-					Some(meta_data) => {
-						let member_count = meta_data.member_count;
-						batch.put_ser(
-							&member_meta_data_key,
-							&MemberMetaDataValue {
-								member_count: member_count + 1,
-							},
-						)?;
-						member_count / MEMBER_BATCH_SIZE
-					}
-					None => {
-						batch.put_ser(
-							&member_meta_data_key,
-							&MemberMetaDataValue { member_count: 1 },
-						)?;
-						0
-					}
-				};
-
 				let member = Member {
 					user_pubkey,
-					server_pubkey,
-					server_id,
-					profile,
+					profile_data: None,
 					roles,
-					batch_num,
 					join_time: join_time.unwrap_or(time_now),
 					modified_time: modified_time.unwrap_or(time_now),
 				};
-				member
+
+				self.save_member(server_pubkey, server_id, &member, batch)?;
+				Ok(member.into())
+			}
+		}
+	}
+
+	fn update_metadata(
+		&self,
+		server_id: ServerId,
+		server_pubkey: Pubkey,
+		batch: &Batch,
+	) -> Result<u64, Error> {
+		let mut member_meta_data_key = vec![];
+		serialize_default(
+			&mut member_meta_data_key,
+			&MemberMetaDataKey {
+				server_pubkey,
+				server_id,
+			},
+		)?;
+
+		let member_meta_data_value: Option<MemberMetaDataValue> =
+			batch.get_ser(&member_meta_data_key)?;
+
+		let batch_num = match member_meta_data_value {
+			Some(meta_data) => {
+				let member_count = meta_data.member_count;
+				batch.put_ser(
+					&member_meta_data_key,
+					&MemberMetaDataValue {
+						member_count: member_count + 1,
+					},
+				)?;
+				member_count / MEMBER_BATCH_SIZE
+			}
+			None => {
+				batch.put_ser(
+					&member_meta_data_key,
+					&MemberMetaDataValue { member_count: 1 },
+				)?;
+				0
 			}
 		};
-		self.save_member(&member, batch)?;
 
-		Ok(member)
+		Ok(batch_num)
 	}
 
 	// note that this function does not save profile data associated with this member struct.
 	// use save_profile to do that.
-	fn save_member(&self, member: &Member, batch: &Batch) -> Result<(), Error> {
+	fn save_member(
+		&self,
+		server_pubkey: Pubkey,
+		server_id: ServerId,
+		member: &Member,
+		batch: &Batch,
+	) -> Result<(), Error> {
+		let batch_num = self.update_metadata(server_id, server_pubkey, batch)?;
+
+		let member_impl = &MemberImpl {
+			user_pubkey: member.user_pubkey.clone(),
+			roles: member.roles,
+			join_time: member.join_time,
+			modified_time: member.modified_time,
+			batch_num,
+			server_id,
+			server_pubkey,
+		};
+
 		// create key/value structs
-		let member_key_hash: MemberKeyHashImpl = member.into();
-		let member_key_itt: MemberKeyIttImpl = member.into();
-		let member_key_auth: MemberKeyAuthImpl = member.into();
-		let member_value: MemberValueImpl = member.into();
+		let member_key_hash: MemberKeyHashImpl = member_impl.into();
+		let member_key_itt: MemberKeyIttImpl = member_impl.into();
+		let member_key_auth: MemberKeyAuthImpl = member_impl.into();
+		let member_value: MemberValueImpl = member_impl.into();
 
 		// key vectors
 		let mut member_key_hash_buffer = vec![];
@@ -2326,11 +1975,6 @@ impl DSContext {
 			}
 		}
 
-		match &member.profile {
-			Some(_profile) => {}
-			None => {}
-		}
-
 		Ok(())
 	}
 
@@ -2339,7 +1983,6 @@ impl DSContext {
 		server_pubkey: [u8; 32],
 		server_id: [u8; 8],
 		batch_num: u64,
-		_include_profile: bool,
 		auth: bool, // if true send back users with auth privileges (moderators), otherwise members.
 	) -> Result<Vec<Member>, Error> {
 		let batch = self.store.batch()?;
@@ -2347,8 +1990,8 @@ impl DSContext {
 		match auth {
 			true => {
 				let ablki = AuthBatchLookupKeyImpl {
-					server_pubkey,
-					server_id,
+					server_pubkey: Pubkey::from_bytes(server_pubkey),
+					server_id: ServerId::from_bytes(server_id),
 					batch_num,
 				};
 				let mut ablki_buffer = vec![];
@@ -2364,12 +2007,11 @@ impl DSContext {
 					let mut reader = BinReader::new(&mut cursor, ProtocolVersion::local());
 					let member_value = MemberValueImpl::read(&mut reader)?;
 
-					let member = Member {
+					let member = MemberImpl {
 						user_pubkey: member_key.user_pubkey,
 						server_pubkey: member_key.server_pubkey,
 						server_id: member_key.server_id,
 						batch_num: member_key.batch_num,
-						profile: None,
 						roles: member_value.roles,
 						join_time: member_value.join_time,
 						modified_time: member_value.modified_time,
@@ -2388,8 +2030,8 @@ impl DSContext {
 			}
 			false => {
 				let mblki = MemberBatchLookupKeyImpl {
-					server_pubkey,
-					server_id,
+					server_pubkey: Pubkey::from_bytes(server_pubkey),
+					server_id: ServerId::from_bytes(server_id),
 					batch_num,
 				};
 
@@ -2406,12 +2048,11 @@ impl DSContext {
 					let mut reader = BinReader::new(&mut cursor, ProtocolVersion::local());
 					let member_value = MemberValueImpl::read(&mut reader)?;
 
-					let member = Member {
+					let member = MemberImpl {
 						user_pubkey: member_key.user_pubkey,
 						server_pubkey: member_key.server_pubkey,
 						server_id: member_key.server_id,
 						batch_num: member_key.batch_num,
-						profile: None,
 						roles: member_value.roles,
 						join_time: member_value.join_time,
 						modified_time: member_value.modified_time,
@@ -2430,9 +2071,31 @@ impl DSContext {
 			}
 		}
 
-		// handle including profile here
+		let mut members: Vec<Member> = vec![];
+		let mut pubkeys = vec![];
+		for member in ret {
+			pubkeys.push(member.user_pubkey);
+			members.push(member.into());
+			// handle including profile here.
+		}
 
-		Ok(ret)
+		let profiles = self.get_profiles_impl(
+			pubkeys,
+			Pubkey::from_bytes(server_pubkey),
+			ServerId::from_bytes(server_id),
+			&batch,
+		)?;
+
+		let mut i = 0;
+		for profile in profiles {
+			members[i].profile_data = match profile {
+				Some(profile) => Some(profile.profile_data),
+				None => None,
+			};
+			i += 1;
+		}
+
+		Ok(members)
 	}
 
 	pub fn create_auth_challenge(&self, user_pubkey: [u8; 32]) -> Result<[u8; 8], Error> {
@@ -2450,7 +2113,7 @@ impl DSContext {
 	pub fn validate_challenge(
 		&self,
 		user_pubkey: [u8; 32],
-		server_pubkey: [u8; 32],
+		_server_pubkey: [u8; 32],
 		challenge: [u8; 8],
 		expiration_millis: u128,
 		roles: u128,
@@ -2486,7 +2149,7 @@ impl DSContext {
 
 				// needed for local access
 				if (roles & AUTH_FLAG_OWNER) != 0 {
-					self.update_roles(user_pubkey, [0u8; 8], server_pubkey, roles, &batch)?;
+					//self.update_roles(user_pubkey, [0u8; 8], server_pubkey, roles, &batch)?;
 				}
 
 				batch.commit()?;
@@ -2506,10 +2169,14 @@ impl DSContext {
 		server_id: [u8; 8],
 		requested_roles: u128,
 	) -> Result<(), Error> {
+		let user_pubkey = Pubkey::from_bytes(user_pubkey);
+		let server_pubkey = Pubkey::from_bytes(server_pubkey);
+		let server_id = ServerId::from_bytes(server_id);
+
 		let batch = self.store.batch()?;
 
 		let mut auth_key = vec![TOKEN_PREFIX];
-		auth_key.append(&mut user_pubkey.to_vec());
+		auth_key.append(&mut user_pubkey.to_bytes().to_vec());
 		auth_key.append(&mut token.to_be_bytes().to_vec());
 
 		let auth_info: Option<AuthInfo> = batch.get_ser(&auth_key)?;
@@ -2522,8 +2189,7 @@ impl DSContext {
 				if time_now - auth_info.last_access_time > auth_info.expiration_millis {
 					Err(ErrorKind::NotAuthorized("invalid token - expired".to_string()).into())
 				} else {
-					let member =
-						self.get_member(user_pubkey, server_id, server_pubkey, false, &batch)?;
+					let member = self.get_member(user_pubkey, server_id, server_pubkey, &batch)?;
 
 					match member {
 						Some(member) => {
@@ -2622,7 +2288,7 @@ impl DSContext {
 		user_pubkey: Pubkey,
 		server_pubkey: Pubkey,
 		server_id: ServerId,
-		profile_data: ProfileValue,
+		profile_data: ProfileData,
 	) -> Result<(), Error> {
 		let batch = self.store.batch()?;
 		self.set_profile_impl(user_pubkey, server_pubkey, server_id, profile_data, &batch)?;
@@ -2646,7 +2312,7 @@ impl DSContext {
 			};
 			let mut profile_key_buffer = vec![];
 			serialize_default(&mut profile_key_buffer, &profile_key)?;
-			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 			match profile_value {
 				Some(profile_data) => {
 					ret.push(Some(Profile {
@@ -2667,9 +2333,13 @@ impl DSContext {
 		user_pubkey: Pubkey,
 		server_pubkey: Pubkey,
 		server_id: ServerId,
-		profile_data: ProfileValue,
+		profile_data: ProfileData,
 		batch: &Batch,
 	) -> Result<(), Error> {
+		info!(
+			"setting profile: user_pubkey={:?},server_pubkey={:?},server_id={:?},profile_data={:?}",
+			user_pubkey, server_pubkey, server_id, profile_data
+		);
 		let profile_key = ProfileKey {
 			user_pubkey,
 			server_pubkey,
@@ -2709,7 +2379,7 @@ impl DSContext {
 				server_id,
 			},
 		)?;
-		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+		let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 
 		match profile_value {
 			Some(profile_value) => Ok(Some(Profile {
@@ -2725,7 +2395,7 @@ impl DSContext {
 
 	/*fn save_profile_impl(&self, profile: Profile, batch: &Batch) -> Result<(), Error> {
 		let profile_key: ProfileKey = profile.clone().into();
-		let profile_value: ProfileValue = profile.into();
+		let profile_value: ProfileData = profile.into();
 		let mut profile_key_buffer = vec![];
 		serialize_default(&mut profile_key_buffer, &profile_key)?;
 		batch.put_ser(&profile_key_buffer, &profile_value)?;
@@ -2758,7 +2428,7 @@ impl DSContext {
 				server_id,
 			},
 		)?;
-		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+		let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 		match profile_value {
 			Some(mut profile_value) => {
 				profile_value.avatar = avatar;
@@ -2771,7 +2441,7 @@ impl DSContext {
 				profile.server_pubkey = server_pubkey;
 				profile.server_id = server_id;
 				profile.avatar = avatar;
-				let profile_value: ProfileValue = profile.into();
+				let profile_value: ProfileData = profile.into();
 
 				batch.put_ser(&profile_key_buffer, &profile_value)?;
 				batch.commit()?;
@@ -2800,7 +2470,7 @@ impl DSContext {
 					server_id,
 				},
 			)?;
-			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 			match profile_value {
 				Some(profile_value) => {
 					ret.push(Some(profile_value.avatar));
@@ -2834,7 +2504,7 @@ impl DSContext {
 				},
 			)?;
 
-			let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+			let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 			match profile_value {
 				Some(profile_value) => {
 					ret.push(Some(ProfileData {
@@ -2869,7 +2539,7 @@ impl DSContext {
 				server_id,
 			},
 		)?;
-		let profile_value: Option<ProfileValue> = batch.get_ser(&profile_key_buffer)?;
+		let profile_value: Option<ProfileData> = batch.get_ser(&profile_key_buffer)?;
 		match profile_value {
 			Some(mut profile_value) => {
 				profile_value.profile_data = profile_data;

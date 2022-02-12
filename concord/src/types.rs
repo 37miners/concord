@@ -13,12 +13,13 @@
 // limitations under the License.
 
 use crate::librustlet::ConnData;
-use concorddata::ser::{Readable, Reader, Writeable, Writer};
+use concorddata::ser::{serialize_default, Readable, Reader, Writeable, Writer};
 use concorddata::types::{
-	Image, Invite, ProfileValue, Pubkey, SerOption, SerString, ServerId, Signature, U128,
+	Image, Invite, ProfileData, Pubkey, SerOption, SerString, ServerId, Signature, U128,
 };
 use concorderror::{Error, ErrorKind};
 use concordutil::nioruntime_log;
+use ed25519_dalek::{ExpandedSecretKey, PublicKey, Verifier};
 use nioruntime_log::*;
 use num_enum::{IntoPrimitive, TryFromPrimitive};
 use std::convert::TryFrom;
@@ -395,6 +396,393 @@ impl Readable for GetChannelsRequest {
 	}
 }
 
+// Messages
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum MessageType {
+	Text,
+}
+
+impl Writeable for MessageType {
+	fn write<W: Writer>(&self, _writer: &mut W) -> Result<(), Error> {
+		Ok(())
+	}
+}
+
+impl Readable for MessageType {
+	fn read<R: Reader>(_reader: &mut R) -> Result<Self, Error> {
+		Ok(MessageType::Text)
+	}
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ChannelIdentifier {
+	pub server_pubkey: Pubkey,
+	pub server_id: ServerId,
+	pub channel_id: u64,
+}
+
+impl Writeable for ChannelIdentifier {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_pubkey, writer)?;
+		Writeable::write(&self.server_id, writer)?;
+		writer.write_u64(self.channel_id)?;
+		Ok(())
+	}
+}
+
+impl Readable for ChannelIdentifier {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_pubkey = Pubkey::read(reader)?;
+		let server_id = ServerId::read(reader)?;
+		let channel_id = reader.read_u64()?;
+		Ok(Self {
+			server_pubkey,
+			server_id,
+			channel_id,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+struct MessageBody {
+	channel_identifier: ChannelIdentifier,
+	user_pubkey: Pubkey,
+	payload: Vec<u8>,
+	message_type: MessageType,
+	timestamp: u128,
+	nonce: u16,
+}
+
+impl MessageBody {
+	fn build_message(&self) -> Result<Vec<u8>, Error> {
+		let mut ret = vec![];
+		let mut buffer = vec![];
+		serialize_default(&mut buffer, &self.channel_identifier)?;
+		ret.append(&mut buffer);
+		serialize_default(&mut buffer, &self.message_type)?;
+		ret.append(&mut buffer);
+		ret.append(&mut self.timestamp.to_be_bytes().to_vec());
+		ret.append(&mut self.nonce.to_be_bytes().to_vec());
+		Ok(ret)
+	}
+}
+
+impl Writeable for MessageBody {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.channel_identifier, writer)?;
+		Writeable::write(&self.user_pubkey, writer)?;
+		let len = self.payload.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			writer.write_u8(self.payload[i])?;
+		}
+		Writeable::write(&self.message_type, writer)?;
+		writer.write_u128(self.timestamp)?;
+		writer.write_u16(self.nonce)?;
+		Ok(())
+	}
+}
+
+impl Readable for MessageBody {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let channel_identifier = ChannelIdentifier::read(reader)?;
+		let user_pubkey = Pubkey::read(reader)?;
+		let len = reader.read_u64()?;
+		let mut payload = vec![];
+		for _ in 0..len {
+			payload.push(reader.read_u8()?);
+		}
+		let message_type = MessageType::read(reader)?;
+		let timestamp = reader.read_u128()?;
+		let nonce = reader.read_u16()?;
+		Ok(Self {
+			channel_identifier,
+			user_pubkey,
+			payload,
+			message_type,
+			timestamp,
+			nonce,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct Message {
+	body: MessageBody,
+	signature: Signature,
+}
+
+impl Message {
+	pub fn new(
+		channel_identifier: ChannelIdentifier,
+		payload: Vec<u8>,
+		message_type: MessageType,
+		timestamp: u128,
+		nonce: u16,
+		secret_key: ExpandedSecretKey,
+	) -> Result<Self, Error> {
+		let user_pubkey: PublicKey = (&secret_key).into();
+		let user_pubkey = Pubkey::from_dalek(user_pubkey);
+
+		let body = MessageBody {
+			channel_identifier,
+			user_pubkey,
+			payload,
+			message_type,
+			timestamp,
+			nonce,
+		};
+
+		let signature = secret_key
+			.sign(&body.build_message()?, &user_pubkey.to_dalek()?)
+			.into();
+		Ok(Self { body, signature })
+	}
+
+	pub fn payload(&self) -> Result<Vec<u8>, Error> {
+		self.verify()?;
+		Ok(self.body.payload.clone())
+	}
+
+	pub fn channel_identifier(&self) -> ChannelIdentifier {
+		self.body.channel_identifier
+	}
+
+	pub fn user_pubkey(&self) -> Pubkey {
+		self.body.user_pubkey
+	}
+
+	pub fn message_type(&self) -> MessageType {
+		self.body.message_type
+	}
+
+	pub fn timestamp(&self) -> u128 {
+		self.body.timestamp
+	}
+
+	pub fn verify(&self) -> Result<(), Error> {
+		let message = self.body.build_message()?;
+		self.body
+			.user_pubkey
+			.to_dalek()?
+			.verify(&message, &self.signature.to_dalek()?)?;
+		Ok(())
+	}
+}
+
+impl Writeable for Message {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.body, writer)?;
+		Writeable::write(&self.signature, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for Message {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let body = MessageBody::read(reader)?;
+		let signature = Signature::read(reader)?;
+		Ok(Self { body, signature })
+	}
+}
+
+#[derive(Debug, Clone)]
+pub enum SubscriptionActionType {
+	// send messages for this channel
+	Subscribe,
+	// stop sending messages for this channel
+	UnSubscribe,
+	// only notify of a message, but don't send it.
+	// Once one notification is sent, no further notifications are sent.
+	// used to indicate unread messages
+	NotifyOnly,
+}
+
+impl Writeable for SubscriptionActionType {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		match self {
+			SubscriptionActionType::Subscribe => writer.write_u8(0)?,
+			SubscriptionActionType::UnSubscribe => writer.write_u8(1)?,
+			SubscriptionActionType::NotifyOnly => writer.write_u8(2)?,
+		}
+		Ok(())
+	}
+}
+
+impl Readable for SubscriptionActionType {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		match reader.read_u8()? {
+			0 => Ok(SubscriptionActionType::Subscribe),
+			1 => Ok(SubscriptionActionType::UnSubscribe),
+			2 => Ok(SubscriptionActionType::NotifyOnly),
+			_ => Err(ErrorKind::CorruptedData(
+				"corrupted data in SubscriptionActionType".to_string(),
+			)
+			.into()),
+		}
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct ChannelSubscription {
+	pub channel_identifier: ChannelIdentifier,
+	pub subscription_type: SubscriptionActionType,
+}
+
+impl Writeable for ChannelSubscription {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.channel_identifier, writer)?;
+		Writeable::write(&self.subscription_type, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for ChannelSubscription {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let channel_identifier = ChannelIdentifier::read(reader)?;
+		let subscription_type = SubscriptionActionType::read(reader)?;
+		Ok(Self {
+			channel_identifier,
+			subscription_type,
+		})
+	}
+}
+
+// Message Events
+
+#[derive(Debug, Clone)]
+pub struct GetMessagesRequest {
+	pub channel_identifier: ChannelIdentifier,
+	pub batch_num: u64,
+}
+
+impl Writeable for GetMessagesRequest {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.channel_identifier, writer)?;
+		writer.write_u64(self.batch_num)?;
+		Ok(())
+	}
+}
+
+impl Readable for GetMessagesRequest {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let channel_identifier = ChannelIdentifier::read(reader)?;
+		let batch_num = reader.read_u64()?;
+		Ok(Self {
+			channel_identifier,
+			batch_num,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct GetMessagesResponse {
+	pub channel_identifier: ChannelIdentifier,
+	pub messages: Vec<Message>,
+	pub batch_num: u64,
+}
+
+impl Writeable for GetMessagesResponse {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.channel_identifier, writer)?;
+		writer.write_u64(self.batch_num)?;
+		let len = self.messages.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			Writeable::write(&self.messages[i], writer)?;
+		}
+
+		Ok(())
+	}
+}
+
+impl Readable for GetMessagesResponse {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let channel_identifier = ChannelIdentifier::read(reader)?;
+		let batch_num = reader.read_u64()?;
+		let len = reader.read_u64()?;
+		let mut messages = vec![];
+		for _ in 0..len {
+			messages.push(Message::read(reader)?);
+		}
+		Ok(Self {
+			channel_identifier,
+			messages,
+			batch_num,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SendMessage {
+	pub message: Message,
+}
+
+impl Writeable for SendMessage {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.message, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for SendMessage {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		Ok(Self {
+			message: Message::read(reader)?,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct MessageNotification {
+	pub message: Message,
+}
+
+impl Writeable for MessageNotification {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.message, writer)?;
+		Ok(())
+	}
+}
+
+impl Readable for MessageNotification {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		Ok(Self {
+			message: Message::read(reader)?,
+		})
+	}
+}
+
+#[derive(Debug, Clone)]
+pub struct SubscribeChannel {
+	pub subscriptions: Vec<ChannelSubscription>,
+}
+
+impl Writeable for SubscribeChannel {
+	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		let len = self.subscriptions.len();
+		writer.write_u64(len.try_into()?)?;
+		for i in 0..len {
+			Writeable::write(&self.subscriptions[i], writer)?;
+		}
+		Ok(())
+	}
+}
+
+impl Readable for SubscribeChannel {
+	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let mut subscriptions = vec![];
+		let len = reader.read_u64()?;
+		for _ in 0..len {
+			subscriptions.push(ChannelSubscription::read(reader)?);
+		}
+		Ok(Self { subscriptions })
+	}
+}
+
+// Invites
+
 #[derive(Debug, Clone)]
 pub struct CreateInviteRequest {
 	pub server_id: ServerId,
@@ -713,7 +1101,7 @@ impl Readable for ViewInviteResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
 		let response_info = match reader.read_u8()? {
 			0 => None,
-			_ => {
+			1 => {
 				let inviter_name = SerString::read(reader)?;
 				let inviter_icon = Image::read(reader)?;
 				let server_icon = Image::read(reader)?;
@@ -730,6 +1118,12 @@ impl Readable for ViewInviteResponse {
 					server_name,
 				};
 				Some(rinfo)
+			}
+			_ => {
+				return Err(ErrorKind::CorruptedData(
+					"corrupted data in ViewInviteResponse".to_string(),
+				)
+				.into())
 			}
 		};
 		Ok(Self { response_info })
@@ -881,7 +1275,7 @@ impl Readable for GetProfileRequest {
 
 #[derive(Debug, Clone)]
 pub struct GetProfileResponse {
-	pub data: Vec<(SerOption<Image>, SerOption<ProfileValue>)>,
+	pub data: Vec<(SerOption<Image>, SerOption<ProfileData>)>,
 }
 
 impl Writeable for GetProfileResponse {
@@ -911,7 +1305,7 @@ pub struct SetProfileRequest {
 	pub server_pubkey: Pubkey,
 	pub server_id: ServerId,
 	pub avatar: SerOption<Image>,
-	pub profile_data: SerOption<ProfileValue>,
+	pub profile_data: SerOption<ProfileData>,
 }
 
 impl Writeable for SetProfileRequest {
@@ -979,17 +1373,17 @@ pub struct Member {
 	user_bio: SerString,
 	roles: u128,
 	profile_seqno: u64,
+	join_time: u64,
+	modified_time: u64,
 	online_status: OnlineStatus,
 }
 
 impl From<concorddata::concord::Member> for Member {
 	fn from(dmember: concorddata::concord::Member) -> Member {
+		info!("==================================dmember={:?}", dmember);
 		let user_pubkey = dmember.user_pubkey;
-		let (user_name, user_bio) = match dmember.profile {
-			Some(profile) => (
-				profile.profile_data.user_name,
-				profile.profile_data.user_bio,
-			),
+		let (user_name, user_bio) = match dmember.profile_data {
+			Some(profile_data) => (profile_data.user_name, profile_data.user_bio),
 			None => ("".to_string().into(), "".to_string().into()),
 		};
 		let roles = 0;
@@ -997,7 +1391,7 @@ impl From<concorddata::concord::Member> for Member {
 		let online_status = OnlineStatus::Offline;
 		let user_name = user_name.into();
 		let user_bio = user_bio.into();
-		let user_pubkey = Pubkey::from_bytes(user_pubkey);
+		let user_pubkey = user_pubkey;
 
 		Member {
 			user_pubkey,
@@ -1006,6 +1400,8 @@ impl From<concorddata::concord::Member> for Member {
 			roles,
 			profile_seqno,
 			online_status,
+			join_time: 0,
+			modified_time: 0,
 		}
 	}
 }
@@ -1018,6 +1414,8 @@ impl Writeable for Member {
 		writer.write_u128(self.roles)?;
 		writer.write_u64(self.profile_seqno)?;
 		writer.write_u8(self.online_status.clone().into())?;
+		writer.write_u64(self.join_time)?;
+		writer.write_u64(self.modified_time)?;
 		Ok(())
 	}
 }
@@ -1039,6 +1437,8 @@ impl Readable for Member {
 				.into();
 				error
 			})?;
+		let join_time = reader.read_u64()?;
+		let modified_time = reader.read_u64()?;
 		Ok(Self {
 			user_pubkey,
 			user_name,
@@ -1046,6 +1446,8 @@ impl Readable for Member {
 			roles,
 			profile_seqno,
 			online_status,
+			join_time,
+			modified_time,
 		})
 	}
 }
@@ -1258,11 +1660,13 @@ impl Readable for ServerInfo {
 
 #[derive(Debug, Clone)]
 pub struct GetServersResponse {
+	pub server_pubkey: Pubkey,
 	pub servers: Vec<ServerInfo>,
 }
 
 impl Writeable for GetServersResponse {
 	fn write<W: Writer>(&self, writer: &mut W) -> Result<(), Error> {
+		Writeable::write(&self.server_pubkey, writer)?;
 		writer.write_u64(self.servers.len().try_into().unwrap_or(0))?;
 		for server in &self.servers {
 			Writeable::write(server, writer)?;
@@ -1273,12 +1677,16 @@ impl Writeable for GetServersResponse {
 
 impl Readable for GetServersResponse {
 	fn read<R: Reader>(reader: &mut R) -> Result<Self, Error> {
+		let server_pubkey = Pubkey::read(reader)?;
 		let mut servers = vec![];
 		let len = reader.read_u64()?;
 		for _ in 0..len {
 			servers.push(ServerInfo::read(reader)?);
 		}
-		Ok(Self { servers })
+		Ok(Self {
+			servers,
+			server_pubkey,
+		})
 	}
 }
 
@@ -1321,6 +1729,11 @@ pub enum EventType {
 	GetProfileResponse,
 	SetProfileRequest,
 	SetProfileResponse,
+	GetMessagesRequest,
+	GetMessagesResponse,
+	SendMessage,
+	MessageNotification,
+	SubscribeChannel,
 }
 
 #[derive(Debug, Clone)]
@@ -1361,6 +1774,11 @@ pub enum EventBody {
 	GetProfileResponse(GetProfileResponse),
 	SetProfileRequest(SetProfileRequest),
 	SetProfileResponse(SetProfileResponse),
+	GetMessagesRequest(GetMessagesRequest),
+	GetMessagesResponse(GetMessagesResponse),
+	SendMessage(SendMessage),
+	MessageNotification(MessageNotification),
+	SubscribeChannel(SubscribeChannel),
 }
 
 impl Writeable for EventBody {
@@ -1510,6 +1928,26 @@ impl Writeable for EventBody {
 				writer.write_u16(35)?;
 				Writeable::write(e, writer)?;
 			}
+			EventBody::GetMessagesRequest(e) => {
+				writer.write_u16(36)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::GetMessagesResponse(e) => {
+				writer.write_u16(37)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::SendMessage(e) => {
+				writer.write_u16(38)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::MessageNotification(e) => {
+				writer.write_u16(39)?;
+				Writeable::write(e, writer)?;
+			}
+			EventBody::SubscribeChannel(e) => {
+				writer.write_u16(40)?;
+				Writeable::write(e, writer)?;
+			}
 		}
 		Ok(())
 	}
@@ -1619,6 +2057,17 @@ impl Readable for EventBody {
 			35 => Ok(EventBody::SetProfileResponse(SetProfileResponse::read(
 				reader,
 			)?)),
+			36 => Ok(EventBody::GetMessagesRequest(GetMessagesRequest::read(
+				reader,
+			)?)),
+			37 => Ok(EventBody::GetMessagesResponse(GetMessagesResponse::read(
+				reader,
+			)?)),
+			38 => Ok(EventBody::SendMessage(SendMessage::read(reader)?)),
+			39 => Ok(EventBody::MessageNotification(MessageNotification::read(
+				reader,
+			)?)),
+			40 => Ok(EventBody::SubscribeChannel(SubscribeChannel::read(reader)?)),
 			_ => Err(ErrorKind::CorruptedData("corrupted data in EventBody".to_string()).into()),
 		}
 	}
@@ -1670,4 +2119,66 @@ impl Readable for Event {
 			request_id,
 		})
 	}
+}
+
+#[test]
+fn test_messages() -> Result<(), Error> {
+	use ed25519_dalek::{ExpandedSecretKey, SecretKey};
+
+	let channel_identifier = ChannelIdentifier {
+		server_id: ServerId::from_bytes([0u8; 8]),
+		server_pubkey: Pubkey::from_bytes([0u8; 32]),
+		channel_id: 15,
+	};
+	let secret_bytes = [8u8; 32];
+	let secret_key = SecretKey::from_bytes(&secret_bytes)?;
+	let secret_key = ExpandedSecretKey::from(&secret_key);
+	let dalek_pubkey = PublicKey::from(&secret_key);
+	let pubkey = Pubkey::from_bytes(dalek_pubkey.to_bytes());
+
+	let mut message = Message::new(
+		channel_identifier,
+		[0, 1, 2, 3].to_vec(),
+		MessageType::Text,
+		0,
+		12,
+		secret_key,
+	)?;
+
+	assert_eq!(message.payload()?, [0, 1, 2, 3].to_vec());
+	assert_eq!(message.channel_identifier(), channel_identifier,);
+	assert_eq!(message.user_pubkey(), pubkey);
+	assert_eq!(message.message_type(), MessageType::Text);
+	assert_eq!(message.timestamp(), 0);
+
+	let message_body = MessageBody {
+		channel_identifier,
+		message_type: MessageType::Text,
+		user_pubkey: pubkey,
+		payload: [0, 1, 2, 3].to_vec(),
+		timestamp: 0,
+		nonce: 12,
+	};
+
+	let secret_key = SecretKey::from_bytes(&secret_bytes)?;
+	let secret_key = ExpandedSecretKey::from(&secret_key);
+	let message_to_sign = message_body.build_message()?;
+	let signature = secret_key.sign(&message_to_sign, &dalek_pubkey);
+	let signature = Signature::from(signature);
+	assert_eq!(signature, message.signature);
+
+	// negative test
+	message.body.nonce = 13;
+	assert_eq!(message.payload().is_err(), true);
+
+	message.body.nonce = 12;
+	assert_eq!(message.payload().is_ok(), true);
+
+	message.body.channel_identifier.server_id = ServerId::from_bytes([1u8; 8]);
+	assert_eq!(message.payload().is_err(), true);
+
+	message.body.channel_identifier.server_id = ServerId::from_bytes([0u8; 8]);
+	assert_eq!(message.payload().is_ok(), true);
+
+	Ok(())
 }

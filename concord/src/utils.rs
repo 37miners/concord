@@ -106,7 +106,12 @@ macro_rules! send {
 macro_rules! bin_event {
 	() => {{
 		let bin = binary!()?;
-		info!("bindata={:?}", bin);
+		info!(
+			"bindata={:?},file={},line={}",
+			bin,
+			std::file!(),
+			std::line!()
+		);
 		let mut cursor = std::io::Cursor::new(bin);
 		cursor.set_position(0);
 		let mut reader = concorddata::ser::BinReader::new(

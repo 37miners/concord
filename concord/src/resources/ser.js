@@ -385,8 +385,65 @@ const EVENT_TYPE_MODIFY_INVITE_REQUEST   = 22;
 const EVENT_TYPE_MODIFY_INVITE_RESPONSE  = 23;
 const EVENT_TYPE_DELETE_INVITE_REQUEST   = 24;
 const EVENT_TYPE_DELETE_INVITE_RESPONSE  = 25;
+const EVENT_TYPE_SET_PROFILE_REQUEST     = 34;
+const EVENT_TYPE_SET_PROFILE_RESPONSE    = 35;
 
 const FIRST_EVENT_DATA = 23; // first byte of event data
+
+class ProfileData {
+	constructor(user_name, user_bio) {
+		this.user_name = user_name;
+		this.user_bio = user_bio;
+	}
+
+	serialize(profile_data) {
+		var a = SerString.prototype.serialize(profile_data.user_name);
+		var b = SerString.prototype.serialize(profile_data.user_bio);
+		var ret = new Uint8Array(new ArrayBuffer(a.length + b.length));
+		for(var i=0; i<a.length; i++)
+			ret[i] = a[i];
+		for(var i=0; i<b.length; i++)
+			ret[i+a.length] = b[i];
+
+		return ret;
+
+	}
+
+	deserialize() {
+		throw "TODO: implement ProfileData.deserialize";
+	}
+}
+
+class SetProfileRequest {
+	constructor(server_pubkey, server_id, avatar, profile_data) {
+		this.server_pubkey = server_pubkey;
+		this.server_id = server_id;
+		this.avatar = avatar;
+		this.profile_data = profile_data;
+	}
+
+        serialize(set_profile_request) {
+		var a = Pubkey.prototype.serialize(set_profile_request.server_pubkey);
+		var b = ServerId.prototype.serialize(set_profile_request.server_id);
+		var c = SerOption.prototype.serialize(set_profile_request.avatar, Icon.prototype);
+                var d = SerOption.prototype.serialize(set_profile_request.profile_data, ProfileData.prototype);
+		var ret = new Uint8Array(new ArrayBuffer(a.length + b.length + c.length + d.length));
+                for(var i=0; i<a.length; i++)
+                        ret[i] = a[i];
+                for(var i=0; i<b.length; i++)
+                        ret[i+a.length] = b[i];
+                for(var i=0; i<c.length; i++)
+                        ret[i+a.length+b.length] = c[i];
+		for(var i=0; i<d.length; i++)
+			ret[i+a.length+b.length+c.length] = d[i];
+
+                return ret;
+        }
+
+        deserialize() {
+                throw "TODO: implement SetProfileRequest.deserialize";
+        }
+}
 
 class Invite {
 	constructor(invite_id, max, current, expiration, server_id, inviter) {
@@ -958,6 +1015,9 @@ class GetServersResponse {
 
 	deserialize(buffer, offset) {
 		var servers_response = new GetServersResponse();
+		servers_response.server_pubkey = Pubkey.prototype.deserialize(buffer, offset);
+		offset += 32;
+		
 		var len = U64.prototype.deserialize(buffer, offset).value;
 		offset += 8;
 		servers_response.servers = [];
@@ -1025,6 +1085,8 @@ class Event {
 				this.get_members_response = event_data;
 			} else if(this.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
 				this.list_invites_request = event_data;
+			} else if(this.event_type == EVENT_TYPE_SET_PROFILE_REQUEST) {
+				this.set_profile_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
 				this.create_invite_request = event_data;
 			} else if(this.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
@@ -1067,6 +1129,8 @@ class Event {
 			x = event.get_members_response.serialize(event.get_members_response);
 		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
 			x = event.list_invites_request.serialize(event.list_invites_request);
+		} else if(event.event_type == EVENT_TYPE_SET_PROFILE_REQUEST) {
+			x = event.set_profile_request.serialize(event.set_profile_request);
 		} else if(event.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {
 			x = event.create_invite_request.serialize(event.create_invite_request);
 		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_RESPONSE) {
@@ -1164,6 +1228,10 @@ class Event {
 				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_LIST_INVITES_REQUEST) {
 			event.list_invites_request = ListInvitesRequest
+				.prototype
+				.deserialize(buffer, FIRST_EVENT_DATA);
+		} else if(event.event_type == EVENT_TYPE_SET_PROFILE_REQUEST) {
+			event.set_profile_request = SetProfileRequest
 				.prototype
 				.deserialize(buffer, FIRST_EVENT_DATA);
 		} else if(event.event_type == EVENT_TYPE_CREATE_INVITE_REQUEST) {

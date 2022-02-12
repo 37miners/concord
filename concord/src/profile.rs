@@ -22,7 +22,7 @@ use concordconfig::ConcordConfig;
 use concorddata::concord::DSContext;
 use concorddata::types::Pubkey;
 use concorddata::types::ServerId;
-use concorddata::types::{Image, ProfileValue, SerOption};
+use concorddata::types::{Image, ProfileData, SerOption};
 use concorderror::Error as ConcordError;
 use concordutil::librustlet;
 use librustlet::nioruntime_log;
@@ -38,15 +38,24 @@ debug!(); // set log level to debug
 fn get_avatar(
 	root_dir: String,
 	server_id: [u8; 8],
-	pubkey: [u8; 32],
+	server_pubkey: [u8; 32],
+	user_pubkey: [u8; 32],
 ) -> Result<Vec<u8>, ConcordError> {
-	let server_id = ServerId::from_bytes(server_id).to_base58()?;
-	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
-	let file_name = format!(
-		"{}/www/images/user_images/{}-{}",
-		root_dir, server_id, pubkey
+	info!(
+		"get_avatar: server_pubkey={:?},user_pubkey={:?},server_id={:?}",
+		server_pubkey, user_pubkey, server_id
 	);
-	error!("start read: {}", file_name);
+
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let server_pubkey = Pubkey::from_bytes(server_pubkey).to_base58()?;
+	let user_pubkey = Pubkey::from_bytes(user_pubkey).to_base58()?;
+
+	let file_name = format!(
+		"{}/www/images/user_images/avatars-{}-{}-{}",
+		root_dir, server_id, server_pubkey, user_pubkey
+	);
+	error!("get_avatar filename={}", file_name);
+
 	let start = std::time::Instant::now();
 	let mut f = File::open(&file_name)?;
 	let metadata = std::fs::metadata(&file_name)?;
@@ -64,16 +73,24 @@ fn get_avatar(
 fn set_avatar(
 	root_dir: String,
 	server_id: [u8; 8],
-	pubkey: [u8; 32],
+	server_pubkey: [u8; 32],
+	user_pubkey: [u8; 32],
 	icon: Vec<u8>,
 ) -> Result<(), ConcordError> {
-	let server_id = ServerId::from_bytes(server_id).to_base58()?;
-	let pubkey = Pubkey::from_bytes(pubkey).to_base58()?;
-	let file_name = format!(
-		"{}/www/images/user_images/avatars-{}-{}",
-		root_dir, server_id, pubkey
+	info!(
+		"set_avatar: server_pubkey={:?},user_pubkey={:?},server_id={:?}",
+		server_pubkey, user_pubkey, server_id
 	);
 
+	let server_id = ServerId::from_bytes(server_id).to_base58()?;
+	let server_pubkey = Pubkey::from_bytes(server_pubkey).to_base58()?;
+	let user_pubkey = Pubkey::from_bytes(user_pubkey).to_base58()?;
+
+	let file_name = format!(
+		"{}/www/images/user_images/avatars-{}-{}-{}",
+		root_dir, server_id, server_pubkey, user_pubkey
+	);
+	error!("set_avatar filename={}", file_name);
 	let mut file = if std::path::Path::new(&file_name).exists() {
 		std::fs::OpenOptions::new()
 			.write(true)
@@ -119,11 +136,14 @@ pub fn get_profile(
 
 	if pubkey == server_pubkey.to_bytes() {
 		// local request
-		let mut data: Vec<(SerOption<Image>, SerOption<ProfileValue>)> = vec![];
+		let mut data: Vec<(SerOption<Image>, SerOption<ProfileData>)> = vec![];
 
 		if include_profile_data {
-			let profiles =
-				ds_context.get_profiles(user_pubkeys.clone(), server_pubkey, server_id.clone())?;
+			let profiles = ds_context.get_profiles(
+				user_pubkeys.clone(),
+				server_pubkey.clone(),
+				server_id.clone(),
+			)?;
 			for profile in profiles {
 				match profile {
 					Some(profile) => data.push((None.into(), Some(profile.profile_data).into())),
@@ -137,6 +157,7 @@ pub fn get_profile(
 				data[i].0 = match get_avatar(
 					config.root_dir.clone(),
 					server_id.to_bytes(),
+					server_pubkey.to_bytes(),
 					user_pubkeys[i].to_bytes(),
 				) {
 					Ok(avatar) => Some(Image { data: avatar }).into(),
@@ -201,6 +222,7 @@ pub fn get_profile(
 										set_avatar(
 											root_dir.clone(),
 											server_id.to_bytes(),
+											server_pubkey.to_bytes(),
 											user_pubkeys[i].to_bytes(),
 											image.data.clone(),
 										)?;
@@ -293,6 +315,7 @@ pub fn set_profile(
 					config.root_dir.clone(),
 					server_id.to_bytes(),
 					server_pubkey.to_bytes(),
+					user_pubkey.to_bytes(),
 					avatar.data.clone(),
 				)?;
 			}

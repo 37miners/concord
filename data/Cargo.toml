@@ -38,6 +38,7 @@ serde_derive = "1"
 bs58 = "0.4.0"
 bit_reverse = "0.1.8"
 backtrace = "0.3"
+ed25519-dalek = "1.0.1"
 
 [dev-dependencies]
 chrono = "0.4.11"

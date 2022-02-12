@@ -117,8 +117,13 @@ pub fn get_servers(
 		now.elapsed().as_nanos()
 	);
 
+	let server_pubkey = Pubkey::from_bytes(pubkey!());
 	let event = Event {
-		body: EventBody::GetServersResponse(GetServersResponse { servers }).into(),
+		body: EventBody::GetServersResponse(GetServersResponse {
+			server_pubkey,
+			servers,
+		})
+		.into(),
 		..Default::default()
 	};
 	error!("end of building event, time = {}", now.elapsed().as_nanos());
